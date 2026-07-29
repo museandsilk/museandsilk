@@ -1,0 +1,59 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Runtime secrets the Worker reads via process.env at request time. Pushed on every deploy
+      # so a rotated GitHub secret always ends up in sync on Cloudflare's side too.
+      - name: Sync Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "${{ secrets.DATABASE_URL }}" | npx wrangler secret put DATABASE_URL
+          echo "${{ secrets.SESSION_SECRET }}" | npx wrangler secret put SESSION_SECRET
+          echo "${{ secrets.ADMIN_EMAIL }}" | npx wrangler secret put ADMIN_EMAIL
+          echo "${{ secrets.ADMIN_INITIAL_PASSWORD }}" | npx wrangler secret put ADMIN_INITIAL_PASSWORD
+          echo "${{ secrets.R2_ACCOUNT_ID }}" | npx wrangler secret put R2_ACCOUNT_ID
+          echo "${{ secrets.R2_ACCESS_KEY_ID }}" | npx wrangler secret put R2_ACCESS_KEY_ID
+          echo "${{ secrets.R2_SECRET_ACCESS_KEY }}" | npx wrangler secret put R2_SECRET_ACCESS_KEY
+          echo "${{ secrets.R2_BUCKET_NAME }}" | npx wrangler secret put R2_BUCKET_NAME
+          echo "${{ secrets.R2_ENDPOINT }}" | npx wrangler secret put R2_ENDPOINT
+          echo "${{ secrets.RESEND_API_KEY }}" | npx wrangler secret put RESEND_API_KEY
+          echo "${{ secrets.RESEND_FROM_EMAIL }}" | npx wrangler secret put RESEND_FROM_EMAIL
+          echo "${{ secrets.RESEND_FROM_NAME }}" | npx wrangler secret put RESEND_FROM_NAME
+          echo "${{ secrets.WHATSAPP_DEFAULT_NUMBER }}" | npx wrangler secret put WHATSAPP_DEFAULT_NUMBER
+          echo "${{ secrets.CRON_SECRET }}" | npx wrangler secret put CRON_SECRET
+
+      # NEXT_PUBLIC_* vars must be present at build time — they get inlined into client bundles.
+      - name: Build
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
+          NEXT_PUBLIC_META_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_META_PIXEL_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run cf:build
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy

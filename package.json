@@ -10,7 +10,10 @@
     "db:generate": "node --env-file=.env.local ./node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --env-file=.env.local ./node_modules/drizzle-kit/bin.cjs migrate",
     "db:studio": "node --env-file=.env.local ./node_modules/drizzle-kit/bin.cjs studio",
-    "db:seed": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/seed.ts"
+    "db:seed": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/seed.ts",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1097.0",
