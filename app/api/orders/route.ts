@@ -1,0 +1,391 @@
+import { randomUUID } from "node:crypto";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { db } from "@/db";
+import {
+  deliveryZones,
+  discountCodes,
+  discountRedemptions,
+  inventoryMovements,
+  orderItems,
+  orderStatusHistory,
+  orders,
+  productVariants,
+  products,
+  siteSettings,
+} from "@/db/schema";
+import { sendOrderEmails } from "@/lib/email/resend";
+import { findOrderByIdempotencyKey, recordIdempotencyKey } from "@/lib/idempotency";
+import { isCheckoutRateLimited } from "@/lib/auth/rate-limit";
+import { expireReservations } from "@/lib/orders";
+import { cleanPhone } from "@/lib/slug";
+import { checkCoupon, computeDiscountAmount } from "@/lib/coupons";
+
+export const dynamic = "force-dynamic";
+
+type CheckoutItem = { variantId: string; quantity: number };
+
+type OrderLine = {
+  variantId: string;
+  productId: string;
+  productName: string;
+  variantName: string;
+  sku: string;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+};
+
+type BankDetails = { name: string; accountTitle: string; accountNumber: string; iban: string };
+
+class InsufficientStockError extends Error {
+  constructor(public productName: string) {
+    super(`${productName} does not have enough available stock.`);
+  }
+}
+
+class CouponUnavailableError extends Error {
+  constructor() {
+    super("This coupon is no longer available. Please remove it and try again.");
+  }
+}
+
+type SiteSettingsRow = typeof siteSettings.$inferSelect;
+type OrderRow = typeof orders.$inferSelect;
+
+function generateOrderNumber(): string {
+  const now = new Date();
+  const stamp = `${String(now.getUTCFullYear()).slice(-2)}${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(
+    now.getUTCDate(),
+  ).padStart(2, "0")}`;
+  const random = Math.floor(Math.random() * 1_000_000)
+    .toString()
+    .padStart(6, "0");
+  return `MS-${stamp}-${random}`;
+}
+
+function bankDetailsFrom(settings: SiteSettingsRow | undefined): BankDetails {
+  return {
+    name: settings?.bankName ?? "",
+    accountTitle: settings?.bankAccountTitle ?? "",
+    accountNumber: settings?.bankAccountNumber ?? "",
+    iban: settings?.bankIban ?? "",
+  };
+}
+
+async function loadSettings(): Promise<SiteSettingsRow | undefined> {
+  const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, "store")).limit(1);
+  return settings;
+}
+
+function orderSummary(
+  order: Pick<
+    OrderRow,
+    "orderNumber" | "total" | "deliveryCharge" | "discount" | "reservationExpiresAt" | "paymentMethod" | "id"
+  >,
+  settings: SiteSettingsRow | undefined,
+) {
+  return {
+    ok: true,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    total: order.total,
+    deliveryCharge: order.deliveryCharge,
+    discount: order.discount,
+    reservationExpiresAt: order.reservationExpiresAt ? order.reservationExpiresAt.toISOString() : null,
+    paymentMethod: order.paymentMethod,
+    whatsappNumber: settings?.whatsappNumber ?? "",
+    bank: order.paymentMethod === "bank_deposit" ? bankDetailsFrom(settings) : undefined,
+  };
+}
+
+export async function POST(request: Request) {
+  const idempotencyKey = request.headers.get("Idempotency-Key")?.trim();
+  if (!idempotencyKey) {
+    return Response.json({ error: "Missing Idempotency-Key header." }, { status: 400 });
+  }
+
+  const existingOrder = await findOrderByIdempotencyKey(idempotencyKey);
+  if (existingOrder) {
+    const settings = await loadSettings();
+    return Response.json(orderSummary(existingOrder, settings), { status: 200 });
+  }
+
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isCheckoutRateLimited(ip)) {
+    return Response.json({ error: "Too many checkout attempts. Please wait a moment and try again." }, { status: 429 });
+  }
+
+  await expireReservations();
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return Response.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const customerName = String(body.customerName ?? "").trim();
+  const customerPhone = cleanPhone(String(body.customerPhone ?? ""));
+  const customerEmail = String(body.customerEmail ?? "").trim() || null;
+  const city = String(body.city ?? "").trim();
+  const province = String(body.province ?? "").trim();
+  const address = String(body.address ?? "").trim();
+  const zoneId = String(body.zoneId ?? "").trim();
+  const paymentMethod = body.paymentMethod === "bank_deposit" ? "bank_deposit" : body.paymentMethod === "cod" ? "cod" : null;
+  const notes = String(body.notes ?? "").trim() || null;
+  const couponCode = String(body.couponCode ?? "").trim().toUpperCase() || null;
+  const items: CheckoutItem[] = Array.isArray(body.items) ? (body.items as CheckoutItem[]) : [];
+
+  if (
+    !customerName ||
+    customerPhone.replace(/\D/g, "").length < 10 ||
+    !city ||
+    !province ||
+    !address ||
+    !zoneId ||
+    !paymentMethod
+  ) {
+    return Response.json({ error: "Complete all required details before placing the order." }, { status: 400 });
+  }
+  if (!items.length || items.length > 20) {
+    return Response.json({ error: "Your bag must contain between 1 and 20 items." }, { status: 400 });
+  }
+  if (
+    items.some(
+      (item) => !item.variantId || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 10,
+    )
+  ) {
+    return Response.json({ error: "The bag contains an invalid quantity." }, { status: 400 });
+  }
+
+  const variantIds = [...new Set(items.map((item) => item.variantId))];
+  const variantRows = await db
+    .select({
+      variantId: productVariants.id,
+      productId: productVariants.productId,
+      variantName: productVariants.name,
+      sku: productVariants.sku,
+      price: productVariants.price,
+      stockQuantity: productVariants.stockQuantity,
+      reservedQuantity: productVariants.reservedQuantity,
+      variantStatus: productVariants.status,
+      productName: products.name,
+      productStatus: products.status,
+    })
+    .from(productVariants)
+    .innerJoin(products, eq(products.id, productVariants.productId))
+    .where(inArray(productVariants.id, variantIds));
+
+  const variantById = new Map(variantRows.map((row) => [row.variantId, row]));
+  if (variantById.size !== variantIds.length) {
+    return Response.json({ error: "One of the selected products is no longer available." }, { status: 409 });
+  }
+
+  let subtotal = 0;
+  const lines: OrderLine[] = [];
+  for (const item of items) {
+    const variant = variantById.get(item.variantId);
+    if (!variant) {
+      return Response.json({ error: "One of the selected products is no longer available." }, { status: 409 });
+    }
+    const available = variant.stockQuantity - variant.reservedQuantity;
+    if (variant.productStatus !== "published" || variant.variantStatus !== "active" || available < item.quantity) {
+      return Response.json({ error: `${variant.productName} does not have enough available stock.` }, { status: 409 });
+    }
+    const lineTotal = variant.price * item.quantity;
+    subtotal += lineTotal;
+    lines.push({
+      variantId: variant.variantId,
+      productId: variant.productId,
+      productName: variant.productName,
+      variantName: variant.variantName,
+      sku: variant.sku,
+      unitPrice: variant.price,
+      quantity: item.quantity,
+      lineTotal,
+    });
+  }
+
+  const [zone] = await db
+    .select({ id: deliveryZones.id, deliveryCharge: deliveryZones.deliveryCharge })
+    .from(deliveryZones)
+    .where(and(eq(deliveryZones.id, zoneId), eq(deliveryZones.active, true)))
+    .limit(1);
+  if (!zone) {
+    return Response.json({ error: "Choose a valid delivery zone." }, { status: 400 });
+  }
+
+  const settings = await loadSettings();
+  const freeThreshold = settings?.freeDeliveryThreshold ?? 12000;
+  const deliveryCharge = subtotal >= freeThreshold ? 0 : zone.deliveryCharge;
+
+  let discount = 0;
+  let appliedCouponId: string | null = null;
+  if (couponCode) {
+    const result = await checkCoupon(db, couponCode, subtotal);
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: 400 });
+    }
+    discount = computeDiscountAmount(result.coupon, subtotal, deliveryCharge);
+    appliedCouponId = result.coupon.id;
+  }
+
+  const total = subtotal + deliveryCharge - discount;
+  const reservationHours = paymentMethod === "cod" ? settings?.codReservationHours ?? 12 : settings?.bankReservationHours ?? 24;
+  const reservationExpiresAt = new Date(Date.now() + reservationHours * 60 * 60 * 1000);
+  const orderId = randomUUID();
+  const orderNumber = generateOrderNumber();
+
+  // Everything below runs in a single Postgres transaction: stock reservation (each UPDATE carries
+  // a WHERE guard — stock - reserved >= requested — so a concurrent order can never over-reserve the
+  // same variant) plus the order/items/history/inventory-movement writes. If any step fails —
+  // including a lost reservation race — the whole transaction rolls back, so no phantom reservation
+  // or dangling order is ever left behind.
+  try {
+    await db.transaction(async (tx) => {
+      for (const line of lines) {
+        const updated = await tx
+          .update(productVariants)
+          .set({
+            reservedQuantity: sql`${productVariants.reservedQuantity} + ${line.quantity}`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(productVariants.id, line.variantId),
+              sql`${productVariants.stockQuantity} - ${productVariants.reservedQuantity} >= ${line.quantity}`,
+            ),
+          )
+          .returning({ id: productVariants.id });
+
+        if (updated.length === 0) {
+          throw new InsufficientStockError(line.productName);
+        }
+      }
+
+      if (appliedCouponId) {
+        // Guarded the same way as stock: only consume a redemption if the coupon is still active
+        // and (unlimited OR under its cap) at the moment of commit, so two concurrent checkouts can
+        // never both slip through past a coupon's maxRedemptions.
+        const consumed = await tx
+          .update(discountCodes)
+          .set({ redemptionCount: sql`${discountCodes.redemptionCount} + 1`, updatedAt: new Date() })
+          .where(
+            and(
+              eq(discountCodes.id, appliedCouponId),
+              eq(discountCodes.active, true),
+              sql`(${discountCodes.maxRedemptions} IS NULL OR ${discountCodes.redemptionCount} < ${discountCodes.maxRedemptions})`,
+            ),
+          )
+          .returning({ id: discountCodes.id });
+        if (consumed.length === 0) {
+          throw new CouponUnavailableError();
+        }
+        await tx.insert(discountRedemptions).values({
+          discountCodeId: appliedCouponId,
+          orderId,
+          amountDiscounted: discount,
+        });
+      }
+
+      await tx.insert(orders).values({
+        id: orderId,
+        orderNumber,
+        customerName,
+        customerPhone,
+        customerEmail,
+        city,
+        province,
+        address,
+        subtotal,
+        deliveryCharge,
+        discount,
+        tax: 0,
+        total,
+        currency: "PKR",
+        paymentMethod,
+        paymentStatus: "pending",
+        orderStatus: "pending_confirmation",
+        reservationExpiresAt,
+        notes,
+      });
+      await tx.insert(orderStatusHistory).values({
+        orderId,
+        fromStatus: null,
+        toStatus: "pending_confirmation",
+        note: "Order placed",
+        actorEmail: "customer",
+      });
+      for (const line of lines) {
+        await tx.insert(orderItems).values({
+          orderId,
+          productId: line.productId,
+          variantId: line.variantId,
+          productName: line.productName,
+          variantName: line.variantName,
+          sku: line.sku,
+          unitPrice: line.unitPrice,
+          quantity: line.quantity,
+          lineTotal: line.lineTotal,
+        });
+        await tx.insert(inventoryMovements).values({
+          variantId: line.variantId,
+          type: "reservation",
+          quantity: line.quantity,
+          reason: "Checkout reservation",
+          referenceType: "order",
+          referenceId: orderId,
+          actorEmail: "customer",
+        });
+      }
+    });
+  } catch (error) {
+    if (error instanceof InsufficientStockError) {
+      return Response.json({ error: `${error.productName} does not have enough available stock.` }, { status: 409 });
+    }
+    if (error instanceof CouponUnavailableError) {
+      return Response.json({ error: error.message }, { status: 409 });
+    }
+    console.error("Order transaction failed", error);
+    return Response.json({ error: "The order could not be placed. Please try again." }, { status: 500 });
+  }
+
+  await recordIdempotencyKey(idempotencyKey, orderId);
+
+  try {
+    await sendOrderEmails({
+      toEmail: customerEmail ?? "",
+      orderNumber,
+      customerName,
+      total,
+      currency: "PKR",
+      items: lines.map((line) => ({
+        productName: line.productName,
+        variantName: line.variantName,
+        quantity: line.quantity,
+        lineTotal: line.lineTotal,
+      })),
+      paymentMethod,
+      bank: paymentMethod === "bank_deposit" ? bankDetailsFrom(settings) : undefined,
+      whatsappNumber: settings?.whatsappNumber,
+    });
+  } catch (error) {
+    console.error("sendOrderEmails failed", error);
+  }
+
+  return Response.json(
+    orderSummary(
+      {
+        id: orderId,
+        orderNumber,
+        total,
+        deliveryCharge,
+        discount,
+        reservationExpiresAt,
+        paymentMethod,
+      },
+      settings,
+    ),
+    { status: 201 },
+  );
+}
