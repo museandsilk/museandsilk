@@ -1,8 +1,18 @@
 import decodeJpeg, { init as initJpegDecodeCodec } from "@jsquash/jpeg/decode";
 import decodePng, { init as initPngDecodeCodec } from "@jsquash/png/decode";
 import decodeWebp, { init as initWebpDecodeCodec } from "@jsquash/webp/decode";
-import encodeWebp, { init as initWebpEncodeCodec } from "@jsquash/webp/encode";
 import resizeImageData, { initResize as initResizeCodec } from "@jsquash/resize";
+// NOTE: intentionally NOT importing @jsquash/webp/encode. Its public wrapper dynamically
+// `import()`s BOTH a SIMD and non-SIMD codec variant (picking one at runtime via feature
+// detection), and Next's dependency tracer bundles both into the deployed Worker regardless of
+// which branch actually runs — ~950KB of pure waste that helped blow past Cloudflare's 3MB
+// script-size limit. We only ever want the plain (non-SIMD) encoder, so we import its raw
+// Emscripten factory directly and wire it up ourselves, identically to what the wrapper does
+// internally (see initEmscriptenModule in @jsquash/webp/utils.js) but without the dead branch.
+import createWebpEncoderModule from "@jsquash/webp/codec/enc/webp_enc.js";
+import { defaultOptions as webpDefaultOptions } from "@jsquash/webp/meta.js";
+import { initEmscriptenModule } from "@jsquash/webp/utils.js";
+import type { EncodeOptions as WebpEncodeOptions, WebPModule } from "@jsquash/webp/codec/enc/webp_enc.js";
 
 import { jpegDecWasmBase64 } from "./wasm/jpeg-dec-wasm";
 import { pngDecWasmBase64 } from "./wasm/png-dec-wasm";
@@ -56,12 +66,24 @@ async function ensureWebpDecode(): Promise<void> {
   await webpDecodeReady;
 }
 
-let webpEncodeReady: Promise<unknown> | null = null;
-async function ensureWebpEncode(): Promise<void> {
+let webpEncodeReady: Promise<WebPModule> | null = null;
+function ensureWebpEncode(): Promise<WebPModule> {
   if (!webpEncodeReady) {
-    webpEncodeReady = base64ToWasmModule(webpEncWasmBase64).then((mod) => initWebpEncodeCodec(mod));
+    webpEncodeReady = base64ToWasmModule(webpEncWasmBase64).then((wasmModule) =>
+      initEmscriptenModule(createWebpEncoderModule, wasmModule),
+    );
   }
-  await webpEncodeReady;
+  return webpEncodeReady;
+}
+
+async function encodeWebp(imageData: ImageData, options: Partial<WebpEncodeOptions> = {}): Promise<ArrayBuffer> {
+  const webpModule = await ensureWebpEncode();
+  const result = webpModule.encode(imageData.data, imageData.width, imageData.height, {
+    ...webpDefaultOptions,
+    ...options,
+  });
+  if (!result) throw new Error("WebP encoding failed");
+  return result.buffer as ArrayBuffer;
 }
 
 let resizeReady: Promise<unknown> | null = null;
