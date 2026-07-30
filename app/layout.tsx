@@ -28,7 +28,14 @@ export async function generateMetadata(): Promise<Metadata> {
     title: { default: "Muse & Silk — Modern scarves, bandanas and eyewear", template: "%s | Muse & Silk" },
     description: "A modern accessories house offering considered scarves, silk bandanas and eyewear, delivered across Pakistan.",
     applicationName: "Muse & Silk",
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+    icons: {
+      icon: [
+        { url: "/logo.ico", sizes: "32x32" },
+        { url: "/logo.png", type: "image/png", sizes: "1002x1002" },
+      ],
+      shortcut: "/logo.ico",
+      apple: "/logo.png",
+    },
     openGraph: {
       title: "Muse & Silk — The final layer, considered.",
       description: "Scarves, bandanas and eyewear selected for the way they transform an everyday look.",
@@ -48,7 +55,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const settings = await getPublicSettings();
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://muse-and-silk-store.mohsin-aujla.chatgpt.site";
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
 
   const jsonLd = {
     "@context": "https://schema.org",

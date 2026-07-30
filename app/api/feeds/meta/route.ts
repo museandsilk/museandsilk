@@ -3,7 +3,7 @@ import { buildProductFeedXml } from "@/lib/feed";
 
 export const revalidate = 3600;
 
-const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://muse-and-silk-store.mohsin-aujla.chatgpt.site";
+const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
 
 /** Meta (Facebook/Instagram) Commerce Manager product catalogue feed. Meta's Catalog ingestion
  * accepts the same Google Shopping RSS format (including the `g:` namespace), so this reuses the

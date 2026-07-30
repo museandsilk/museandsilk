@@ -5,7 +5,7 @@ import { journalArticles } from "./(store)/journal/journal-data";
 const POLICY_SLUGS = ["shipping", "returns", "privacy", "terms"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://muse-and-silk-store.mohsin-aujla.chatgpt.site";
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
   const [products, collections] = await Promise.all([getCatalogProducts(), getActiveCollections()]);
   const now = new Date();
 

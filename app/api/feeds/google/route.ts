@@ -3,7 +3,7 @@ import { buildProductFeedXml } from "@/lib/feed";
 
 export const revalidate = 3600;
 
-const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://muse-and-silk-store.mohsin-aujla.chatgpt.site";
+const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
 
 /** Google Merchant Center product feed (RSS 2.0 + `g:` Google Shopping namespace). Register this
  * URL as a scheduled fetch in Merchant Center: /api/feeds/google */

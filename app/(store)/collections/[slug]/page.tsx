@@ -8,7 +8,7 @@ import { getCatalogProducts, getCollectionBySlug } from "@/lib/commerce";
 
 const names: Record<string, string> = { scarves: "Scarves", bandanas: "Bandanas", glasses: "Eyewear", eyewear: "Eyewear" };
 
-const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://muse-and-silk-store.mohsin-aujla.chatgpt.site";
+const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
 
 export const revalidate = 300;
 
