@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
+import { processImageClientSide } from "@/lib/client-image-processing";
 
 type Slide = {
   id: string;
@@ -33,8 +34,23 @@ export function CampaignManager() {
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
-    setMessage("");
-    const response = await fetch("/api/admin/campaign", { method: "POST", body: new FormData(event.currentTarget) });
+    setMessage("Processing image…");
+    const form = new FormData(event.currentTarget);
+
+    const file = form.get("file");
+    if (file instanceof File) {
+      const processed = await processImageClientSide(file);
+      if (processed) {
+        form.set("blurDataUrl", processed.blurDataUrl);
+        form.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+        for (const variant of processed.variants) {
+          form.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+        }
+      }
+    }
+
+    setMessage("Uploading…");
+    const response = await fetch("/api/admin/campaign", { method: "POST", body: form });
     const result = await response.json();
     setMessage(response.ok ? "Campaign slide added." : result.error ?? "Slide could not be added.");
     if (response.ok) {

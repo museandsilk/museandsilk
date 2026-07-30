@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { productImages } from "@/db/schema";
 import { getObjectBytes } from "@/lib/r2";
-import { nearestVariantWidth, variantKeyFor } from "@/lib/image-processing";
+import { nearestVariantWidth, variantKeyFor } from "@/lib/image-variants";
 
 export const dynamic = "force-dynamic";
 

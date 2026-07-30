@@ -5,7 +5,7 @@ import { getAdminUser } from "@/lib/auth/admin-auth";
 import { validateImageUpload } from "@/lib/validation";
 import { newObjectKey, putObject } from "@/lib/r2";
 import { auditLogEntry } from "@/lib/admin/audit";
-import { processUploadedImage, variantKeyFor } from "@/lib/image-processing";
+import { variantKeyFor } from "@/lib/image-variants";
 
 export const dynamic = "force-dynamic";
 
@@ -35,14 +35,44 @@ export async function POST(request: Request) {
   const key = newObjectKey("products", contentType);
   await putObject(key, bytes, contentType);
 
-  // Best-effort: generate resized WebP variants + a blur-up placeholder. If this fails for any
-  // reason (unusual image, decoder edge case), the original upload above is already safely stored
-  // and still fully usable — the product simply won't have optimized variants for this image.
-  const processed = await processUploadedImage(bytes, contentType);
-  if (processed) {
-    await Promise.all(
-      processed.variants.map((variant) => putObject(variantKeyFor(key, variant.width), variant.bytes, "image/webp")),
-    );
+  // Resized WebP variants + a blur-up placeholder are generated in the admin's browser (see
+  // lib/client-image-processing.ts) and arrive here already encoded — the server just validates
+  // and stores them. This keeps real image-codec CPU work off the deployed Worker entirely, which
+  // matters because Cloudflare's free-tier CPU-time-per-request budget (10ms) is far too small for
+  // it. If the client didn't send variants (older browser, or its processing failed), we simply
+  // store the original — never a hard failure.
+  let width: number | undefined;
+  let height: number | undefined;
+  let blurDataUrl: string | undefined;
+  const storedVariantWidths: number[] = [];
+
+  const widthField = form.get("width");
+  const heightField = form.get("height");
+  const blurField = form.get("blurDataUrl");
+  const variantWidthsField = form.get("variantWidths");
+  if (typeof widthField === "string" && widthField) width = Number(widthField);
+  if (typeof heightField === "string" && heightField) height = Number(heightField);
+  if (typeof blurField === "string" && blurField.startsWith("data:image/webp;base64,")) blurDataUrl = blurField;
+
+  if (typeof variantWidthsField === "string") {
+    let widths: unknown;
+    try {
+      widths = JSON.parse(variantWidthsField);
+    } catch {
+      widths = [];
+    }
+    if (Array.isArray(widths)) {
+      for (const w of widths) {
+        if (typeof w !== "number" || !Number.isFinite(w) || w <= 0) continue;
+        const variantFile = form.get(`variant_${w}`);
+        if (!(variantFile instanceof File)) continue;
+        const variantBytes = new Uint8Array(await variantFile.arrayBuffer());
+        const variantValidation = validateImageUpload("image/webp", variantBytes);
+        if (!variantValidation.ok) continue;
+        await putObject(variantKeyFor(key, w), variantBytes, "image/webp");
+        storedVariantWidths.push(w);
+      }
+    }
   }
 
   const makePrimary = isPrimary === "true" || isPrimary === "on";
@@ -59,10 +89,10 @@ export async function POST(request: Request) {
       altText: altText.trim(),
       contentType,
       byteSize: bytes.byteLength,
-      width: processed?.width,
-      height: processed?.height,
-      blurDataUrl: processed?.blurDataUrl,
-      variantWidths: processed?.variants.map((v) => v.width),
+      width,
+      height,
+      blurDataUrl,
+      variantWidths: storedVariantWidths.length ? storedVariantWidths : undefined,
       sortOrder: typeof sortOrder === "string" && sortOrder ? Number(sortOrder) : 0,
       isPrimary: makePrimary,
     })

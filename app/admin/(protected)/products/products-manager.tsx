@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { slugify } from "@/lib/slug";
+import { processImageClientSide } from "@/lib/client-image-processing";
 
 type Category = { id: string; name: string };
 
@@ -269,8 +270,25 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     event.preventDefault();
     if (!draft?.id) return;
     setBusy(true);
+    setMessage("Processing image…");
     const form = new FormData(event.currentTarget);
     form.set("productId", draft.id);
+
+    const file = form.get("file");
+    if (file instanceof File) {
+      const processed = await processImageClientSide(file);
+      if (processed) {
+        form.set("width", String(processed.width));
+        form.set("height", String(processed.height));
+        form.set("blurDataUrl", processed.blurDataUrl);
+        form.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+        for (const variant of processed.variants) {
+          form.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+        }
+      }
+    }
+
+    setMessage("Uploading…");
     const response = await fetch("/api/admin/images", { method: "POST", body: form });
     const result = await response.json();
     setMessage(response.ok ? "Image added to the gallery." : result.error ?? "Image upload failed.");

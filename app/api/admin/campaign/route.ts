@@ -5,7 +5,7 @@ import { getAdminUser } from "@/lib/auth/admin-auth";
 import { validateImageUpload } from "@/lib/validation";
 import { newObjectKey, putObject } from "@/lib/r2";
 import { auditLogEntry } from "@/lib/admin/audit";
-import { processUploadedImage, variantKeyFor } from "@/lib/image-processing";
+import { variantKeyFor } from "@/lib/image-variants";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +39,32 @@ export async function POST(request: Request) {
   const key = newObjectKey("campaign", contentType);
   await putObject(key, bytes, contentType);
 
-  const processed = await processUploadedImage(bytes, contentType);
-  if (processed) {
-    await Promise.all(
-      processed.variants.map((variant) => putObject(variantKeyFor(key, variant.width), variant.bytes, "image/webp")),
-    );
+  // See app/api/admin/images/route.ts for why variants arrive pre-made from the browser rather
+  // than being generated here.
+  let blurDataUrl: string | undefined;
+  const storedVariantWidths: number[] = [];
+  const blurField = form.get("blurDataUrl");
+  const variantWidthsField = form.get("variantWidths");
+  if (typeof blurField === "string" && blurField.startsWith("data:image/webp;base64,")) blurDataUrl = blurField;
+  if (typeof variantWidthsField === "string") {
+    let widths: unknown;
+    try {
+      widths = JSON.parse(variantWidthsField);
+    } catch {
+      widths = [];
+    }
+    if (Array.isArray(widths)) {
+      for (const w of widths) {
+        if (typeof w !== "number" || !Number.isFinite(w) || w <= 0) continue;
+        const variantFile = form.get(`variant_${w}`);
+        if (!(variantFile instanceof File)) continue;
+        const variantBytes = new Uint8Array(await variantFile.arrayBuffer());
+        const variantValidation = validateImageUpload("image/webp", variantBytes);
+        if (!variantValidation.ok) continue;
+        await putObject(variantKeyFor(key, w), variantBytes, "image/webp");
+        storedVariantWidths.push(w);
+      }
+    }
   }
 
   const eyebrow = form.get("eyebrow");
@@ -61,8 +82,8 @@ export async function POST(request: Request) {
       altText: altText.trim(),
       contentType,
       byteSize: bytes.byteLength,
-      blurDataUrl: processed?.blurDataUrl,
-      variantWidths: processed?.variants.map((v) => v.width),
+      blurDataUrl,
+      variantWidths: storedVariantWidths.length ? storedVariantWidths : undefined,
       ...(typeof eyebrow === "string" && eyebrow ? { eyebrow } : {}),
       ...(typeof headline === "string" && headline ? { headline } : {}),
       ...(typeof body === "string" && body ? { body } : {}),
