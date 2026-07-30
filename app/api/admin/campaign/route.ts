@@ -5,6 +5,7 @@ import { getAdminUser } from "@/lib/auth/admin-auth";
 import { validateImageUpload } from "@/lib/validation";
 import { newObjectKey, putObject } from "@/lib/r2";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { processUploadedImage, variantKeyFor } from "@/lib/image-processing";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,13 @@ export async function POST(request: Request) {
   const key = newObjectKey("campaign", contentType);
   await putObject(key, bytes, contentType);
 
+  const processed = await processUploadedImage(bytes, contentType);
+  if (processed) {
+    await Promise.all(
+      processed.variants.map((variant) => putObject(variantKeyFor(key, variant.width), variant.bytes, "image/webp")),
+    );
+  }
+
   const eyebrow = form.get("eyebrow");
   const headline = form.get("headline");
   const body = form.get("body");
@@ -53,6 +61,8 @@ export async function POST(request: Request) {
       altText: altText.trim(),
       contentType,
       byteSize: bytes.byteLength,
+      blurDataUrl: processed?.blurDataUrl,
+      variantWidths: processed?.variants.map((v) => v.width),
       ...(typeof eyebrow === "string" && eyebrow ? { eyebrow } : {}),
       ...(typeof headline === "string" && headline ? { headline } : {}),
       ...(typeof body === "string" && body ? { body } : {}),

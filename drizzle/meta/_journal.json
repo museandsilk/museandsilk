@@ -15,6 +15,13 @@
       "when": 1785337392523,
       "tag": "0001_far_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785439547293,
+      "tag": "0002_spooky_serpent_society",
+      "breakpoints": true
     }
   ]
 }

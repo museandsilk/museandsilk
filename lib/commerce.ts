@@ -23,6 +23,7 @@ export type CatalogImage = {
   altText: string;
   sortOrder: number;
   isPrimary: boolean;
+  blurDataUrl?: string;
 };
 
 export type CatalogProduct = {
@@ -46,6 +47,7 @@ export type CatalogProduct = {
   careInstructions?: string;
   seoTitle?: string;
   seoDescription?: string;
+  blurDataUrl?: string;
   variants: CatalogVariant[];
   images: CatalogImage[];
 };
@@ -81,6 +83,7 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
       reserved: productVariants.reservedQuantity,
       imageId: productImages.id,
       altText: productImages.altText,
+      blurDataUrl: productImages.blurDataUrl,
     })
     .from(products)
     .innerJoin(categories, eq(categories.id, products.categoryId))
@@ -102,6 +105,7 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     badge: row.badge ?? "",
     sku: row.sku,
     imageUrl: row.imageId ? imageUrlFor(row.imageId) : undefined,
+    blurDataUrl: row.blurDataUrl ?? undefined,
     stock: Math.max(0, row.stock - row.reserved),
     description: row.description ?? "",
     shortDescription: row.shortDescription ?? "",
@@ -160,6 +164,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
         altText: productImages.altText,
         sortOrder: productImages.sortOrder,
         isPrimary: productImages.isPrimary,
+        blurDataUrl: productImages.blurDataUrl,
       })
       .from(productImages)
       .where(and(eq(productImages.productId, row.id), eq(productImages.status, "active")))
@@ -186,6 +191,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     altText: img.altText,
     sortOrder: img.sortOrder,
     isPrimary: img.isPrimary,
+    blurDataUrl: img.blurDataUrl ?? undefined,
   }));
   const defaultVariant = variants.find((v) => v.isDefault) ?? variants[0];
 
@@ -202,6 +208,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     badge: row.badge ?? "",
     sku: defaultVariant?.sku ?? "",
     imageUrl: images[0]?.url,
+    blurDataUrl: images[0]?.blurDataUrl,
     stock: defaultVariant?.available ?? 0,
     description: row.description ?? "",
     shortDescription: row.shortDescription ?? "",
@@ -225,6 +232,7 @@ export type CampaignSlide = {
   ctaLabel: string;
   ctaHref: string;
   sortOrder: number;
+  blurDataUrl?: string;
 };
 
 /** Homepage hero slides — CampaignCarousel auto-rotates through these every 5s. Falls back to a
@@ -241,6 +249,7 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
       ctaHref: campaignSlides.ctaHref,
       sortOrder: campaignSlides.sortOrder,
       active: campaignSlides.active,
+      blurDataUrl: campaignSlides.blurDataUrl,
     })
     .from(campaignSlides)
     .where(includeInactive ? undefined : eq(campaignSlides.active, true))
@@ -256,6 +265,7 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
     ctaLabel: row.ctaLabel,
     ctaHref: row.ctaHref,
     sortOrder: row.sortOrder,
+    blurDataUrl: row.blurDataUrl ?? undefined,
   }));
 }
 
@@ -285,6 +295,7 @@ export async function getCollectionBySlug(
       stock: productVariants.stockQuantity,
       reserved: productVariants.reservedQuantity,
       imageId: productImages.id,
+      blurDataUrl: productImages.blurDataUrl,
     })
     .from(products)
     .innerJoin(categories, eq(categories.id, products.categoryId))
@@ -309,6 +320,7 @@ export async function getCollectionBySlug(
       badge: row.badge ?? "",
       sku: row.sku,
       imageUrl: row.imageId ? imageUrlFor(row.imageId) : undefined,
+      blurDataUrl: row.blurDataUrl ?? undefined,
       stock: Math.max(0, row.stock - row.reserved),
       variants: [],
       images: [],

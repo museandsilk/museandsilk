@@ -38,6 +38,7 @@ export function CampaignCarousel({ slides }: { slides: CampaignSlide[] }) {
             priority={index === 0}
             sizes="100vw"
             className={index === active ? "active" : ""}
+            {...(item.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: item.blurDataUrl } : {})}
           />
         ))}
       </div>

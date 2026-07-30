@@ -19,7 +19,14 @@ export function ProductGallery({
   const [active, setActive] = useState(0);
   return (
     <div className={`product-gallery crop-${crop}`}>
-      <Image src={gallery[active].url} alt={gallery[active].altText} fill priority sizes="(max-width: 800px) 100vw, 58vw" />
+      <Image
+        src={gallery[active].url}
+        alt={gallery[active].altText}
+        fill
+        priority
+        sizes="(max-width: 800px) 100vw, 58vw"
+        {...(gallery[active].blurDataUrl ? { placeholder: "blur" as const, blurDataURL: gallery[active].blurDataUrl } : {})}
+      />
       <span>
         {String(active + 1).padStart(2, "0")} / {String(gallery.length).padStart(2, "0")}
       </span>

@@ -130,6 +130,11 @@ export const productImages = pgTable("product_images", {
   sortOrder: integer("sort_order").notNull().default(0),
   isPrimary: boolean("is_primary").notNull().default(false),
   status: text("status").notNull().default("active"),
+  // Tiny base64 WebP data URL for a blur-up placeholder, and the set of resized WebP variant
+  // widths actually generated for this image (see lib/image-processing.ts) — both null for images
+  // uploaded before this pipeline existed, or if processing failed and only the original was kept.
+  blurDataUrl: text("blur_data_url"),
+  variantWidths: jsonb("variant_widths").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("images_product_idx").on(table.productId)]);
 
@@ -146,6 +151,8 @@ export const campaignSlides = pgTable("campaign_slides", {
   ctaHref: text("cta_href").notNull().default("/shop"),
   sortOrder: integer("sort_order").notNull().default(0),
   active: boolean("active").notNull().default(true),
+  blurDataUrl: text("blur_data_url"),
+  variantWidths: jsonb("variant_widths").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("campaign_slides_order_idx").on(table.active, table.sortOrder)]);

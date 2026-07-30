@@ -5,6 +5,7 @@ import { getAdminUser } from "@/lib/auth/admin-auth";
 import { validateImageUpload } from "@/lib/validation";
 import { newObjectKey, putObject } from "@/lib/r2";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { processUploadedImage, variantKeyFor } from "@/lib/image-processing";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,16 @@ export async function POST(request: Request) {
   const key = newObjectKey("products", contentType);
   await putObject(key, bytes, contentType);
 
+  // Best-effort: generate resized WebP variants + a blur-up placeholder. If this fails for any
+  // reason (unusual image, decoder edge case), the original upload above is already safely stored
+  // and still fully usable — the product simply won't have optimized variants for this image.
+  const processed = await processUploadedImage(bytes, contentType);
+  if (processed) {
+    await Promise.all(
+      processed.variants.map((variant) => putObject(variantKeyFor(key, variant.width), variant.bytes, "image/webp")),
+    );
+  }
+
   const makePrimary = isPrimary === "true" || isPrimary === "on";
   if (makePrimary) {
     await db.update(productImages).set({ isPrimary: false }).where(eq(productImages.productId, productId));
@@ -48,6 +59,10 @@ export async function POST(request: Request) {
       altText: altText.trim(),
       contentType,
       byteSize: bytes.byteLength,
+      width: processed?.width,
+      height: processed?.height,
+      blurDataUrl: processed?.blurDataUrl,
+      variantWidths: processed?.variants.map((v) => v.width),
       sortOrder: typeof sortOrder === "string" && sortOrder ? Number(sortOrder) : 0,
       isPrimary: makePrimary,
     })

@@ -54,7 +54,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
   const crop = cropForCategory(product.category);
   return (
     <article className="product-card">
-      <Link href={`/products/${product.slug}`} className={`product-image crop-${crop}`}><Image src={product.imageUrl ?? "/category-still-life.webp"} alt={product.name} fill sizes="(max-width: 760px) 50vw, 25vw" />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-view">View piece</span></Link>
+      <Link href={`/products/${product.slug}`} className={`product-image crop-${crop}`}><Image src={product.imageUrl ?? "/category-still-life.webp"} alt={product.name} fill sizes="(max-width: 760px) 50vw, 25vw" {...(product.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: product.blurDataUrl } : {})} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-view">View piece</span></Link>
       <button className={`save-button ${saved ? "saved" : ""}`} onClick={() => setSaved(!saved)} aria-label={saved ? `Remove ${product.name} from saved pieces` : `Save ${product.name}`}>{saved ? "♥" : "♡"}</button>
       <div className="product-info"><div><p>{product.type}</p><Link href={`/products/${product.slug}`}>{product.name}</Link></div><strong>{money.format(product.price)}</strong></div>
       <div className="product-color"><i className={`swatch swatch-${crop}`} />{product.color}</div>
