@@ -5,6 +5,8 @@ import { productImages, products, productVariants } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { deleteObject } from "@/lib/r2";
+import { variantKeyFor } from "@/lib/image-variants";
 
 export const dynamic = "force-dynamic";
 
@@ -108,19 +110,48 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   return Response.json({ product: row });
 }
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const admin = await getAdminUser();
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
+  const permanent = new URL(request.url).searchParams.get("permanent") === "true";
 
-  const [row] = await db
-    .update(products)
-    .set({ status: "archived", updatedAt: new Date() })
-    .where(eq(products.id, id))
-    .returning();
-  if (!row) return Response.json({ error: "Product not found." }, { status: 404 });
+  if (!permanent) {
+    // Default, reversible action: hide from the storefront, keep everything (can be republished).
+    const [row] = await db
+      .update(products)
+      .set({ status: "archived", updatedAt: new Date() })
+      .where(eq(products.id, id))
+      .returning();
+    if (!row) return Response.json({ error: "Product not found." }, { status: 404 });
 
-  await auditLogEntry({ actorEmail: admin.email, action: "product.archive", entityType: "product", entityId: id });
+    await auditLogEntry({ actorEmail: admin.email, action: "product.archive", entityType: "product", entityId: id });
+    return Response.json({ ok: true });
+  }
+
+  // Permanent delete: free the R2 storage this product's images occupy, then remove the product
+  // row — productVariants and productImages cascade-delete at the database level (see
+  // db/schema.ts's onDelete: "cascade" on both tables' productId foreign key). Order history is
+  // unaffected: order_items snapshot product/variant names, SKUs and prices at time of purchase
+  // and only set their productId/variantId to null (onDelete: "set null"), never cascade-deleted.
+  const [existing] = await db.select({ id: products.id }).from(products).where(eq(products.id, id)).limit(1);
+  if (!existing) return Response.json({ error: "Product not found." }, { status: 404 });
+
+  const images = await db
+    .select({ r2Key: productImages.r2Key, variantWidths: productImages.variantWidths })
+    .from(productImages)
+    .where(eq(productImages.productId, id));
+
+  await Promise.all(
+    images.flatMap((image) => [
+      deleteObject(image.r2Key),
+      ...(image.variantWidths ?? []).map((width) => deleteObject(variantKeyFor(image.r2Key, width))),
+    ]),
+  );
+
+  await db.delete(products).where(eq(products.id, id));
+
+  await auditLogEntry({ actorEmail: admin.email, action: "product.delete_permanent", entityType: "product", entityId: id, detail: { imagesDeleted: images.length } });
 
   return Response.json({ ok: true });
 }

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { requireAdminUser } from "@/lib/auth/admin-auth";
 import { LogoutButton } from "./logout-button";
@@ -20,8 +21,8 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
   return (
     <main className="admin-shell">
       <aside className="admin-sidebar">
-        <Link href="/" className="admin-mark">
-          M<span>&amp;</span>S
+        <Link href="/" className="admin-mark" aria-label="Muse & Silk, view store">
+          <Image src="/logo.png" alt="" width={48} height={48} priority />
         </Link>
         <nav>
           {navItems.map((item, index) => (

@@ -350,7 +350,13 @@ export default function CheckoutPage() {
                       disabled={couponBusy || !couponInput.trim()}
                       onClick={() => applyCoupon(couponInput)}
                     >
-                      {couponBusy ? "Checking…" : "Apply coupon"}
+                      {couponBusy ? (
+                        <span className="busy-label">
+                          <span className="spinner" aria-hidden="true" /> Checking…
+                        </span>
+                      ) : (
+                        "Apply coupon"
+                      )}
                     </button>
                     {couponError && <p className="checkout-error field-wide">{couponError}</p>}
                   </div>
@@ -396,7 +402,13 @@ export default function CheckoutPage() {
               </div>
               {error && <p className="checkout-error">{error}</p>}
               <button className="add-button" disabled={busy || !zoneId}>
-                {busy ? "Placing order…" : "Place order"}
+                {busy ? (
+                  <span className="busy-label">
+                    <span className="spinner spinner-light" aria-hidden="true" /> Placing order…
+                  </span>
+                ) : (
+                  "Place order"
+                )}
                 <span>→</span>
               </button>
               <small>By placing the order, you agree to the store terms and reservation policy.</small>

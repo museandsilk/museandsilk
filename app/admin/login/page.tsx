@@ -66,7 +66,13 @@ function LoginForm() {
         </div>
         {error && <p className="admin-message">{error}</p>}
         <button className="admin-primary" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? (
+            <span className="busy-label">
+              <span className="spinner spinner-light" aria-hidden="true" /> Signing in…
+            </span>
+          ) : (
+            "Sign in"
+          )}
         </button>
       </form>
     </main>

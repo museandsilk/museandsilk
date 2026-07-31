@@ -193,7 +193,13 @@ export function CampaignManager() {
             <input type="number" min="0" name="sortOrder" defaultValue={slides.length} />
           </label>
           <button className="admin-primary" disabled={busy}>
-            {busy ? "Uploading…" : "Add to homepage rotation"}
+            {busy ? (
+              <span className="busy-label">
+                <span className="spinner spinner-light" aria-hidden="true" /> {message || "Uploading…"}
+              </span>
+            ) : (
+              "Add to homepage rotation"
+            )}
           </button>
         </form>
       </div>

@@ -181,9 +181,25 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   }
 
   async function archiveProduct(productId: string) {
-    if (!window.confirm("Archive this product? It will be hidden from the storefront.")) return;
+    if (!window.confirm("Archive this product? It will be hidden from the storefront but can be republished later.")) return;
     const response = await fetch(`/api/admin/products/${productId}`, { method: "DELETE" });
     setMessage(response.ok ? "Product archived." : "Could not archive product.");
+    if (response.ok) {
+      await refresh();
+      if (draft?.id === productId) closeDrawer();
+    }
+  }
+
+  async function deleteProductPermanently(productId: string) {
+    if (
+      !window.confirm(
+        "Permanently delete this product? This removes its images from storage and cannot be undone. Past orders that included it are not affected.",
+      )
+    )
+      return;
+    const response = await fetch(`/api/admin/products/${productId}?permanent=true`, { method: "DELETE" });
+    const result = await response.json().catch(() => ({}));
+    setMessage(response.ok ? "Product permanently deleted." : result.error ?? "Could not delete product.");
     if (response.ok) {
       await refresh();
       if (draft?.id === productId) closeDrawer();
@@ -644,7 +660,15 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                     <input type="checkbox" name="isPrimary" />
                     <span>Make this the main product image</span>
                   </label>
-                  <button disabled={busy}>Add image to gallery</button>
+                  <button disabled={busy}>
+                    {busy ? (
+                      <span className="busy-label">
+                        <span className="spinner spinner-light" aria-hidden="true" /> {message || "Working…"}
+                      </span>
+                    ) : (
+                      "Add image to gallery"
+                    )}
+                  </button>
                   <small>JPG, PNG or WebP · maximum 10 MB · alt text is required</small>
                 </form>
 
@@ -738,6 +762,9 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                 <div className="admin-top-actions">
                   <button type="button" onClick={() => archiveProduct(draft.id)}>
                     Archive product
+                  </button>
+                  <button type="button" onClick={() => deleteProductPermanently(draft.id)}>
+                    Delete permanently
                   </button>
                 </div>
               </section>

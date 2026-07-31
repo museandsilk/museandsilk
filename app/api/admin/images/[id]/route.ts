@@ -5,6 +5,7 @@ import { productImages } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { deleteObject } from "@/lib/r2";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { variantKeyFor } from "@/lib/image-variants";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,11 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 
   await db.delete(productImages).where(eq(productImages.id, id));
   await deleteObject(existing.r2Key);
+  // Also remove the resized WebP variants generated at upload time (see lib/client-image-processing.ts)
+  // — these are separate R2 objects from the original and were previously left orphaned on delete.
+  if (existing.variantWidths?.length) {
+    await Promise.all(existing.variantWidths.map((width) => deleteObject(variantKeyFor(existing.r2Key, width))));
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "image.delete", entityType: "product", entityId: existing.productId, detail: { imageId: id } });
 

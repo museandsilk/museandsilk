@@ -44,7 +44,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   };
 
   return (
-    <main>
+    <main className="page-fade-in">
       <StoreHeader />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <section className={`collection-hero collection-${normalized}`}>

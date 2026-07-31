@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default async function ShopPage() {
   const products = await getCatalogProducts();
   return (
-    <main>
+    <main className="page-fade-in">
       <StoreHeader />
       <section className="collection-hero">
         <Image src="/category-still-life.webp" alt="" fill priority sizes="100vw" />

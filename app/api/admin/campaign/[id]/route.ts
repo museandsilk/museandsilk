@@ -5,6 +5,7 @@ import { campaignSlides } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { deleteObject } from "@/lib/r2";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { variantKeyFor } from "@/lib/image-variants";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,9 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 
   await db.delete(campaignSlides).where(eq(campaignSlides.id, id));
   await deleteObject(existing.r2Key);
+  if (existing.variantWidths?.length) {
+    await Promise.all(existing.variantWidths.map((width) => deleteObject(variantKeyFor(existing.r2Key, width))));
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "campaign.delete", entityType: "campaign-slide", entityId: id });
 

@@ -9,7 +9,7 @@ export const revalidate = 300;
 export default async function Home() {
   const [products, campaignSlides] = await Promise.all([getCatalogProducts(), getCampaignSlides()]);
   return (
-    <main>
+    <main className="page-fade-in">
       <StoreHeader />
       <CampaignCarousel slides={campaignSlides} />
 
