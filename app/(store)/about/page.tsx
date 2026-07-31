@@ -22,7 +22,7 @@ export default function AboutPage() {
           <h1>Accessories are the final idea.</h1>
 
           <p>
-            Muse &amp; Silk began with a narrow, stubborn question: why should the piece that finishes a look be the one we think about
+            Muse and Silk began with a narrow, stubborn question: why should the piece that finishes a look be the one we think about
             least? Scarves were folded away in drawers. Sunglasses were an afterthought bought at an airport counter. We started this
             house to treat the final layer with the same seriousness as everything underneath it.
           </p>

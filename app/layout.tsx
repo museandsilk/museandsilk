@@ -63,6 +63,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       {
         "@type": "Organization",
         name: "Muse & Silk",
+        alternateName: ["Muse and Silk", "museandsilk"],
         url: origin,
         logo: `${origin}/logo.png`,
         ...(settings.instagramUrl ? { sameAs: [settings.instagramUrl] } : {}),
@@ -70,6 +71,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       {
         "@type": "WebSite",
         name: "Muse & Silk",
+        alternateName: ["Muse and Silk", "museandsilk"],
         url: origin,
         potentialAction: {
           "@type": "SearchAction",
