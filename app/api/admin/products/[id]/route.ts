@@ -129,11 +129,13 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     return Response.json({ ok: true });
   }
 
-  // Permanent delete: free the R2 storage this product's images occupy, then remove the product
-  // row — productVariants and productImages cascade-delete at the database level (see
-  // db/schema.ts's onDelete: "cascade" on both tables' productId foreign key). Order history is
-  // unaffected: order_items snapshot product/variant names, SKUs and prices at time of purchase
-  // and only set their productId/variantId to null (onDelete: "set null"), never cascade-deleted.
+  // Permanent delete: remove the product row first — productVariants and productImages cascade-
+  // delete at the database level (see db/schema.ts's onDelete: "cascade" on both tables' productId
+  // foreign key, and on inventory_movements' variantId key). Order history is unaffected: order_items
+  // snapshot product/variant names, SKUs and prices at time of purchase and only set their
+  // productId/variantId to null (onDelete: "set null"), never cascade-deleted.
+  // Only once the DB delete has actually succeeded do we free the R2 objects — deleting storage
+  // first would leave orphaned, image-less DB rows behind if the DB step then failed for any reason.
   const [existing] = await db.select({ id: products.id }).from(products).where(eq(products.id, id)).limit(1);
   if (!existing) return Response.json({ error: "Product not found." }, { status: 404 });
 
@@ -142,14 +144,19 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     .from(productImages)
     .where(eq(productImages.productId, id));
 
+  try {
+    await db.delete(products).where(eq(products.id, id));
+  } catch (error) {
+    console.error("product.delete_permanent failed", error);
+    return Response.json({ error: "Could not delete product — it may still be referenced elsewhere." }, { status: 500 });
+  }
+
   await Promise.all(
     images.flatMap((image) => [
       deleteObject(image.r2Key),
       ...(image.variantWidths ?? []).map((width) => deleteObject(variantKeyFor(image.r2Key, width))),
     ]),
   );
-
-  await db.delete(products).where(eq(products.id, id));
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.delete_permanent", entityType: "product", entityId: id, detail: { imagesDeleted: images.length } });
 

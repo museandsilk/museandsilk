@@ -166,7 +166,7 @@ export const productCollections = pgTable("product_collections", {
 
 export const inventoryMovements = pgTable("inventory_movements", {
   id: uuid("id").primaryKey().defaultRandom(),
-  variantId: uuid("variant_id").notNull().references(() => productVariants.id),
+  variantId: uuid("variant_id").notNull().references(() => productVariants.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   quantity: integer("quantity").notNull(),
   reason: text("reason"),
