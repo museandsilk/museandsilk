@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Instrument_Serif, Manrope } from "next/font/google";
-import { headers } from "next/headers";
 import "./globals.css";
 import { getPublicSettings } from "@/lib/commerce";
 import { AnalyticsConsent } from "./analytics-consent";
@@ -18,11 +17,8 @@ const manrope = Manrope({
   display: "swap",
 });
 
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`;
+export function generateMetadata(): Metadata {
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   return {
     metadataBase: new URL(origin),
     title: { default: "Muse & Silk — Modern scarves, bandanas and eyewear", template: "%s | Muse & Silk" },
@@ -31,10 +27,10 @@ export async function generateMetadata(): Promise<Metadata> {
     icons: {
       icon: [
         { url: "/logo.ico", sizes: "32x32" },
-        { url: "/logo.png", type: "image/png", sizes: "1002x1002" },
+        { url: "/logo-icon.png", type: "image/png", sizes: "512x512" },
       ],
       shortcut: "/logo.ico",
-      apple: "/logo.png",
+      apple: "/apple-touch-icon.png",
     },
     openGraph: {
       title: "Muse & Silk — The final layer, considered.",
