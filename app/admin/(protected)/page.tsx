@@ -53,7 +53,7 @@ export default async function AdminDashboardPage() {
         </div>
         <div className="admin-top-actions">
           <Link href="/" target="_blank">
-            View store ↗
+            View store ↗︎
           </Link>
           <Link href="/admin/products">Manage products</Link>
         </div>
@@ -88,7 +88,7 @@ export default async function AdminDashboardPage() {
             <h2>Recent orders</h2>
             <span>{recentOrders.length} records</span>
           </div>
-          <Link href="/admin/orders">View all orders →</Link>
+          <Link href="/admin/orders">View all orders →︎</Link>
         </div>
         <div className="admin-table-wrap">
           <table>

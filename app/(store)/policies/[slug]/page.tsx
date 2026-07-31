@@ -155,7 +155,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
         <footer>
           <p>Last updated 29 July 2026. Questions about this policy?</p>
           <Link className="text-link" href="/contact">
-            Contact customer care →
+            Contact customer care →︎
           </Link>
         </footer>
       </article>

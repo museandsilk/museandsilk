@@ -49,7 +49,7 @@ export function CampaignCarousel({ slides }: { slides: CampaignSlide[] }) {
         <p className="hero-note">{slide.body}</p>
         <div className="hero-actions">
           <Link href={slide.ctaHref} className="button button-dark">{slide.ctaLabel}</Link>
-          <Link href="/collections/scarves" className="text-link light-link">Discover scarves <span aria-hidden="true">↗</span></Link>
+          <Link href="/collections/scarves" className="text-link light-link">Discover scarves <span aria-hidden="true">↗︎</span></Link>
         </div>
       </div>
       {items.length > 1 && (

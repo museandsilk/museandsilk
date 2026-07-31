@@ -31,7 +31,7 @@ export default async function Home() {
             <Link href={`/collections/${name.toLowerCase()}`} className={`category-card crop-${crop}`} key={name}>
               <Image src="/category-still-life.webp" alt="" fill sizes="(max-width: 760px) 100vw, 33vw" />
               <span className="category-number">0{index + 1}</span>
-              <div className="category-label"><h3>{name}</h3><p>{note}</p><span className="round-arrow" aria-hidden="true">↗</span></div>
+              <div className="category-label"><h3>{name}</h3><p>{note}</p><span className="round-arrow" aria-hidden="true">↗︎</span></div>
             </Link>
           ))}
         </div>
@@ -40,7 +40,7 @@ export default async function Home() {
       <section className="section products-section" aria-labelledby="new-title">
         <div className="section-heading product-heading">
           <div><p className="eyebrow">Freshly arrived</p><h2 id="new-title">The Muse edit</h2></div>
-          <Link href="/shop" className="text-link">View all pieces <span aria-hidden="true">→</span></Link>
+          <Link href="/shop" className="text-link">View all pieces <span aria-hidden="true">→︎</span></Link>
         </div>
         <div className="product-grid">{products.slice(0, 4).map((product) => <ProductCard key={product.slug} product={product} />)}</div>
       </section>
@@ -51,7 +51,7 @@ export default async function Home() {
           <p className="eyebrow">The art of the finish</p>
           <h2>One piece can change the whole sentence.</h2>
           <p>We believe accessories are not an afterthought. They are the final idea—the color, line and texture that makes a look feel entirely your own.</p>
-          <Link href="/about" className="text-link">Enter our world <span aria-hidden="true">↗</span></Link>
+          <Link href="/about" className="text-link">Enter our world <span aria-hidden="true">↗︎</span></Link>
           <span className="editorial-mark" aria-hidden="true">M &amp; S</span>
         </div>
       </section>
@@ -65,12 +65,12 @@ export default async function Home() {
           <article className="journal-lead">
             <div className="journal-image journal-image-left"><Image src="/category-still-life.webp" alt="" fill sizes="66vw" /></div>
             <p className="eyebrow">Styling · 6 min</p><h3>Seven quiet ways to wear a silk scarf</h3>
-            <Link href="/journal/seven-ways-to-wear-a-scarf" className="text-link">Read the story <span aria-hidden="true">→</span></Link>
+            <Link href="/journal/seven-ways-to-wear-a-scarf" className="text-link">Read the story <span aria-hidden="true">→︎</span></Link>
           </article>
           <article className="journal-side">
             <div className="journal-image journal-image-right"><Image src="/category-still-life.webp" alt="" fill sizes="33vw" /></div>
             <p className="eyebrow">Care · 4 min</p><h3>Keeping silk soft, luminous and beautifully folded</h3>
-            <Link href="/journal/silk-care" className="text-link">Read the story <span aria-hidden="true">→</span></Link>
+            <Link href="/journal/silk-care" className="text-link">Read the story <span aria-hidden="true">→︎</span></Link>
           </article>
         </div>
       </section>

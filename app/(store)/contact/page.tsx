@@ -33,7 +33,7 @@ export default async function ContactPage() {
             <span>WhatsApp Business</span>
             {whatsapp ? (
               <a href={`https://wa.me/${whatsapp}?text=${encodeURIComponent("Hello Muse & Silk, I would like some assistance.")}`} target="_blank" rel="noreferrer">
-                Start a conversation ↗
+                Start a conversation ↗︎
               </a>
             ) : (
               <p>Add your WhatsApp number in Owner Studio.</p>
@@ -51,7 +51,7 @@ export default async function ContactPage() {
             <span>Instagram</span>
             {settings.instagramUrl ? (
               <a href={settings.instagramUrl} target="_blank" rel="noreferrer">
-                Visit Instagram ↗
+                Visit Instagram ↗︎
               </a>
             ) : (
               <p>Add your Instagram profile in Owner Studio.</p>
@@ -59,7 +59,7 @@ export default async function ContactPage() {
           </article>
           <article>
             <span>Existing order</span>
-            <Link href="/track-order">Track an order →</Link>
+            <Link href="/track-order">Track an order →︎</Link>
           </article>
         </aside>
       </section>

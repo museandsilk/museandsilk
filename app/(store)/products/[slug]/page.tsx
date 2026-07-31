@@ -6,6 +6,7 @@ import { ProductPurchase } from "./product-purchase";
 import { getProductBySlug } from "@/lib/commerce";
 import { cropForCategory } from "@/lib/slug";
 import { ProductGallery } from "./product-gallery";
+import { BackButton } from "./back-button";
 
 export const revalidate = 300;
 
@@ -95,6 +96,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <ProductGallery name={product.name} crop={crop} images={product.images} fallback={fallbackImage} />
         <div className="product-buy">
           <nav aria-label="Breadcrumb">
+            <BackButton />
             <Link href="/">Home</Link>
             <span>/</span>
             <Link href={`/collections/${product.category}`}>{product.type}</Link>
@@ -130,7 +132,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </details>
           </div>
           <Link className="whatsapp-help" href="/contact">
-            Need help? Talk to us on WhatsApp <span>↗</span>
+            Need help? Talk to us on WhatsApp <span>↗︎</span>
           </Link>
         </div>
       </section>

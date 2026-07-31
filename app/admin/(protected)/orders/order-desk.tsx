@@ -303,7 +303,7 @@ export function OrderDesk() {
                 </p>
                 {proofs.map((proof) => (
                   <div key={proof.id} className="proof-actions">
-                    <button onClick={() => viewProof(proof.id)}>View receipt ↗</button>
+                    <button onClick={() => viewProof(proof.id)}>View receipt ↗︎</button>
                     <small>{proof.status}</small>
                     {proof.status === "pending" && (
                       <>
@@ -339,7 +339,7 @@ export function OrderDesk() {
                 {history.map((entry) => (
                   <p key={entry.id}>
                     <small>
-                      {new Date(entry.createdAt).toLocaleString("en-PK")} — {entry.fromStatus ?? "created"} → {entry.toStatus} ({entry.actorEmail})
+                      {new Date(entry.createdAt).toLocaleString("en-PK")} — {entry.fromStatus ?? "created"} →︎ {entry.toStatus} ({entry.actorEmail})
                       {entry.note ? `: ${entry.note}` : ""}
                     </small>
                   </p>

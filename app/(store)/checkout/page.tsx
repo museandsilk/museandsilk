@@ -409,7 +409,7 @@ export default function CheckoutPage() {
                 ) : (
                   "Place order"
                 )}
-                <span>→</span>
+                <span>→︎</span>
               </button>
               <small>By placing the order, you agree to the store terms and reservation policy.</small>
             </aside>

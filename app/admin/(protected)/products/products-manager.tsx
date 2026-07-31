@@ -336,7 +336,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
         </div>
         <div className="admin-top-actions">
           <Link href="/" target="_blank">
-            View store ↗
+            View store ↗︎
           </Link>
           <button onClick={openNew}>Add product</button>
         </div>

@@ -96,7 +96,7 @@ export default function CartPage() {
               </div>
               <p>Complimentary nationwide delivery above PKR 12,000.</p>
               <Link className="add-button" href="/checkout">
-                Continue to checkout <span>→</span>
+                Continue to checkout <span>→︎</span>
               </Link>
               <Link href="/shop" className="text-link">
                 Continue shopping

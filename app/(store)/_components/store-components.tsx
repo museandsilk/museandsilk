@@ -14,6 +14,7 @@ export function StoreHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [bagCount, setBagCount] = useState(0);
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState<number | null>(null);
   useEffect(() => {
     const update = () => setBagCount(cartCount(readCart()));
     update();
@@ -22,12 +23,23 @@ export function StoreHeader() {
     return () => { window.removeEventListener("muse-cart-change", update); window.removeEventListener("storage", update); };
   }, []);
   useEffect(() => {
+    fetch("/api/checkout/options", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.settings?.freeDeliveryThreshold) setFreeDeliveryThreshold(data.settings.freeDeliveryThreshold);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
     document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [menuOpen, searchOpen]);
   return (
     <>
-      <div className="announcement">Complimentary delivery over PKR 12,000<span>Pakistan nationwide</span></div>
+      <div className="announcement">
+        {freeDeliveryThreshold ? `Complimentary delivery over PKR ${freeDeliveryThreshold.toLocaleString("en-PK")}` : "Complimentary delivery on qualifying orders"}
+        <span>Pakistan nationwide</span>
+      </div>
       <header className="header">
         <button className="mobile-menu-button" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><i /><i /></button>
         <nav className="main-nav" aria-label="Primary navigation"><Link href="/shop">New</Link><Link href="/collections/scarves">Scarves</Link><Link href="/collections/bandanas">Bandanas</Link><Link href="/collections/glasses">Eyewear</Link><Link href="/journal">The edit</Link></nav>
@@ -36,13 +48,13 @@ export function StoreHeader() {
       </header>
       <div className={`menu-panel ${menuOpen ? "is-open" : ""}`} aria-hidden={!menuOpen}>
         <div className="panel-top"><span className="wordmark">MUSE <i>&amp;</i> SILK</span><button onClick={() => setMenuOpen(false)} aria-label="Close menu">×</button></div>
-        <nav>{[["New arrivals","/shop"],["Scarves","/collections/scarves"],["Bandanas","/collections/bandanas"],["Eyewear","/collections/glasses"],["The edit","/journal"],["Our story","/about"]].map(([label, href], index) => <Link href={href} key={href} onClick={() => setMenuOpen(false)}><span>0{index+1}</span>{label}<b aria-hidden="true">↗</b></Link>)}</nav>
+        <nav>{[["New arrivals","/shop"],["Scarves","/collections/scarves"],["Bandanas","/collections/bandanas"],["Eyewear","/collections/glasses"],["The edit","/journal"],["Our story","/about"]].map(([label, href], index) => <Link href={href} key={href} onClick={() => setMenuOpen(false)}><span>0{index+1}</span>{label}<b aria-hidden="true">↗︎</b></Link>)}</nav>
         <div className="menu-panel-footer"><Link href="/track-order">Track an order</Link><Link href="/contact">WhatsApp</Link><span>PKR · Pakistan</span></div>
       </div>
       <div className={`search-panel ${searchOpen ? "is-open" : ""}`} aria-hidden={!searchOpen}>
         <div className="panel-top"><span className="eyebrow">Search the collection</span><button onClick={() => setSearchOpen(false)} aria-label="Close search">×</button></div>
         <label><span className="sr-only">Search products</span><input autoFocus={searchOpen} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Scarf, oxblood, sunglasses…" /><span aria-hidden="true">⌕</span></label>
-        <div className="search-suggestions"><p>{query ? "Search now" : "Popular now"}</p>{query ? <Link href={`/search?q=${encodeURIComponent(query)}`} onClick={() => setSearchOpen(false)}>View results for &ldquo;{query}&rdquo; <span>→</span></Link> : ["Silk scarves","Oxblood","Tortoiseshell frames"].map(item => <button key={item} onClick={() => setQuery(item)}>{item}</button>)}</div>
+        <div className="search-suggestions"><p>{query ? "Search now" : "Popular now"}</p>{query ? <Link href={`/search?q=${encodeURIComponent(query)}`} onClick={() => setSearchOpen(false)}>View results for &ldquo;{query}&rdquo; <span>→︎</span></Link> : ["Silk scarves","Oxblood","Tortoiseshell frames"].map(item => <button key={item} onClick={() => setQuery(item)}>{item}</button>)}</div>
       </div>
       {(menuOpen || searchOpen) && <button className="page-scrim" aria-label="Close panel" onClick={() => { setMenuOpen(false); setSearchOpen(false); }} />}
     </>
@@ -73,5 +85,5 @@ export function NewsletterForm() {
     setMessage(response.ok ? "You're on the private list." : result.error ?? "Please try again.");
     if (response.ok) form.reset();
   }
-  return <><form className="newsletter-form" onSubmit={submit}><label><span className="sr-only">Email address</span><input name="email" type="email" required placeholder="Your email address" /></label><button type="submit">Join the list <span aria-hidden="true">→</span></button></form><p className="form-message" aria-live="polite">{message}</p></>;
+  return <><form className="newsletter-form" onSubmit={submit}><label><span className="sr-only">Email address</span><input name="email" type="email" required placeholder="Your email address" /></label><button type="submit">Join the list <span aria-hidden="true">→︎</span></button></form><p className="form-message" aria-live="polite">{message}</p></>;
 }

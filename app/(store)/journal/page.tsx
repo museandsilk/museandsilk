@@ -32,7 +32,7 @@ export default function JournalPage() {
                 {article.category} · {article.readTime}
               </p>
               <h2>{article.title}</h2>
-              <span>Read the story →</span>
+              <span>Read the story →︎</span>
             </Link>
           ))}
         </div>
