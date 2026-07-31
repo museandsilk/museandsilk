@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreHeader } from "../../_components/store-components";
+import { getPublicSettings } from "@/lib/commerce";
+
+const FREE_DELIVERY_PLACEHOLDER = "__FREE_DELIVERY_THRESHOLD__";
 
 type Policy = {
   title: string;
@@ -20,7 +23,7 @@ const policies: Record<string, Policy> = {
       ],
       [
         "Delivery charges",
-        "Delivery is charged according to the delivery zone your city or province falls into — not by parcel weight. The exact charge for your zone is shown at checkout before you place your order. Delivery is complimentary on orders that reach the current free-delivery threshold of PKR 12,000.",
+        `Delivery is charged according to the delivery zone your city or province falls into — not by parcel weight. The exact charge for your zone is shown at checkout before you place your order. Delivery is complimentary on orders that reach the current free-delivery threshold of PKR ${FREE_DELIVERY_PLACEHOLDER}.`,
       ],
       [
         "Delivery timing",
@@ -135,6 +138,15 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
   const policy = policies[slug];
   if (!policy) notFound();
 
+  const sections =
+    slug === "shipping"
+      ? await (async () => {
+          const settings = await getPublicSettings();
+          const threshold = settings.freeDeliveryThreshold.toLocaleString("en-PK");
+          return policy.sections.map(([title, body]) => [title, body.replaceAll(FREE_DELIVERY_PLACEHOLDER, threshold)] as [string, string]);
+        })()
+      : policy.sections;
+
   return (
     <main>
       <StoreHeader />
@@ -145,7 +157,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
           <p>{policy.intro}</p>
         </header>
         <div>
-          {policy.sections.map(([title, body]) => (
+          {sections.map(([title, body]) => (
             <section key={title}>
               <h2>{title}</h2>
               <p>{body}</p>

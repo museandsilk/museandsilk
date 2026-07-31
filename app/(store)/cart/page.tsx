@@ -10,6 +10,7 @@ const money = new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR
 
 export default function CartPage() {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState<number | null>(null);
 
   useEffect(() => {
     const update = () => setItems(readCart());
@@ -21,6 +22,15 @@ export default function CartPage() {
       window.removeEventListener("muse-cart-change", update);
       window.removeEventListener("storage", update);
     };
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/checkout/options", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.settings?.freeDeliveryThreshold) setFreeDeliveryThreshold(data.settings.freeDeliveryThreshold);
+      })
+      .catch(() => {});
   }, []);
 
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
@@ -94,7 +104,11 @@ export default function CartPage() {
                 <span>Delivery</span>
                 <span>Calculated at checkout</span>
               </div>
-              <p>Complimentary nationwide delivery above PKR 12,000.</p>
+              <p>
+                {freeDeliveryThreshold
+                  ? `Complimentary nationwide delivery above PKR ${freeDeliveryThreshold.toLocaleString("en-PK")}.`
+                  : "Complimentary nationwide delivery on qualifying orders."}
+              </p>
               <Link className="add-button" href="/checkout">
                 Continue to checkout <span>→︎</span>
               </Link>

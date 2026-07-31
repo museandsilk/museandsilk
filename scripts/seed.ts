@@ -32,7 +32,7 @@ async function seedSiteSettings() {
     id: "store",
     brandName: "Muse & Silk",
     whatsappNumber: process.env.WHATSAPP_DEFAULT_NUMBER ?? "",
-    freeDeliveryThreshold: 12000,
+    freeDeliveryThreshold: 4000,
     codReservationHours: 12,
     bankReservationHours: 24,
     taxEnabled: false,

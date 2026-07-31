@@ -76,7 +76,7 @@ export default function CheckoutPage() {
 
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
   const zone = zones.find((item) => item.id === zoneId);
-  const delivery = subtotal >= Number(settings?.freeDeliveryThreshold ?? 12000) ? 0 : Number(zone?.deliveryCharge ?? 0);
+  const delivery = subtotal >= Number(settings?.freeDeliveryThreshold ?? 4000) ? 0 : Number(zone?.deliveryCharge ?? 0);
   const total = Math.max(0, subtotal + delivery - (coupon?.discount ?? 0));
 
   // Re-check the applied coupon whenever the cart total changes (e.g. a min-order-amount coupon

@@ -1,0 +1,1 @@
+ALTER TABLE "site_settings" ALTER COLUMN "free_delivery_threshold" SET DEFAULT 4000;

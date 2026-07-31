@@ -204,7 +204,7 @@ export async function POST(request: Request) {
   }
 
   const settings = await loadSettings();
-  const freeThreshold = settings?.freeDeliveryThreshold ?? 12000;
+  const freeThreshold = settings?.freeDeliveryThreshold ?? 4000;
   const deliveryCharge = subtotal >= freeThreshold ? 0 : zone.deliveryCharge;
 
   let discount = 0;

@@ -270,7 +270,7 @@ export const siteSettings = pgTable("site_settings", {
   bankIban: text("bank_iban").notNull().default(""),
   metaPixelId: text("meta_pixel_id").notNull().default(""),
   gaMeasurementId: text("ga_measurement_id").notNull().default(""),
-  freeDeliveryThreshold: integer("free_delivery_threshold").notNull().default(12000),
+  freeDeliveryThreshold: integer("free_delivery_threshold").notNull().default(4000),
   codReservationHours: integer("cod_reservation_hours").notNull().default(12),
   bankReservationHours: integer("bank_reservation_hours").notNull().default(24),
   taxEnabled: boolean("tax_enabled").notNull().default(false),

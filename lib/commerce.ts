@@ -428,7 +428,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     supportPhone: row?.supportPhone ?? "",
     supportEmail: row?.supportEmail ?? "",
     instagramUrl: row?.instagramUrl ?? "",
-    freeDeliveryThreshold: row?.freeDeliveryThreshold ?? 12000,
+    freeDeliveryThreshold: row?.freeDeliveryThreshold ?? 4000,
     metaPixelId: row?.metaPixelId ?? "",
     gaMeasurementId: row?.gaMeasurementId ?? "",
     brandName: row?.brandName ?? "Muse & Silk",
