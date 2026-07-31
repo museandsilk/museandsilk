@@ -1,6 +1,5 @@
-import { Pool, neonConfig } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
-import ws from "ws";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
 function requireDatabaseUrl(): string {
@@ -13,17 +12,21 @@ function requireDatabaseUrl(): string {
   return url;
 }
 
-// neon-serverless uses WebSockets for its Pool connections. In Node (local dev, and the
-// OpenNext Cloudflare Workers build both run on a Node-compatible runtime here) we point it at
-// the `ws` package; Cloudflare Workers' native WebSocket global is used automatically otherwise.
-if (typeof WebSocket === "undefined") {
-  neonConfig.webSocketConstructor = ws;
-}
+// IMPORTANT: this MUST stay the stateless, per-query HTTP driver (fetch-based), not the
+// Pool-based `neon-serverless` driver. Cloudflare Workers forbids reusing an I/O object (sockets,
+// streams, etc.) across different requests — each request gets its own isolated I/O context, even
+// when the same Worker isolate handles multiple requests over time. A WebSocket connection pool is
+// exactly this kind of long-lived cross-request state, and using one here caused real, reproduced
+// production failures: "Cannot perform I/O on behalf of a different request" and "Network
+// connection lost" errors surfacing as intermittent Error 1101s on every route. `neon-http` issues
+// a fresh, independent fetch() per query, so nothing is ever held open between requests.
+//
+// The tradeoff: this driver does not support `db.transaction(async (tx) => {...})` — it throws
+// "No transactions support in neon-http driver" if called. Multi-statement writes that need
+// atomicity (order creation, reservation expiry) use guarded sequential awaits instead — see
+// app/api/orders/route.ts and lib/orders.ts for the pattern (a conditional UPDATE with a WHERE
+// guard acts as the atomicity check, since Postgres itself still applies each statement safely).
+const sql = neon(requireDatabaseUrl());
 
-const pool = new Pool({ connectionString: requireDatabaseUrl() });
-
-// A real Postgres transaction (BEGIN/COMMIT/ROLLBACK) — unlike `neon-http`, this driver supports
-// `db.transaction(async (tx) => {...})`, which matters for order creation and admin writes that
-// touch multiple tables and must never partially commit.
-export const db = drizzle(pool, { schema });
+export const db = drizzle(sql, { schema });
 export { schema };

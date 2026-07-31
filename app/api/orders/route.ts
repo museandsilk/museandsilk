@@ -37,18 +37,6 @@ type OrderLine = {
 
 type BankDetails = { name: string; accountTitle: string; accountNumber: string; iban: string };
 
-class InsufficientStockError extends Error {
-  constructor(public productName: string) {
-    super(`${productName} does not have enough available stock.`);
-  }
-}
-
-class CouponUnavailableError extends Error {
-  constructor() {
-    super("This coupon is no longer available. Please remove it and try again.");
-  }
-}
-
 type SiteSettingsRow = typeof siteSettings.$inferSelect;
 type OrderRow = typeof orders.$inferSelect;
 
@@ -236,117 +224,127 @@ export async function POST(request: Request) {
   const orderId = randomUUID();
   const orderNumber = generateOrderNumber();
 
-  // Everything below runs in a single Postgres transaction: stock reservation (each UPDATE carries
-  // a WHERE guard — stock - reserved >= requested — so a concurrent order can never over-reserve the
-  // same variant) plus the order/items/history/inventory-movement writes. If any step fails —
-  // including a lost reservation race — the whole transaction rolls back, so no phantom reservation
-  // or dangling order is ever left behind.
-  try {
-    await db.transaction(async (tx) => {
-      for (const line of lines) {
-        const updated = await tx
+  // NOTE: this project's Neon connection (db/index.ts) intentionally uses the stateless `neon-http`
+  // driver, not a connection-pooling driver — Cloudflare Workers forbids reusing an I/O object
+  // (sockets, pooled connections) across different requests, and a pooling driver caused real
+  // production failures ("Cannot perform I/O on behalf of a different request"). That means
+  // `db.transaction()` isn't available here. Instead, each guarded UPDATE below carries a WHERE
+  // condition that only succeeds if the precondition (enough stock, coupon still under its cap)
+  // still holds, so a lost race is caught explicitly rather than relying on rollback. If a later
+  // step fails after stock was already reserved, we compensate by releasing it manually.
+  const reserved: Array<{ variantId: string; quantity: number }> = [];
+  async function releaseReservedStock(): Promise<void> {
+    const now = new Date();
+    for (const item of reserved) {
+      try {
+        await db
           .update(productVariants)
-          .set({
-            reservedQuantity: sql`${productVariants.reservedQuantity} + ${line.quantity}`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(productVariants.id, line.variantId),
-              sql`${productVariants.stockQuantity} - ${productVariants.reservedQuantity} >= ${line.quantity}`,
-            ),
-          )
-          .returning({ id: productVariants.id });
-
-        if (updated.length === 0) {
-          throw new InsufficientStockError(line.productName);
-        }
+          .set({ reservedQuantity: sql`greatest(0, ${productVariants.reservedQuantity} - ${item.quantity})`, updatedAt: now })
+          .where(eq(productVariants.id, item.variantId));
+      } catch (releaseError) {
+        console.error("Failed to release reserved stock after a failed checkout", item.variantId, releaseError);
       }
+    }
+  }
 
-      if (appliedCouponId) {
-        // Guarded the same way as stock: only consume a redemption if the coupon is still active
-        // and (unlimited OR under its cap) at the moment of commit, so two concurrent checkouts can
-        // never both slip through past a coupon's maxRedemptions.
-        const consumed = await tx
-          .update(discountCodes)
-          .set({ redemptionCount: sql`${discountCodes.redemptionCount} + 1`, updatedAt: new Date() })
-          .where(
-            and(
-              eq(discountCodes.id, appliedCouponId),
-              eq(discountCodes.active, true),
-              sql`(${discountCodes.maxRedemptions} IS NULL OR ${discountCodes.redemptionCount} < ${discountCodes.maxRedemptions})`,
-            ),
-          )
-          .returning({ id: discountCodes.id });
-        if (consumed.length === 0) {
-          throw new CouponUnavailableError();
-        }
-        await tx.insert(discountRedemptions).values({
-          discountCodeId: appliedCouponId,
-          orderId,
-          amountDiscounted: discount,
-        });
+  try {
+    for (const line of lines) {
+      const updated = await db
+        .update(productVariants)
+        .set({
+          reservedQuantity: sql`${productVariants.reservedQuantity} + ${line.quantity}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(productVariants.id, line.variantId),
+            sql`${productVariants.stockQuantity} - ${productVariants.reservedQuantity} >= ${line.quantity}`,
+          ),
+        )
+        .returning({ id: productVariants.id });
+
+      if (updated.length === 0) {
+        await releaseReservedStock();
+        return Response.json({ error: `${line.productName} does not have enough available stock.` }, { status: 409 });
       }
+      reserved.push({ variantId: line.variantId, quantity: line.quantity });
+    }
 
-      await tx.insert(orders).values({
-        id: orderId,
-        orderNumber,
-        customerName,
-        customerPhone,
-        customerEmail,
-        city,
-        province,
-        address,
-        subtotal,
-        deliveryCharge,
-        discount,
-        tax: 0,
-        total,
-        currency: "PKR",
-        paymentMethod,
-        paymentStatus: "pending",
-        orderStatus: "pending_confirmation",
-        reservationExpiresAt,
-        notes,
-      });
-      await tx.insert(orderStatusHistory).values({
+    if (appliedCouponId) {
+      // Guarded the same way as stock: only consume a redemption if the coupon is still active and
+      // (unlimited OR under its cap) right now, so two concurrent checkouts can never both slip
+      // through past a coupon's maxRedemptions.
+      const consumed = await db
+        .update(discountCodes)
+        .set({ redemptionCount: sql`${discountCodes.redemptionCount} + 1`, updatedAt: new Date() })
+        .where(
+          and(
+            eq(discountCodes.id, appliedCouponId),
+            eq(discountCodes.active, true),
+            sql`(${discountCodes.maxRedemptions} IS NULL OR ${discountCodes.redemptionCount} < ${discountCodes.maxRedemptions})`,
+          ),
+        )
+        .returning({ id: discountCodes.id });
+      if (consumed.length === 0) {
+        await releaseReservedStock();
+        return Response.json({ error: "This coupon is no longer available. Please remove it and try again." }, { status: 409 });
+      }
+      await db.insert(discountRedemptions).values({ discountCodeId: appliedCouponId, orderId, amountDiscounted: discount });
+    }
+
+    await db.insert(orders).values({
+      id: orderId,
+      orderNumber,
+      customerName,
+      customerPhone,
+      customerEmail,
+      city,
+      province,
+      address,
+      subtotal,
+      deliveryCharge,
+      discount,
+      tax: 0,
+      total,
+      currency: "PKR",
+      paymentMethod,
+      paymentStatus: "pending",
+      orderStatus: "pending_confirmation",
+      reservationExpiresAt,
+      notes,
+    });
+    await db.insert(orderStatusHistory).values({
+      orderId,
+      fromStatus: null,
+      toStatus: "pending_confirmation",
+      note: "Order placed",
+      actorEmail: "customer",
+    });
+    for (const line of lines) {
+      await db.insert(orderItems).values({
         orderId,
-        fromStatus: null,
-        toStatus: "pending_confirmation",
-        note: "Order placed",
+        productId: line.productId,
+        variantId: line.variantId,
+        productName: line.productName,
+        variantName: line.variantName,
+        sku: line.sku,
+        unitPrice: line.unitPrice,
+        quantity: line.quantity,
+        lineTotal: line.lineTotal,
+      });
+      await db.insert(inventoryMovements).values({
+        variantId: line.variantId,
+        type: "reservation",
+        quantity: line.quantity,
+        reason: "Checkout reservation",
+        referenceType: "order",
+        referenceId: orderId,
         actorEmail: "customer",
       });
-      for (const line of lines) {
-        await tx.insert(orderItems).values({
-          orderId,
-          productId: line.productId,
-          variantId: line.variantId,
-          productName: line.productName,
-          variantName: line.variantName,
-          sku: line.sku,
-          unitPrice: line.unitPrice,
-          quantity: line.quantity,
-          lineTotal: line.lineTotal,
-        });
-        await tx.insert(inventoryMovements).values({
-          variantId: line.variantId,
-          type: "reservation",
-          quantity: line.quantity,
-          reason: "Checkout reservation",
-          referenceType: "order",
-          referenceId: orderId,
-          actorEmail: "customer",
-        });
-      }
-    });
+    }
   } catch (error) {
-    if (error instanceof InsufficientStockError) {
-      return Response.json({ error: `${error.productName} does not have enough available stock.` }, { status: 409 });
-    }
-    if (error instanceof CouponUnavailableError) {
-      return Response.json({ error: error.message }, { status: 409 });
-    }
-    console.error("Order transaction failed", error);
+    await releaseReservedStock();
+    console.error("Order write failed", error);
     return Response.json({ error: "The order could not be placed. Please try again." }, { status: 500 });
   }
 
