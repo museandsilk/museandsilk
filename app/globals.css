@@ -51,9 +51,8 @@ img { object-fit: cover; }
   .skeleton::after { animation: none; }
 }
 
-.announcement { height: 30px; padding: 0 3vw; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; gap: 30px; font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
-.announcement-region { color: #cdbda8; white-space: nowrap; }
-.announcement-ticker { position: relative; overflow: hidden; height: 1.4em; width: min(70vw, 460px); }
+.announcement { height: 30px; padding: 0 3vw; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+.announcement-ticker { position: relative; overflow: hidden; height: 1.4em; width: 100%; }
 .announcement-ticker span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; transform: translateX(100%); opacity: 0; transition: transform .45s cubic-bezier(.4,0,.2,1), opacity .45s ease; }
 .announcement-ticker .ticker-current { transform: translateX(0); opacity: 1; }
 .announcement-ticker .ticker-prev { transform: translateX(-100%); opacity: 0; }
@@ -244,7 +243,7 @@ img { object-fit: cover; }
   .editorial { grid-template-columns: 1fr 1fr; min-height: 650px; }
 }
 @media (max-width: 700px) {
-  .announcement { justify-content: center; height: 29px; font-size: 8px; }.announcement-region { display: none; }.announcement-ticker { width: 90vw; }
+  .announcement { justify-content: center; height: 29px; font-size: 8px; }
   .header { top: 29px; height: 62px; padding: 0 16px; }.wordmark { font-size: 17px; }.utility-nav { gap: 0; }
   .bag-link { font-size: 0 !important; }.bag-link::before { content: "Bag"; font-size: 10px; }
   .hero { min-height: calc(100svh - 29px); }.hero-image { object-position: 60% center; }.hero-shade { background: linear-gradient(0deg, rgba(20,12,8,.78) 0%, rgba(20,12,8,.12) 72%); }

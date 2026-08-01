@@ -63,7 +63,6 @@ export function StoreHeader() {
             );
           })}
         </div>
-        <span className="announcement-region">Pakistan nationwide</span>
       </div>
       <header className="header">
         <button className="mobile-menu-button" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><i /><i /></button>
