@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CampaignSlide } from "@/lib/commerce";
 
 const fallback: CampaignSlide = {
@@ -20,18 +20,41 @@ const fallback: CampaignSlide = {
 export function CampaignCarousel({ slides }: { slides: CampaignSlide[] }) {
   const items = slides.length ? slides : [fallback];
   const [active, setActive] = useState(0);
+  const [zoomCycle, setZoomCycle] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
+  const wasVisible = useRef(true);
+
   useEffect(() => {
     if (items.length < 2) return;
     const timer = window.setInterval(() => setActive((index) => (index + 1) % items.length), 5000);
     return () => window.clearInterval(timer);
   }, [items.length]);
+
+  // Restart the hero image's slow zoom whenever it re-enters the viewport (e.g. the visitor
+  // scrolls down and back up), rather than leaving it mid-zoom or already fully zoomed in.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !wasVisible.current) {
+          setZoomCycle((cycle) => cycle + 1);
+        }
+        wasVisible.current = entry.isIntersecting;
+      },
+      { threshold: 0.6 },
+    );
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
+
   const slide = items[active];
   return (
-    <section className="hero campaign-carousel" aria-labelledby="hero-title">
+    <section ref={sectionRef} className="hero campaign-carousel" aria-labelledby="hero-title">
       <div className="campaign-images">
         {items.map((item, index) => (
           <Image
-            key={item.id}
+            key={`${item.id}-${index === active ? zoomCycle : "idle"}`}
             src={item.imageUrl}
             alt={index === active ? item.altText : ""}
             fill

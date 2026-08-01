@@ -67,7 +67,11 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
   return (
     <article className="product-card">
       <Link href={`/products/${product.slug}`} className={`product-image crop-${crop}`}><Image src={product.imageUrl ?? "/category-still-life.webp"} alt={product.name} fill sizes="(max-width: 760px) 50vw, 25vw" {...(product.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: product.blurDataUrl } : {})} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-view">View piece</span></Link>
-      <button className={`save-button ${saved ? "saved" : ""}`} onClick={() => setSaved(!saved)} aria-label={saved ? `Remove ${product.name} from saved pieces` : `Save ${product.name}`}>{saved ? "♥" : "♡"}</button>
+      <button className={`save-button ${saved ? "saved" : ""}`} onClick={() => setSaved(!saved)} aria-label={saved ? `Remove ${product.name} from saved pieces` : `Save ${product.name}`}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} aria-hidden="true">
+          <path d="M12 21s-7.5-4.6-10.2-9.1C.2 8.9 1.4 5 5 4c2.4-.7 4.6.4 7 3 2.4-2.6 4.6-3.7 7-3 3.6 1 4.8 4.9 3.2 7.9C19.5 16.4 12 21 12 21z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        </svg>
+      </button>
       <div className="product-info"><div><p>{product.type}</p><Link href={`/products/${product.slug}`}>{product.name}</Link></div><strong>{money.format(product.price)}</strong></div>
       <div className="product-color"><i className={`swatch swatch-${crop}`} />{product.color}</div>
     </article>
