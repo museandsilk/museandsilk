@@ -11,7 +11,9 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "img-src 'self' data: https:",
+      // blob: is required for the admin campaign-image cropper, which previews the picked file
+      // via URL.createObjectURL() entirely client-side before anything is uploaded.
+      "img-src 'self' data: blob: https:",
       // 'unsafe-eval' is required by React Fast Refresh in dev only — never present in production.
       `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net`,
       "style-src 'self' 'unsafe-inline'",

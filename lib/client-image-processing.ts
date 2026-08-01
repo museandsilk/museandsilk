@@ -40,11 +40,22 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** Crops a source file down to an exact pixel rectangle (e.g. from an on-screen crop tool) and
+ * returns the result as a decoded bitmap, ready to hand to processImageClientSide — the browser
+ * does the crop natively as part of decoding, no intermediate canvas needed. */
+export async function cropImageClientSide(
+  file: File,
+  crop: { x: number; y: number; width: number; height: number },
+): Promise<ImageBitmap> {
+  return createImageBitmap(file, Math.round(crop.x), Math.round(crop.y), Math.round(crop.width), Math.round(crop.height));
+}
+
 /**
- * Decodes an image file picked in the admin panel, resizes it to standard breakpoints (never
- * upscaling past the original), and re-encodes each as WebP — entirely in the browser via the
- * Canvas API (natively supported decode + WebP encode in every modern browser, no libraries
- * needed). Also produces a tiny heavily-compressed WebP placeholder for a blur-up loading effect.
+ * Decodes an image file (or an already-decoded/cropped bitmap) picked in the admin panel, resizes
+ * it to standard breakpoints (never upscaling past the original), and re-encodes each as WebP —
+ * entirely in the browser via the Canvas API (natively supported decode + WebP encode in every
+ * modern browser, no libraries needed). Also produces a tiny heavily-compressed WebP placeholder
+ * for a blur-up loading effect.
  *
  * This runs on the admin's own machine at upload time specifically so the deployed Cloudflare
  * Worker never has to do real CPU-heavy image work — Workers' free-tier CPU-time-per-request
@@ -53,9 +64,9 @@ function blobToDataUrl(blob: Blob): Promise<string> {
  * Returns null (never throws) if anything goes wrong — callers should fall back to uploading only
  * the original file.
  */
-export async function processImageClientSide(file: File): Promise<ProcessedImage | null> {
+export async function processImageClientSide(source: File | ImageBitmap): Promise<ProcessedImage | null> {
   try {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = source instanceof ImageBitmap ? source : await createImageBitmap(source);
     const { width, height } = bitmap;
 
     const variants: ImageVariant[] = [];

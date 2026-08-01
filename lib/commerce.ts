@@ -225,6 +225,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
 export type CampaignSlide = {
   id: string;
   imageUrl: string;
+  mobileImageUrl: string | null;
   altText: string;
   eyebrow: string;
   headline: string;
@@ -250,6 +251,7 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
       sortOrder: campaignSlides.sortOrder,
       active: campaignSlides.active,
       blurDataUrl: campaignSlides.blurDataUrl,
+      mobileR2Key: campaignSlides.mobileR2Key,
     })
     .from(campaignSlides)
     .where(includeInactive ? undefined : eq(campaignSlides.active, true))
@@ -258,6 +260,7 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
   return rows.map((row) => ({
     id: row.id,
     imageUrl: `/api/campaign-media/${row.id}`,
+    mobileImageUrl: row.mobileR2Key ? `/api/campaign-media/${row.id}?variant=mobile` : null,
     altText: row.altText,
     eyebrow: row.eyebrow,
     headline: row.headline,

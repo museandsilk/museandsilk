@@ -8,22 +8,34 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const requestedWidth = Number(new URL(request.url).searchParams.get("w"));
+  const url = new URL(request.url);
+  const requestedWidth = Number(url.searchParams.get("w"));
+  const wantsMobile = url.searchParams.get("variant") === "mobile";
 
   const [slide] = await db
     .select({
       r2Key: campaignSlides.r2Key,
       contentType: campaignSlides.contentType,
       variantWidths: campaignSlides.variantWidths,
+      mobileR2Key: campaignSlides.mobileR2Key,
+      mobileContentType: campaignSlides.mobileContentType,
+      mobileVariantWidths: campaignSlides.mobileVariantWidths,
     })
     .from(campaignSlides)
     .where(and(eq(campaignSlides.id, id), eq(campaignSlides.active, true)))
     .limit(1);
   if (!slide) return new Response("Image not found", { status: 404 });
 
-  if (Number.isFinite(requestedWidth) && requestedWidth > 0 && slide.variantWidths?.length) {
-    const width = nearestVariantWidth(requestedWidth, slide.variantWidths);
-    const variant = await getObjectBytes(variantKeyFor(slide.r2Key, width));
+  // Fall back to the desktop image whenever no separate mobile crop was ever set, so slides
+  // created before that feature existed keep working unchanged.
+  const useMobile = wantsMobile && !!slide.mobileR2Key;
+  const r2Key = useMobile ? slide.mobileR2Key! : slide.r2Key;
+  const contentType = useMobile ? slide.mobileContentType! : slide.contentType;
+  const variantWidths = useMobile ? slide.mobileVariantWidths : slide.variantWidths;
+
+  if (Number.isFinite(requestedWidth) && requestedWidth > 0 && variantWidths?.length) {
+    const width = nearestVariantWidth(requestedWidth, variantWidths);
+    const variant = await getObjectBytes(variantKeyFor(r2Key, width));
     if (variant) {
       return new Response(Buffer.from(variant.body), {
         headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable" },
@@ -31,12 +43,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
   }
 
-  const object = await getObjectBytes(slide.r2Key);
+  const object = await getObjectBytes(r2Key);
   if (!object) return new Response("Image not found", { status: 404 });
 
   return new Response(Buffer.from(object.body), {
     headers: {
-      "Content-Type": slide.contentType,
+      "Content-Type": contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
     },
   });

@@ -36,6 +36,13 @@
       "when": 1785525153633,
       "tag": "0004_outstanding_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785601771151,
+      "tag": "0005_stale_sleepwalker",
+      "breakpoints": true
     }
   ]
 }

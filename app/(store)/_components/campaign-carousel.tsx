@@ -1,13 +1,14 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignSlide } from "@/lib/commerce";
+import { STANDARD_WIDTHS } from "@/lib/image-variants";
 
 const fallback: CampaignSlide = {
   id: "campaign-default",
   imageUrl: "/campaign-hero.webp",
+  mobileImageUrl: null,
   altText: "Woman wearing an ivory and oxblood printed scarf with dark sunglasses",
   eyebrow: "The first edit · 2026",
   headline: "The final layer, considered.",
@@ -16,6 +17,14 @@ const fallback: CampaignSlide = {
   ctaHref: "/shop",
   sortOrder: 0,
 };
+
+/** Builds a width-descriptor srcset against our own resizing origin route (see lib/images.ts for
+ * the equivalent next/image loader) — used here instead of next/image because art-directing a
+ * distinct mobile crop needs a real <picture><source media="…"> pair, which next/image doesn't
+ * render directly. */
+function buildSrcSet(url: string): string {
+  return STANDARD_WIDTHS.map((width) => `${url}${url.includes("?") ? "&" : "?"}w=${width} ${width}w`).join(", ");
+}
 
 export function CampaignCarousel({ slides }: { slides: CampaignSlide[] }) {
   const items = slides.length ? slides : [fallback];
@@ -53,16 +62,35 @@ export function CampaignCarousel({ slides }: { slides: CampaignSlide[] }) {
     <section ref={sectionRef} className="hero campaign-carousel" aria-labelledby="hero-title">
       <div className="campaign-images">
         {items.map((item, index) => (
-          <Image
-            key={`${item.id}-${index === active ? zoomCycle : "idle"}`}
-            src={item.imageUrl}
-            alt={index === active ? item.altText : ""}
-            fill
-            priority={index === 0}
-            sizes="100vw"
-            className={index === active ? "active" : ""}
-            {...(item.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: item.blurDataUrl } : {})}
-          />
+          <div
+            key={item.id}
+            className={`campaign-slide ${index === active ? "active" : ""}`}
+            style={item.blurDataUrl ? { backgroundImage: `url(${item.blurDataUrl})` } : undefined}
+          >
+            {item.mobileImageUrl ? (
+              <picture key={`${item.id}-${index === active ? zoomCycle : "idle"}`}>
+                <source media="(max-width: 760px)" srcSet={buildSrcSet(item.mobileImageUrl)} sizes="100vw" />
+                <img
+                  src={item.imageUrl}
+                  srcSet={buildSrcSet(item.imageUrl)}
+                  sizes="100vw"
+                  alt={index === active ? item.altText : ""}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "auto"}
+                />
+              </picture>
+            ) : (
+              <img
+                key={`${item.id}-${index === active ? zoomCycle : "idle"}`}
+                src={item.imageUrl}
+                srcSet={buildSrcSet(item.imageUrl)}
+                sizes="100vw"
+                alt={index === active ? item.altText : ""}
+                loading={index === 0 ? "eager" : "lazy"}
+                fetchPriority={index === 0 ? "high" : "auto"}
+              />
+            )}
+          </div>
         ))}
       </div>
       <div className="hero-shade" />

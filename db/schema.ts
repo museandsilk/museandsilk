@@ -153,6 +153,14 @@ export const campaignSlides = pgTable("campaign_slides", {
   active: boolean("active").notNull().default(true),
   blurDataUrl: text("blur_data_url"),
   variantWidths: jsonb("variant_widths").$type<number[]>(),
+  // A separately cropped image for narrow (mobile) viewports — set at upload time in the admin
+  // panel by cropping the same or a different source photo to a 9:16 target. Optional: falls back
+  // to the desktop image above (r2Key) if never set, so existing slides keep working unchanged.
+  mobileR2Key: text("mobile_r2_key"),
+  mobileContentType: text("mobile_content_type"),
+  mobileByteSize: integer("mobile_byte_size"),
+  mobileBlurDataUrl: text("mobile_blur_data_url"),
+  mobileVariantWidths: jsonb("mobile_variant_widths").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("campaign_slides_order_idx").on(table.active, table.sortOrder)]);
