@@ -1,21 +1,21 @@
 import Image from "next/image";
 import Link from "next/link";
 import { StoreHeader, ProductCard, NewsletterForm } from "./(store)/_components/store-components";
-import { getCampaignSlides, getCatalogProducts } from "@/lib/commerce";
+import { getCampaignSlides, getCatalogProducts, getPublicSettings } from "@/lib/commerce";
 import { CampaignCarousel } from "./(store)/_components/campaign-carousel";
 import { Reveal } from "./(store)/_components/reveal";
 
 export const revalidate = 300;
 
 export default async function Home() {
-  const [products, campaignSlides] = await Promise.all([getCatalogProducts(), getCampaignSlides()]);
+  const [products, campaignSlides, settings] = await Promise.all([getCatalogProducts(), getCampaignSlides(), getPublicSettings()]);
   return (
     <main className="page-fade-in">
       <StoreHeader />
       <CampaignCarousel slides={campaignSlides} />
 
       <section className="service-strip" aria-label="Store benefits">
-        <p>Nationwide delivery</p><p>Cash on delivery</p><p>12-hour order reservation</p><p>WhatsApp assistance</p>
+        <p>Nationwide delivery</p><p>Cash on delivery</p><p>{settings.codReservationHours}-hour order reservation</p><p>WhatsApp assistance</p>
       </section>
 
       <Reveal>

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { StoreHeader } from "../_components/store-components";
 import { getPublicSettings } from "@/lib/commerce";
 
+export const revalidate = 300;
+
 export const metadata: Metadata = {
   title: "FAQ",
   description: "Answers to common questions about Muse & Silk orders — delivery, cash on delivery, bank deposit, returns, and sizing.",
@@ -16,11 +18,11 @@ export default async function FaqPage() {
   const faqs: [string, string][] = [
     [
       "Do you offer cash on delivery?",
-      "Yes. Cash on delivery is available nationwide. Once you place a COD order, we reserve your stock for 12 hours while we confirm the order with you by phone or WhatsApp.",
+      `Yes. Cash on delivery is available nationwide. Once you place a COD order, we reserve your stock for ${settings.codReservationHours} hours while we confirm the order with you by phone or WhatsApp.`,
     ],
     [
       "Can I pay by bank deposit instead?",
-      "Yes — bank deposit is our other accepted payment method. Your stock is reserved for 24 hours so you have time to make the deposit and upload your payment proof; we verify it before dispatch. We don't yet accept online card payment.",
+      `Yes — bank deposit is our other accepted payment method. Your stock is reserved for ${settings.bankReservationHours} hours so you have time to make the deposit and upload your payment proof; we verify it before dispatch. We don't yet accept online card payment.`,
     ],
     [
       "How much is delivery, and is it ever free?",

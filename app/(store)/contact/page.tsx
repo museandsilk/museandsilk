@@ -3,7 +3,7 @@ import Link from "next/link";
 import { StoreHeader } from "../_components/store-components";
 import { getPublicSettings } from "@/lib/commerce";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Contact",

@@ -422,6 +422,8 @@ export type PublicSettings = {
   metaPixelId: string;
   gaMeasurementId: string;
   brandName: string;
+  codReservationHours: number;
+  bankReservationHours: number;
 };
 
 export async function getPublicSettings(): Promise<PublicSettings> {
@@ -435,5 +437,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     metaPixelId: row?.metaPixelId ?? "",
     gaMeasurementId: row?.gaMeasurementId ?? "",
     brandName: row?.brandName ?? "Muse & Silk",
+    codReservationHours: row?.codReservationHours ?? 12,
+    bankReservationHours: row?.bankReservationHours ?? 24,
   };
 }

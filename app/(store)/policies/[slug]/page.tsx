@@ -4,7 +4,11 @@ import { notFound } from "next/navigation";
 import { StoreHeader } from "../../_components/store-components";
 import { getPublicSettings } from "@/lib/commerce";
 
+export const revalidate = 300;
+
 const FREE_DELIVERY_PLACEHOLDER = "__FREE_DELIVERY_THRESHOLD__";
+const COD_HOURS_PLACEHOLDER = "__COD_RESERVATION_HOURS__";
+const BANK_HOURS_PLACEHOLDER = "__BANK_RESERVATION_HOURS__";
 
 type Policy = {
   title: string;
@@ -19,7 +23,7 @@ const policies: Record<string, Policy> = {
     sections: [
       [
         "Order confirmation",
-        "Cash-on-delivery orders reserve your stock for 12 hours while we confirm the order by phone or WhatsApp. Bank-deposit orders reserve stock for 24 hours while your payment is verified. If confirmation or payment is not completed within that window, the reservation may expire and the stock is released.",
+        `Cash-on-delivery orders reserve your stock for ${COD_HOURS_PLACEHOLDER} hours while we confirm the order by phone or WhatsApp. Bank-deposit orders reserve stock for ${BANK_HOURS_PLACEHOLDER} hours while your payment is verified. If confirmation or payment is not completed within that window, the reservation may expire and the stock is released.`,
       ],
       [
         "Delivery charges",
@@ -105,7 +109,7 @@ const policies: Record<string, Policy> = {
       ],
       [
         "Payments and reservations",
-        "We accept Cash on Delivery and Bank Deposit only; online card payment is not currently supported. Cash-on-delivery orders reserve stock for 12 hours pending confirmation; bank-deposit orders reserve stock for 24 hours pending payment verification. Reservations not confirmed or paid within these windows may expire automatically and the stock is released for other customers.",
+        `We accept Cash on Delivery and Bank Deposit only; online card payment is not currently supported. Cash-on-delivery orders reserve stock for ${COD_HOURS_PLACEHOLDER} hours pending confirmation; bank-deposit orders reserve stock for ${BANK_HOURS_PLACEHOLDER} hours pending payment verification. Reservations not confirmed or paid within these windows may expire automatically and the stock is released for other customers.`,
       ],
       [
         "Returns and cancellations",
@@ -138,14 +142,18 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
   const policy = policies[slug];
   if (!policy) notFound();
 
-  const sections =
-    slug === "shipping"
-      ? await (async () => {
-          const settings = await getPublicSettings();
-          const threshold = settings.freeDeliveryThreshold.toLocaleString("en-PK");
-          return policy.sections.map(([title, body]) => [title, body.replaceAll(FREE_DELIVERY_PLACEHOLDER, threshold)] as [string, string]);
-        })()
-      : policy.sections;
+  const settings = await getPublicSettings();
+  const threshold = settings.freeDeliveryThreshold.toLocaleString("en-PK");
+  const sections = policy.sections.map(
+    ([title, body]) =>
+      [
+        title,
+        body
+          .replaceAll(FREE_DELIVERY_PLACEHOLDER, threshold)
+          .replaceAll(COD_HOURS_PLACEHOLDER, String(settings.codReservationHours))
+          .replaceAll(BANK_HOURS_PLACEHOLDER, String(settings.bankReservationHours)),
+      ] as [string, string],
+  );
 
   return (
     <main>

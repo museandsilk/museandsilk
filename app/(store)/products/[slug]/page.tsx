@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreHeader } from "../../_components/store-components";
 import { ProductPurchase } from "./product-purchase";
-import { getProductBySlug } from "@/lib/commerce";
+import { getProductBySlug, getPublicSettings } from "@/lib/commerce";
 import { cropForCategory } from "@/lib/slug";
 import { ProductGallery } from "./product-gallery";
 import { BackButton } from "./back-button";
@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const [product, settings] = await Promise.all([getProductBySlug(slug), getPublicSettings()]);
   if (!product) notFound();
 
   const crop = cropForCategory(product.category);
@@ -128,7 +128,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <summary>
                 Delivery &amp; returns <span>+</span>
               </summary>
-              <p>Nationwide delivery. Cash-on-delivery orders are reserved for 12 hours; bank-deposit orders for 24 hours. Final return eligibility appears before checkout.</p>
+              <p>
+                Nationwide delivery. Cash-on-delivery orders are reserved for {settings.codReservationHours} hours; bank-deposit orders for{" "}
+                {settings.bankReservationHours} hours. Final return eligibility appears before checkout.
+              </p>
             </details>
           </div>
           <Link className="whatsapp-help" href="/contact">

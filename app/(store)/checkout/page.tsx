@@ -13,6 +13,8 @@ type Settings = {
   bankAccountTitle: string;
   bankAccountNumber: string;
   bankIban: string;
+  codReservationHours: number;
+  bankReservationHours: number;
 };
 type Bank = { name: string; accountTitle: string; accountNumber: string; iban: string };
 type OrderResult = {
@@ -314,7 +316,7 @@ export default function CheckoutPage() {
                     <input type="radio" name="payment" checked={payment === "cod"} onChange={() => setPayment("cod")} />
                     <span>
                       <strong>Cash on delivery</strong>
-                      <small>Reserved for 12 hours while we confirm by phone or WhatsApp.</small>
+                      <small>Reserved for {settings?.codReservationHours ?? 12} hours while we confirm by phone or WhatsApp.</small>
                     </span>
                   </label>
                   <label className={payment === "bank_deposit" ? "active" : ""}>
@@ -326,7 +328,7 @@ export default function CheckoutPage() {
                     />
                     <span>
                       <strong>Bank deposit</strong>
-                      <small>Reserved for 24 hours while payment is verified.</small>
+                      <small>Reserved for {settings?.bankReservationHours ?? 24} hours while payment is verified.</small>
                     </span>
                   </label>
                 </div>

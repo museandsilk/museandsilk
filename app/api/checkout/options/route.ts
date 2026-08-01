@@ -25,6 +25,8 @@ export async function GET() {
         bankAccountTitle: siteSettings.bankAccountTitle,
         bankAccountNumber: siteSettings.bankAccountNumber,
         bankIban: siteSettings.bankIban,
+        codReservationHours: siteSettings.codReservationHours,
+        bankReservationHours: siteSettings.bankReservationHours,
       })
       .from(siteSettings)
       .where(eq(siteSettings.id, "store"))
