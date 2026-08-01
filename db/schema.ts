@@ -204,6 +204,9 @@ export const orders = pgTable("orders", {
   paymentStatus: text("payment_status").notNull().default("pending"),
   orderStatus: text("order_status").notNull().default("pending_confirmation"),
   reservationExpiresAt: timestamp("reservation_expires_at", { withTimezone: true }),
+  // Set once a "please confirm your order" reminder has gone out, so the cron job never sends it
+  // twice for the same order (see lib/orders.ts's sendReservationReminders).
+  reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
   notes: text("notes"),
   ...timestamps,
 }, (table) => [

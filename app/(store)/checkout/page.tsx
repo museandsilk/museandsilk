@@ -142,6 +142,18 @@ export default function CheckoutPage() {
         setResult(data as OrderResult);
         clearCart();
         setItems([]);
+        // Fire the actual conversion event — without this, Meta/Google only ever see PageViews and
+        // have no signal that a purchase happened, which makes ad-spend optimization blind.
+        const trackers = window as Window & {
+          fbq?: (...args: unknown[]) => void;
+          gtag?: (...args: unknown[]) => void;
+        };
+        trackers.fbq?.("track", "Purchase", { value: data.total, currency: "PKR" });
+        trackers.gtag?.("event", "purchase", {
+          transaction_id: data.orderNumber,
+          value: data.total,
+          currency: "PKR",
+        });
       }
     } catch {
       setError("The order could not be placed. Please check your connection and try again.");

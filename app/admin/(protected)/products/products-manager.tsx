@@ -113,6 +113,37 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   const [images, setImages] = useState<ProductImage[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  async function generateDescription() {
+    if (!draft?.name) {
+      setMessage("Add a product name first.");
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const response = await fetch("/api/admin/ai-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draft.name,
+          type: draft.typeLabel || undefined,
+          color: draft.primaryColour || undefined,
+          material: draft.material || undefined,
+        }),
+      });
+      const result = await response.json();
+      if (response.ok) {
+        setDraft((current) => (current ? { ...current, description: result.description } : current));
+      } else {
+        setMessage(result.error ?? "Could not generate a description.");
+      }
+    } catch {
+      setMessage("Could not reach the AI service.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     const params = new URLSearchParams();
@@ -537,7 +568,18 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                   />
                 </label>
                 <label className="field-wide">
-                  <span>Description</span>
+                  <span className="ai-description-label">
+                    Description
+                    <button type="button" className="ai-description-button" disabled={aiBusy} onClick={generateDescription}>
+                      {aiBusy ? (
+                        <span className="busy-label">
+                          <span className="spinner" aria-hidden="true" /> Writing…
+                        </span>
+                      ) : (
+                        "✦ Generate with AI"
+                      )}
+                    </button>
+                  </span>
                   <textarea rows={4} value={draft.description ?? ""} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
                 </label>
                 <label>

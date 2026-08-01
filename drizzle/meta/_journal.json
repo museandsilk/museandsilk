@@ -43,6 +43,13 @@
       "when": 1785601771151,
       "tag": "0005_stale_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785610137168,
+      "tag": "0006_slimy_karma",
+      "breakpoints": true
     }
   ]
 }

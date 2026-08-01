@@ -42,6 +42,7 @@ jobs:
           echo "${{ secrets.RESEND_FROM_NAME }}" | npx wrangler secret put RESEND_FROM_NAME
           echo "${{ secrets.WHATSAPP_DEFAULT_NUMBER }}" | npx wrangler secret put WHATSAPP_DEFAULT_NUMBER
           echo "${{ secrets.CRON_SECRET }}" | npx wrangler secret put CRON_SECRET
+          echo "${{ secrets.GROQ_API_KEY }}" | npx wrangler secret put GROQ_API_KEY
 
       # NEXT_PUBLIC_* vars must be present at build time — they get inlined into client bundles.
       - name: Build

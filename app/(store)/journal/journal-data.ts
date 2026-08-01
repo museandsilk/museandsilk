@@ -109,6 +109,96 @@ export const journalArticles: JournalArticle[] = [
       },
     ],
   },
+  {
+    slug: "ways-to-wear-a-bandana",
+    title: "The bandana, reconsidered",
+    category: "Styling",
+    readTime: "5 min",
+    excerpt: "A smaller piece of fabric with more range than most people give it credit for — five ways to put one to work.",
+    intro: "A bandana asks less of you than a full scarf and, for that reason, tends to get worn more. It earns its place through repetition rather than occasion — here is where it actually goes.",
+    sections: [
+      {
+        heading: "Knotted at the neck",
+        body: "Fold into a narrow band, cross it once at the front and tie a small flat knot to one side rather than centred — an off-centre knot reads considered rather than costume-like, and sits well under an open collar or crew neck.",
+      },
+      {
+        heading: "Through the belt loops",
+        body: "Thread a folded bandana through two or three belt loops so a short length hangs at the hip, in place of or alongside a belt. It is an easy way to bring pattern into a plain pair of trousers without touching what you're wearing above the waist.",
+      },
+      {
+        heading: "As a hair tie",
+        body: "Fold on the bias into a narrow strip, wrap twice around a low ponytail or bun, and knot flat at the base rather than in a bow. Silk-touch fabric holds shape through a full day without the crease marks a cotton bandana leaves behind.",
+      },
+      {
+        heading: "Tied to a bag strap",
+        body: "Wrap once around a bag strap near the shoulder and secure with a single knot, letting the tails sit flush rather than dangling. This is the lowest-commitment way to try a bold print, since it changes the bag rather than the outfit.",
+      },
+      {
+        heading: "Folded in a breast pocket",
+        body: "A small square folded into quarters and tucked so only a triangle shows works as a quieter alternative to a full pocket square — pick one in a tone close to your jacket for something that reads as texture rather than a statement.",
+      },
+    ],
+  },
+  {
+    slug: "choosing-sunglasses-for-your-face-shape",
+    title: "Choosing sunglasses for your face shape",
+    category: "Guide",
+    readTime: "6 min",
+    excerpt: "A short, practical way to narrow down a frame shape before you try anything on — starting from what's already on your face.",
+    intro: "Frame shopping goes faster once you know roughly what you're looking for. The general principle is contrast: a frame that echoes the opposite of your face's dominant line tends to sit best.",
+    sections: [
+      {
+        heading: "Round faces",
+        body: "Soft curves benefit from a frame with some structure and straighter top lines — a rectangular or angular shape adds definition without looking severe. Avoid perfectly round frames, which tend to echo the face rather than balance it.",
+      },
+      {
+        heading: "Square or angular faces",
+        body: "Strong jawlines and a defined brow pair well with rounder or oval frames, which soften the face's straight lines. A frame with the same sharp angles as your jaw tends to double down on structure rather than balance it.",
+      },
+      {
+        heading: "Oval faces",
+        body: "This is the most forgiving shape — most frame styles work, so the deciding factor becomes proportion and colour rather than shape. Oversized frames and bold tortoiseshell both tend to suit an oval face without a specific caveat.",
+      },
+      {
+        heading: "Heart-shaped faces",
+        body: "A narrower jaw and wider brow are balanced by a frame that's wider at the bottom, or by lighter, rimless-adjacent styles that don't add extra width at the temple. Cat-eye shapes are a considered choice here — the upward line echoes the cheekbone rather than the brow.",
+      },
+      {
+        heading: "What actually matters more than shape",
+        body: "Frame width matters more than most guides admit — a frame narrower than your face reads awkward regardless of shape. Hold a frame up before trying it on: it should sit roughly at the width of your face at the temples, not narrower.",
+      },
+      {
+        heading: "Trust the mirror over the rule",
+        body: "These are starting points, not verdicts. The only real test is how a frame sits on your specific face in daylight — if a \"wrong for your shape\" frame still looks right on you, it is right for you.",
+      },
+    ],
+  },
+  {
+    slug: "the-case-for-owning-fewer-accessories",
+    title: "The case for owning three, not thirty",
+    category: "Perspective",
+    readTime: "4 min",
+    excerpt: "Why a small, considered accessory edit tends to get worn more than a large, indifferent one.",
+    intro: "It's easy to assume more choice means more style. In practice, a drawer of accessories bought on impulse mostly goes unworn, while three or four pieces chosen with intention get reached for constantly.",
+    sections: [
+      {
+        heading: "Choice fatigue is real, even at this scale",
+        body: "Faced with fifteen scarves in the morning, most people default to the same two or three anyway — the rest sit as a kind of visual clutter, adding decision cost without adding outfits actually worn. A smaller, considered edit removes the decision entirely.",
+      },
+      {
+        heading: "Quality shows up faster in small pieces",
+        body: "A scarf, bandana or pair of sunglasses sits close to the face, in direct view for the entire time it's worn — cut, drape and finish are more visible here than in almost anything else you own. A well-made piece worn often earns back its cost quickly; several mediocre ones rarely do.",
+      },
+      {
+        heading: "Restraint ages better than trend-chasing",
+        body: "A considered neutral or a well-chosen oxblood outlasts a trend colour bought for a single season. Building slowly around pieces that pair with what you already wear means nothing in the edit becomes dead weight a year later.",
+      },
+      {
+        heading: "How to start small, on purpose",
+        body: "Begin with one scarf or bandana in a tone that works with the three coats or jackets you already wear most, and one pair of sunglasses chosen for your face rather than for a photograph. Everything after that should answer a real gap, not fill a drawer.",
+      },
+    ],
+  },
 ];
 
 export function getJournalArticle(slug: string): JournalArticle | undefined {

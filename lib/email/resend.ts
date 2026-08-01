@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { orderConfirmationEmail } from "./templates/order-confirmation";
 import { bankDepositInstructionsEmail } from "./templates/bank-deposit-instructions";
+import { reservationReminderEmail, type ReservationReminderPayload } from "./templates/reservation-reminder";
 
 function client(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
@@ -48,5 +49,23 @@ export async function sendOrderEmails(payload: OrderEmailPayload): Promise<void>
     }
   } catch (error) {
     console.error("Resend email send failed", error);
+  }
+}
+
+/** "Your order is waiting" nudge for orders still pending_confirmation as their reservation
+ * window approaches expiry — see lib/orders.ts's sendReservationReminders. Best-effort, same as
+ * sendOrderEmails: never throws, since a reminder failing should never block the cron job. */
+export async function sendReservationReminderEmail(payload: ReservationReminderPayload): Promise<void> {
+  const resend = client();
+  if (!resend || !payload.toEmail) return;
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: payload.toEmail,
+      subject: `Your order ${payload.orderNumber} is waiting — Muse & Silk`,
+      html: reservationReminderEmail(payload),
+    });
+  } catch (error) {
+    console.error("Resend reminder email send failed", error);
   }
 }

@@ -190,6 +190,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
           <div>
             <h3>Service</h3>
             <Link href="/track-order">Track your order</Link>
+            <Link href="/faq">FAQ</Link>
             <Link href="/policies/shipping">Shipping</Link>
             <Link href="/policies/returns">Returns</Link>
             <Link href="/contact">WhatsApp assistance</Link>
@@ -199,7 +200,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
             <Link href="/about">Our story</Link>
             <Link href="/journal">Journal</Link>
             <Link href="/contact">Contact</Link>
-            <a href="https://instagram.com" rel="noreferrer">
+            <a href="https://www.instagram.com/museandsilk/" rel="noreferrer">
               Instagram
             </a>
           </div>

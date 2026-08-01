@@ -1,6 +1,10 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { inventoryMovements, orderItems, orderStatusHistory, orders, productVariants } from "@/db/schema";
+import { sendReservationReminderEmail } from "@/lib/email/resend";
+import { getPublicSettings } from "@/lib/commerce";
+
+const REMINDER_WINDOW_HOURS = 3;
 
 /**
  * Cancels orders whose stock reservation has expired while still awaiting confirmation, releasing
@@ -64,5 +68,68 @@ export async function expireReservations(): Promise<void> {
         actorEmail: "system",
       });
     }
+  }
+}
+
+/**
+ * Emails a "your order is waiting" nudge for orders still pending_confirmation whose reservation
+ * expires within REMINDER_WINDOW_HOURS — the closest fit to a classic "abandoned cart" reminder
+ * that this store's data model actually supports: since the cart itself is only ever kept in the
+ * customer's browser (see lib/cart.ts) and no email is captured until checkout is submitted, there
+ * is nothing to remind before an order exists. Once an order exists we do know their email, and a
+ * COD/bank-deposit order sitting unconfirmed near its reservation deadline is the equivalent
+ * moment of risk — a nudge here can recover an order that would otherwise auto-cancel.
+ *
+ * Guarded by reminderSentAt so a run every 15 minutes never emails the same order twice, using the
+ * same sequential-writes pattern as expireReservations (see its comment for why).
+ */
+export async function sendReservationReminders(): Promise<void> {
+  const now = new Date();
+  const reminderCutoff = new Date(now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000);
+
+  const candidates = await db
+    .select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      customerName: orders.customerName,
+      customerEmail: orders.customerEmail,
+      total: orders.total,
+      currency: orders.currency,
+      paymentMethod: orders.paymentMethod,
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.orderStatus, "pending_confirmation"),
+        isNull(orders.reminderSentAt),
+        gt(orders.reservationExpiresAt, now),
+        lt(orders.reservationExpiresAt, reminderCutoff),
+      ),
+    )
+    .limit(50);
+
+  if (!candidates.length) return;
+
+  const settings = await getPublicSettings();
+
+  for (const order of candidates) {
+    if (!order.customerEmail) continue;
+
+    const claimed = await db
+      .update(orders)
+      .set({ reminderSentAt: now })
+      .where(and(eq(orders.id, order.id), isNull(orders.reminderSentAt)))
+      .returning({ id: orders.id });
+    if (claimed.length === 0) continue; // a concurrent run already claimed this order
+
+    await sendReservationReminderEmail({
+      toEmail: order.customerEmail,
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      total: order.total,
+      currency: order.currency,
+      paymentMethod: order.paymentMethod as "cod" | "bank_deposit",
+      whatsappNumber: settings.whatsappNumber || undefined,
+    });
   }
 }
