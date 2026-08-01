@@ -15,6 +15,7 @@ export function StoreHeader() {
   const [query, setQuery] = useState("");
   const [bagCount, setBagCount] = useState(0);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState<number | null>(null);
+  const [messageIndex, setMessageIndex] = useState(0);
   useEffect(() => {
     const update = () => setBagCount(cartCount(readCart()));
     update();
@@ -34,11 +35,35 @@ export function StoreHeader() {
     document.body.style.overflow = menuOpen || searchOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [menuOpen, searchOpen]);
+
+  const announcementMessages = [
+    freeDeliveryThreshold
+      ? `Nationwide free shipping on orders above PKR ${freeDeliveryThreshold.toLocaleString("en-PK")}`
+      : "Nationwide free shipping on qualifying orders",
+    "New collection live!",
+    "Delivery can take up to 2–5 working days",
+    "Wrapped in elegance.",
+  ];
+  useEffect(() => {
+    const timer = window.setInterval(() => setMessageIndex((index) => (index + 1) % announcementMessages.length), 4000);
+    return () => window.clearInterval(timer);
+  }, [announcementMessages.length]);
+
   return (
     <>
       <div className="announcement">
-        {freeDeliveryThreshold ? `Complimentary delivery over PKR ${freeDeliveryThreshold.toLocaleString("en-PK")}` : "Complimentary delivery on qualifying orders"}
-        <span>Pakistan nationwide</span>
+        <div className="announcement-ticker">
+          {announcementMessages.map((message, index) => {
+            const previousIndex = (messageIndex - 1 + announcementMessages.length) % announcementMessages.length;
+            const state = index === messageIndex ? "ticker-current" : index === previousIndex ? "ticker-prev" : "ticker-hidden";
+            return (
+              <span key={message} className={state}>
+                {message}
+              </span>
+            );
+          })}
+        </div>
+        <span className="announcement-region">Pakistan nationwide</span>
       </div>
       <header className="header">
         <button className="mobile-menu-button" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><i /><i /></button>
