@@ -6,6 +6,7 @@ import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { generateSeoFields } from "@/lib/ai/seo";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -135,33 +136,44 @@ export async function POST(request: Request) {
     description: data.description,
   });
 
-  const [row] = await db
-    .insert(products)
-    .values({
-      categoryId: data.categoryId,
-      name: data.name,
-      slug,
-      typeLabel: data.typeLabel,
-      shortDescription: data.shortDescription || null,
-      description: data.description || null,
-      material: data.material || null,
-      dimensions: data.dimensions || null,
-      careInstructions: data.careInstructions || null,
-      status: data.status ?? "draft",
-      featured: data.featured ?? false,
-      badge: data.badge || null,
-      seoTitle: seo?.seoTitle || data.seoTitle || null,
-      seoDescription: seo?.seoDescription || data.seoDescription || null,
-      pattern: data.pattern || null,
-      primaryColour: data.primaryColour || null,
-      occasion: data.occasion || null,
-      style: data.style || null,
-      countryOfOrigin: data.countryOfOrigin || null,
-      gender: data.gender ?? "female",
-      googleProductCategory: data.googleProductCategory || null,
-      publishedAt: data.status === "published" ? new Date() : null,
-    })
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .insert(products)
+      .values({
+        categoryId: data.categoryId,
+        name: data.name,
+        slug,
+        typeLabel: data.typeLabel,
+        shortDescription: data.shortDescription || null,
+        description: data.description || null,
+        material: data.material || null,
+        dimensions: data.dimensions || null,
+        careInstructions: data.careInstructions || null,
+        status: data.status ?? "draft",
+        featured: data.featured ?? false,
+        badge: data.badge || null,
+        seoTitle: seo?.seoTitle || data.seoTitle || null,
+        seoDescription: seo?.seoDescription || data.seoDescription || null,
+        pattern: data.pattern || null,
+        primaryColour: data.primaryColour || null,
+        occasion: data.occasion || null,
+        style: data.style || null,
+        countryOfOrigin: data.countryOfOrigin || null,
+        gender: data.gender ?? "female",
+        googleProductCategory: data.googleProductCategory || null,
+        publishedAt: data.status === "published" ? new Date() : null,
+      })
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json(
+        { error: `A product with a matching URL slug ("${slug}") already exists — try a slightly different name.` },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.create", entityType: "product", entityId: row.id, detail: { name: data.name, slug } });
 

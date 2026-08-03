@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { productVariants } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -42,25 +43,33 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       .where(eq(productVariants.productId, existing.productId));
   }
 
-  const [row] = await db
-    .update(productVariants)
-    .set({
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.sku !== undefined ? { sku: data.sku } : {}),
-      ...(data.color !== undefined ? { color: data.color } : {}),
-      ...(data.size !== undefined ? { size: data.size || null } : {}),
-      ...(data.fabric !== undefined ? { fabric: data.fabric || null } : {}),
-      ...(data.gtin !== undefined ? { gtin: data.gtin || null } : {}),
-      ...(data.price !== undefined ? { price: data.price } : {}),
-      ...(data.compareAtPrice !== undefined ? { compareAtPrice: data.compareAtPrice } : {}),
-      ...(data.stockQuantity !== undefined ? { stockQuantity: data.stockQuantity } : {}),
-      ...(data.lowStockThreshold !== undefined ? { lowStockThreshold: data.lowStockThreshold } : {}),
-      ...(data.isDefault !== undefined ? { isDefault: data.isDefault } : {}),
-      ...(data.status !== undefined ? { status: data.status } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(productVariants.id, id))
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .update(productVariants)
+      .set({
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.sku !== undefined ? { sku: data.sku } : {}),
+        ...(data.color !== undefined ? { color: data.color } : {}),
+        ...(data.size !== undefined ? { size: data.size || null } : {}),
+        ...(data.fabric !== undefined ? { fabric: data.fabric || null } : {}),
+        ...(data.gtin !== undefined ? { gtin: data.gtin || null } : {}),
+        ...(data.price !== undefined ? { price: data.price } : {}),
+        ...(data.compareAtPrice !== undefined ? { compareAtPrice: data.compareAtPrice } : {}),
+        ...(data.stockQuantity !== undefined ? { stockQuantity: data.stockQuantity } : {}),
+        ...(data.lowStockThreshold !== undefined ? { lowStockThreshold: data.lowStockThreshold } : {}),
+        ...(data.isDefault !== undefined ? { isDefault: data.isDefault } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(productVariants.id, id))
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: `SKU "${data.sku}" is already in use — choose a different one.` }, { status: 409 });
+    }
+    throw error;
+  }
 
   // If this variant was explicitly un-defaulted, make sure the product still has exactly one default
   // by promoting another active variant when none remain marked as default.

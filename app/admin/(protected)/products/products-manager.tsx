@@ -207,7 +207,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft) return;
+    if (!draft || busy) return;
     const isCreating = !draft.id;
 
     if (isCreating && !multiVariant && (!initialSku.trim() || !initialPrice)) {
@@ -235,12 +235,18 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
       if (initialImageFile) {
         setMessage("Uploading photo…");
-        const imageForm = new FormData();
-        imageForm.set("productId", newProductId);
-        imageForm.set("altText", draft.name);
-        imageForm.set("isPrimary", "true");
         const processed = await processImageClientSide(initialImageFile);
-        if (processed) {
+        if (!processed) {
+          // Never fall back to uploading the raw picked file — that's exactly what caused the
+          // "Worker exceeded resource limits" crash this whole pipeline exists to avoid (a phone
+          // photo can be tens of MB). Fail this step cleanly instead; the product itself is
+          // already saved, so the admin can just add the photo again from the edit view below.
+          setMessage("Product created, but that photo couldn't be processed — try a different file, or add it below.");
+        } else {
+          const imageForm = new FormData();
+          imageForm.set("productId", newProductId);
+          imageForm.set("altText", draft.name);
+          imageForm.set("isPrimary", "true");
           imageForm.set("width", String(processed.width));
           imageForm.set("height", String(processed.height));
           imageForm.set("blurDataUrl", processed.blurDataUrl);
@@ -250,11 +256,9 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
           }
           const largest = processed.variants[processed.variants.length - 1];
           imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
-        } else {
-          imageForm.set("file", initialImageFile);
+          const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
+          if (!imageResponse.ok) setMessage("Product created, but the photo could not be uploaded — add it below.");
         }
-        const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
-        if (!imageResponse.ok) setMessage("Product created, but the photo could not be uploaded — add it below.");
       }
 
       if (!multiVariant) {
@@ -274,8 +278,11 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
           }),
         });
         if (!variantResponse.ok) {
+          const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string };
           setMessage((current) =>
-            current?.startsWith("Product created, but") ? current : "Product created, but the variant could not be added — add it below.",
+            current?.startsWith("Product created, but")
+              ? current
+              : `Product created, but ${(variantResult.error ?? "the variant could not be added").toLowerCase()} — add it below.`,
           );
         }
       }
@@ -318,7 +325,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
   async function addVariant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft?.id) return;
+    if (!draft?.id || busy) return;
     setBusy(true);
     const form = new FormData(event.currentTarget);
     const body = {
@@ -394,33 +401,42 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
   async function uploadImage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft?.id) return;
+    if (!draft?.id || busy) return;
     setBusy(true);
     setMessage("Processing image…");
     const form = new FormData(event.currentTarget);
     form.set("productId", draft.id);
 
     const file = form.get("file");
-    if (file instanceof File) {
-      const processed = await processImageClientSide(file);
-      if (processed) {
-        form.set("width", String(processed.width));
-        form.set("height", String(processed.height));
-        form.set("blurDataUrl", processed.blurDataUrl);
-        form.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
-        for (const variant of processed.variants) {
-          form.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
-        }
-        // Replace the raw picked file with the largest generated variant before it ever leaves
-        // the browser — phone/camera photos can be tens of MB, and uploading that straight to the
-        // Worker (on top of the variants) is what was tripping Cloudflare's per-request resource
-        // limit. The largest variant is already full quality (native resolution, capped at 1600px)
-        // and WebP-compressed, so nothing is lost — this exact fix is already used for campaign
-        // images (see campaign-manager.tsx).
-        const largest = processed.variants[processed.variants.length - 1];
-        form.set("file", largest.blob, `product-${largest.width}.webp`);
-      }
+    if (!(file instanceof File)) {
+      setMessage("Choose an image file first.");
+      setBusy(false);
+      return;
     }
+    const processed = await processImageClientSide(file);
+    if (!processed) {
+      // Never fall back to uploading the raw picked file — that's exactly what caused the
+      // "Worker exceeded resource limits" crash this whole pipeline exists to avoid (a phone photo
+      // can be tens of MB). Fail cleanly instead of silently sending the huge original.
+      setMessage("That photo couldn't be processed — try a different file (JPEG, PNG or WebP).");
+      setBusy(false);
+      return;
+    }
+    form.set("width", String(processed.width));
+    form.set("height", String(processed.height));
+    form.set("blurDataUrl", processed.blurDataUrl);
+    form.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+    for (const variant of processed.variants) {
+      form.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+    }
+    // Replace the raw picked file with the largest generated variant before it ever leaves the
+    // browser — phone/camera photos can be tens of MB, and uploading that straight to the Worker
+    // (on top of the variants) is what was tripping Cloudflare's per-request resource limit. The
+    // largest variant is already full quality (native resolution, capped at 1600px) and
+    // WebP-compressed, so nothing is lost — this exact fix is already used for campaign images
+    // (see campaign-manager.tsx).
+    const largest = processed.variants[processed.variants.length - 1];
+    form.set("file", largest.blob, `product-${largest.width}.webp`);
 
     setMessage("Uploading…");
     const response = await fetch("/api/admin/images", { method: "POST", body: form });

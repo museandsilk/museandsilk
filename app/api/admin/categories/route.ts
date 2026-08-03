@@ -5,6 +5,7 @@ import { categories } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -34,16 +35,24 @@ export async function POST(request: Request) {
   const data = parsed.data;
   const slug = slugify(data.slug || data.name);
 
-  const [row] = await db
-    .insert(categories)
-    .values({
-      name: data.name,
-      slug,
-      description: data.description || null,
-      status: data.status ?? "active",
-      sortOrder: data.sortOrder ?? 0,
-    })
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .insert(categories)
+      .values({
+        name: data.name,
+        slug,
+        description: data.description || null,
+        status: data.status ?? "active",
+        sortOrder: data.sortOrder ?? 0,
+      })
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: `A category with a matching URL slug ("${slug}") already exists.` }, { status: 409 });
+    }
+    throw error;
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "category.create", entityType: "category", entityId: row.id, detail: data });
 

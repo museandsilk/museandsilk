@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { discountCodes } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -54,22 +55,30 @@ export async function POST(request: Request) {
   const [existing] = await db.select({ id: discountCodes.id }).from(discountCodes).where(eq(discountCodes.code, code));
   if (existing) return Response.json({ error: "A coupon with this code already exists." }, { status: 409 });
 
-  const [row] = await db
-    .insert(discountCodes)
-    .values({
-      code,
-      description: data.description?.trim() || null,
-      type: data.type,
-      value: data.value,
-      minOrderAmount: data.minOrderAmount ?? 0,
-      maxDiscountAmount: data.maxDiscountAmount ?? null,
-      maxRedemptions: data.maxRedemptions ?? null,
-      appliesToDelivery: data.appliesToDelivery ?? false,
-      startsAt: toDate(data.startsAt),
-      expiresAt: toDate(data.expiresAt),
-      active: data.active ?? true,
-    })
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .insert(discountCodes)
+      .values({
+        code,
+        description: data.description?.trim() || null,
+        type: data.type,
+        value: data.value,
+        minOrderAmount: data.minOrderAmount ?? 0,
+        maxDiscountAmount: data.maxDiscountAmount ?? null,
+        maxRedemptions: data.maxRedemptions ?? null,
+        appliesToDelivery: data.appliesToDelivery ?? false,
+        startsAt: toDate(data.startsAt),
+        expiresAt: toDate(data.expiresAt),
+        active: data.active ?? true,
+      })
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: "A coupon with this code already exists." }, { status: 409 });
+    }
+    throw error;
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "coupon.create", entityType: "discount-code", entityId: row.id, detail: { code } });
 

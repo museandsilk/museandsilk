@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { deliveryZones } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -45,19 +46,27 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid delivery zone payload." }, { status: 400 });
   const data = parsed.data;
 
-  const [row] = await db
-    .insert(deliveryZones)
-    .values({
-      name: data.name,
-      cities: toList(data.cities),
-      provinces: toList(data.provinces),
-      deliveryCharge: data.deliveryCharge,
-      estimatedDaysMin: data.estimatedDaysMin ?? 2,
-      estimatedDaysMax: data.estimatedDaysMax ?? 5,
-      active: data.active ?? true,
-      sortOrder: data.sortOrder ?? 0,
-    })
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .insert(deliveryZones)
+      .values({
+        name: data.name,
+        cities: toList(data.cities),
+        provinces: toList(data.provinces),
+        deliveryCharge: data.deliveryCharge,
+        estimatedDaysMin: data.estimatedDaysMin ?? 2,
+        estimatedDaysMax: data.estimatedDaysMax ?? 5,
+        active: data.active ?? true,
+        sortOrder: data.sortOrder ?? 0,
+      })
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: `A delivery zone named "${data.name}" already exists.` }, { status: 409 });
+    }
+    throw error;
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "delivery-zone.create", entityType: "delivery-zone", entityId: row.id, detail: { name: data.name } });
 

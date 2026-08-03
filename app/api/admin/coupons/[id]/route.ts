@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { discountCodes } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -65,24 +66,32 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const startsAt = toDate(data.startsAt);
   const expiresAt = toDate(data.expiresAt);
 
-  const [row] = await db
-    .update(discountCodes)
-    .set({
-      ...(data.code !== undefined ? { code: data.code.toUpperCase() } : {}),
-      ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
-      ...(data.type !== undefined ? { type: data.type } : {}),
-      ...(data.value !== undefined ? { value: data.value } : {}),
-      ...(data.minOrderAmount !== undefined ? { minOrderAmount: data.minOrderAmount } : {}),
-      ...(data.maxDiscountAmount !== undefined ? { maxDiscountAmount: data.maxDiscountAmount } : {}),
-      ...(data.maxRedemptions !== undefined ? { maxRedemptions: data.maxRedemptions } : {}),
-      ...(data.appliesToDelivery !== undefined ? { appliesToDelivery: data.appliesToDelivery } : {}),
-      ...(startsAt !== undefined ? { startsAt } : {}),
-      ...(expiresAt !== undefined ? { expiresAt } : {}),
-      ...(data.active !== undefined ? { active: data.active } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(discountCodes.id, id))
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .update(discountCodes)
+      .set({
+        ...(data.code !== undefined ? { code: data.code.toUpperCase() } : {}),
+        ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
+        ...(data.type !== undefined ? { type: data.type } : {}),
+        ...(data.value !== undefined ? { value: data.value } : {}),
+        ...(data.minOrderAmount !== undefined ? { minOrderAmount: data.minOrderAmount } : {}),
+        ...(data.maxDiscountAmount !== undefined ? { maxDiscountAmount: data.maxDiscountAmount } : {}),
+        ...(data.maxRedemptions !== undefined ? { maxRedemptions: data.maxRedemptions } : {}),
+        ...(data.appliesToDelivery !== undefined ? { appliesToDelivery: data.appliesToDelivery } : {}),
+        ...(startsAt !== undefined ? { startsAt } : {}),
+        ...(expiresAt !== undefined ? { expiresAt } : {}),
+        ...(data.active !== undefined ? { active: data.active } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(discountCodes.id, id))
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: "A coupon with this code already exists." }, { status: 409 });
+    }
+    throw error;
+  }
   if (!row) return Response.json({ error: "Coupon not found." }, { status: 404 });
 
   const action = data.active === false ? "coupon.disable" : data.active === true ? "coupon.enable" : "coupon.update";

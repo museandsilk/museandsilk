@@ -5,6 +5,7 @@ import { categories } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -25,18 +26,28 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!parsed.success) return Response.json({ error: "Invalid category payload." }, { status: 400 });
   const data = parsed.data;
 
-  const [row] = await db
-    .update(categories)
-    .set({
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.slug !== undefined ? { slug: slugify(data.slug) } : {}),
-      ...(data.description !== undefined ? { description: data.description || null } : {}),
-      ...(data.status !== undefined ? { status: data.status } : {}),
-      ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(categories.id, id))
-    .returning();
+  const nextSlug = data.slug !== undefined ? slugify(data.slug) : undefined;
+
+  let row;
+  try {
+    [row] = await db
+      .update(categories)
+      .set({
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(nextSlug !== undefined ? { slug: nextSlug } : {}),
+        ...(data.description !== undefined ? { description: data.description || null } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(categories.id, id))
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: `A category with a matching URL slug ("${nextSlug}") already exists.` }, { status: 409 });
+    }
+    throw error;
+  }
 
   if (!row) return Response.json({ error: "Category not found." }, { status: 404 });
 

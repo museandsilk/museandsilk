@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { productVariants } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -46,24 +47,32 @@ export async function POST(request: Request) {
       .where(eq(productVariants.productId, data.productId));
   }
 
-  const [row] = await db
-    .insert(productVariants)
-    .values({
-      productId: data.productId,
-      name: data.name,
-      sku: data.sku,
-      color: data.color,
-      size: data.size || null,
-      fabric: data.fabric || null,
-      gtin: data.gtin || null,
-      price: data.price,
-      compareAtPrice: data.compareAtPrice ?? null,
-      stockQuantity: data.stockQuantity ?? 0,
-      lowStockThreshold: data.lowStockThreshold ?? 3,
-      isDefault: shouldBeDefault,
-      status: data.status ?? "active",
-    })
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .insert(productVariants)
+      .values({
+        productId: data.productId,
+        name: data.name,
+        sku: data.sku,
+        color: data.color,
+        size: data.size || null,
+        fabric: data.fabric || null,
+        gtin: data.gtin || null,
+        price: data.price,
+        compareAtPrice: data.compareAtPrice ?? null,
+        stockQuantity: data.stockQuantity ?? 0,
+        lowStockThreshold: data.lowStockThreshold ?? 3,
+        isDefault: shouldBeDefault,
+        status: data.status ?? "active",
+      })
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: `SKU "${data.sku}" is already in use — choose a different one.` }, { status: 409 });
+    }
+    throw error;
+  }
 
   await auditLogEntry({
     actorEmail: admin.email,

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { deliveryZones } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -40,21 +41,29 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const cities = toList(data.cities);
   const provinces = toList(data.provinces);
 
-  const [row] = await db
-    .update(deliveryZones)
-    .set({
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(cities !== undefined ? { cities } : {}),
-      ...(provinces !== undefined ? { provinces } : {}),
-      ...(data.deliveryCharge !== undefined ? { deliveryCharge: data.deliveryCharge } : {}),
-      ...(data.estimatedDaysMin !== undefined ? { estimatedDaysMin: data.estimatedDaysMin } : {}),
-      ...(data.estimatedDaysMax !== undefined ? { estimatedDaysMax: data.estimatedDaysMax } : {}),
-      ...(data.active !== undefined ? { active: data.active } : {}),
-      ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(deliveryZones.id, id))
-    .returning();
+  let row;
+  try {
+    [row] = await db
+      .update(deliveryZones)
+      .set({
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(cities !== undefined ? { cities } : {}),
+        ...(provinces !== undefined ? { provinces } : {}),
+        ...(data.deliveryCharge !== undefined ? { deliveryCharge: data.deliveryCharge } : {}),
+        ...(data.estimatedDaysMin !== undefined ? { estimatedDaysMin: data.estimatedDaysMin } : {}),
+        ...(data.estimatedDaysMax !== undefined ? { estimatedDaysMax: data.estimatedDaysMax } : {}),
+        ...(data.active !== undefined ? { active: data.active } : {}),
+        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(deliveryZones.id, id))
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json({ error: `A delivery zone named "${data.name}" already exists.` }, { status: 409 });
+    }
+    throw error;
+  }
   if (!row) return Response.json({ error: "Delivery zone not found." }, { status: 404 });
 
   await auditLogEntry({ actorEmail: admin.email, action: "delivery-zone.update", entityType: "delivery-zone", entityId: id, detail: data });

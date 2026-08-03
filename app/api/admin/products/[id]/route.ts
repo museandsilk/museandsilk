@@ -8,6 +8,7 @@ import { auditLogEntry } from "@/lib/admin/audit";
 import { deleteObject } from "@/lib/r2";
 import { variantKeyFor } from "@/lib/image-variants";
 import { generateSeoFields } from "@/lib/ai/seo";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -103,11 +104,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     });
   }
 
-  const [row] = await db
+  const nextSlug = data.slug !== undefined ? slugify(data.slug) : undefined;
+
+  let row;
+  try {
+    [row] = await db
     .update(products)
     .set({
       ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.slug !== undefined ? { slug: slugify(data.slug) } : {}),
+      ...(nextSlug !== undefined ? { slug: nextSlug } : {}),
       ...(data.categoryId !== undefined ? { categoryId: data.categoryId } : {}),
       ...(data.typeLabel !== undefined ? { typeLabel: data.typeLabel } : {}),
       ...(data.shortDescription !== undefined ? { shortDescription: data.shortDescription || null } : {}),
@@ -133,6 +138,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     })
     .where(eq(products.id, id))
     .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return Response.json(
+        { error: `A product with a matching URL slug ("${nextSlug}") already exists — try a slightly different name.` },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.update", entityType: "product", entityId: id, detail: data });
 

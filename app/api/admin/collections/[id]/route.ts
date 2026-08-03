@@ -5,6 +5,7 @@ import { collections, productCollections } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -33,20 +34,29 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     data.status !== undefined ||
     data.sortOrder !== undefined;
 
+  const nextSlug = data.slug !== undefined ? slugify(data.slug) : undefined;
+
   let row = null;
   if (hasFieldUpdate) {
-    [row] = await db
-      .update(collections)
-      .set({
-        ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.slug !== undefined ? { slug: slugify(data.slug) } : {}),
-        ...(data.description !== undefined ? { description: data.description || null } : {}),
-        ...(data.status !== undefined ? { status: data.status } : {}),
-        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(collections.id, id))
-      .returning();
+    try {
+      [row] = await db
+        .update(collections)
+        .set({
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(nextSlug !== undefined ? { slug: nextSlug } : {}),
+          ...(data.description !== undefined ? { description: data.description || null } : {}),
+          ...(data.status !== undefined ? { status: data.status } : {}),
+          ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(collections.id, id))
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        return Response.json({ error: `A collection with a matching URL slug ("${nextSlug}") already exists.` }, { status: 409 });
+      }
+      throw error;
+    }
     if (!row) return Response.json({ error: "Collection not found." }, { status: 404 });
   }
 
