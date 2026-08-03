@@ -173,7 +173,7 @@ export function CampaignManager() {
             slides.map((slide, index) => (
               <article key={slide.id}>
                 <div>
-                  <Image src={slide.imageUrl} alt={slide.altText} fill unoptimized sizes="220px" />
+                  <Image src={slide.imageUrl} alt={slide.altText} fill sizes="220px" />
                 </div>
                 <span>0{index + 1}</span>
                 <section>

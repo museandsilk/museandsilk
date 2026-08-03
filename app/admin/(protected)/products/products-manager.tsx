@@ -332,6 +332,14 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
         for (const variant of processed.variants) {
           form.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
         }
+        // Replace the raw picked file with the largest generated variant before it ever leaves
+        // the browser — phone/camera photos can be tens of MB, and uploading that straight to the
+        // Worker (on top of the variants) is what was tripping Cloudflare's per-request resource
+        // limit. The largest variant is already full quality (native resolution, capped at 1600px)
+        // and WebP-compressed, so nothing is lost — this exact fix is already used for campaign
+        // images (see campaign-manager.tsx).
+        const largest = processed.variants[processed.variants.length - 1];
+        form.set("file", largest.blob, `product-${largest.width}.webp`);
       }
     }
 
@@ -437,7 +445,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                     <div className="admin-product-cell">
                       <span>
                         {product.imageId ? (
-                          <Image src={`/api/media/${product.imageId}`} alt="" fill unoptimized sizes="52px" />
+                          <Image src={`/api/media/${product.imageId}`} alt="" fill sizes="52px" />
                         ) : (
                           product.name.slice(0, 1)
                         )}
@@ -459,6 +467,11 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                   </td>
                   <td>
                     <span className={`status-pill status-${product.status}`}>{product.status}</span>
+                    {product.status === "published" && product.variantCount === 0 && (
+                      <small className="stock-low" style={{ display: "block", marginTop: 4 }}>
+                        Not visible — add a variant
+                      </small>
+                    )}
                   </td>
                   <td>
                     <button className="edit-link" onClick={() => openEdit(product.id)}>
@@ -672,7 +685,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                     {images.map((image) => (
                       <article key={image.id}>
                         <div>
-                          <Image src={`/api/media/${image.id}`} alt={image.altText} fill unoptimized sizes="100px" />
+                          <Image src={`/api/media/${image.id}`} alt={image.altText} fill sizes="100px" />
                         </div>
                         <small>{image.altText}</small>
                         {image.isPrimary ? <strong>Main image</strong> : <button onClick={() => imageAction(image.id, "primary")}>Make main</button>}

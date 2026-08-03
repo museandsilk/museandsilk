@@ -68,7 +68,7 @@ export default function CartPage() {
                 <article key={item.variantId}>
                   <div className="cart-image">
                     {item.imageUrl ? (
-                      <Image src={item.imageUrl} alt="" fill unoptimized sizes="130px" />
+                      <Image src={item.imageUrl} alt="" fill sizes="130px" />
                     ) : (
                       <Image src="/category-still-life.webp" alt="" fill unoptimized sizes="130px" />
                     )}
