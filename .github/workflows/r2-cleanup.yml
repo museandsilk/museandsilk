@@ -1,0 +1,38 @@
+name: R2 orphan cleanup
+
+# Runs scripts/r2-audit.ts on a schedule so R2 never accumulates files that no longer belong to any
+# product/campaign slide in the database — e.g. if an upload ever crashes between finishing its R2
+# writes and saving the database row (the exact failure mode behind the "Worker exceeded resource
+# limits" crash this was written after), the orphaned files it left behind get removed automatically
+# instead of sitting there forever. Runs daily; this is a full-bucket scan, not something that needs
+# to happen every few minutes. Repo is public, so this costs nothing in GitHub Actions minutes.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Delete orphaned R2 objects
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: node ./node_modules/tsx/dist/cli.mjs scripts/r2-audit.ts --delete
