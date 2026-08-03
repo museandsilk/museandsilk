@@ -5,6 +5,7 @@ import { categories, productImages, products, productVariants } from "@/db/schem
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { generateSeoFields } from "@/lib/ai/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,21 @@ export async function POST(request: Request) {
   const data = parsed.data;
   const slug = slugify(data.slug || data.name);
 
+  // The admin never fills these in directly (see products-manager.tsx — the SEO fields were
+  // deliberately removed from the create/edit form to keep adding a product simple); drafted here
+  // from whatever else was provided. Best-effort: getProductBySlug/generateMetadata already fall
+  // back to the plain name/shortDescription when these come back null.
+  const [category] = data.categoryId ? await db.select({ name: categories.name }).from(categories).where(eq(categories.id, data.categoryId)).limit(1) : [];
+  const seo = await generateSeoFields({
+    name: data.name,
+    typeLabel: data.typeLabel,
+    categoryName: category?.name,
+    color: data.primaryColour,
+    material: data.material,
+    shortDescription: data.shortDescription,
+    description: data.description,
+  });
+
   const [row] = await db
     .insert(products)
     .values({
@@ -134,8 +150,8 @@ export async function POST(request: Request) {
       status: data.status ?? "draft",
       featured: data.featured ?? false,
       badge: data.badge || null,
-      seoTitle: data.seoTitle || null,
-      seoDescription: data.seoDescription || null,
+      seoTitle: seo?.seoTitle || data.seoTitle || null,
+      seoDescription: seo?.seoDescription || data.seoDescription || null,
       pattern: data.pattern || null,
       primaryColour: data.primaryColour || null,
       occasion: data.occasion || null,

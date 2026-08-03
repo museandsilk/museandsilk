@@ -115,6 +115,18 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
 
+  // Simplified single-variant creation path — see the "Multi-variant product" checkbox in the
+  // create form. Left unchecked (the common case), the admin never has to visit a separate
+  // "add variant" step at all: color/name/description are inherited from the product itself, and
+  // only the facts that genuinely differ per-listing (SKU, price, stock) are asked for once, right
+  // here, then submitted automatically right after the product itself is created.
+  const [multiVariant, setMultiVariant] = useState(false);
+  const [initialSku, setInitialSku] = useState("");
+  const [initialPrice, setInitialPrice] = useState("");
+  const [initialCompareAtPrice, setInitialCompareAtPrice] = useState("");
+  const [initialStock, setInitialStock] = useState("0");
+  const [initialImageFile, setInitialImageFile] = useState<File | null>(null);
+
   async function generateDescription() {
     if (!draft?.name) {
       setMessage("Add a product name first.");
@@ -166,6 +178,12 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     setSlugTouched(false);
     setVariants([]);
     setImages([]);
+    setMultiVariant(false);
+    setInitialSku("");
+    setInitialPrice("");
+    setInitialCompareAtPrice("");
+    setInitialStock("0");
+    setInitialImageFile(null);
   }
 
   async function openEdit(productId: string) {
@@ -190,8 +208,15 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft) return;
+    const isCreating = !draft.id;
+
+    if (isCreating && !multiVariant && (!initialSku.trim() || !initialPrice)) {
+      setMessage("Add a SKU and price (or check “Multi-variant product” to add variants afterwards).");
+      return;
+    }
+
     setBusy(true);
-    setMessage("");
+    setMessage(isCreating ? "Creating product…" : "");
     const payload = { ...draft };
     const response = await fetch(draft.id ? `/api/admin/products/${draft.id}` : "/api/admin/products", {
       method: draft.id ? "PATCH" : "POST",
@@ -201,12 +226,66 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     const result = (await response.json()) as { error?: string; product?: ProductDetail };
     if (!response.ok) {
       setMessage(result.error ?? "The product could not be saved.");
-    } else {
-      setMessage(draft.id ? "Product updated." : "Product created.");
-      await refresh();
-      if (!draft.id && result.product) {
-        await openEdit(result.product.id);
+      setBusy(false);
+      return;
+    }
+
+    if (isCreating && result.product) {
+      const newProductId = result.product.id;
+
+      if (initialImageFile) {
+        setMessage("Uploading photo…");
+        const imageForm = new FormData();
+        imageForm.set("productId", newProductId);
+        imageForm.set("altText", draft.name);
+        imageForm.set("isPrimary", "true");
+        const processed = await processImageClientSide(initialImageFile);
+        if (processed) {
+          imageForm.set("width", String(processed.width));
+          imageForm.set("height", String(processed.height));
+          imageForm.set("blurDataUrl", processed.blurDataUrl);
+          imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+          for (const variant of processed.variants) {
+            imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+          }
+          const largest = processed.variants[processed.variants.length - 1];
+          imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
+        } else {
+          imageForm.set("file", initialImageFile);
+        }
+        const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
+        if (!imageResponse.ok) setMessage("Product created, but the photo could not be uploaded — add it below.");
       }
+
+      if (!multiVariant) {
+        setMessage((current) => (current?.startsWith("Product created, but") ? current : "Adding variant…"));
+        const variantResponse = await fetch("/api/admin/variants", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productId: newProductId,
+            name: draft.name,
+            sku: initialSku.trim(),
+            color: draft.primaryColour || draft.name,
+            price: initialPrice,
+            compareAtPrice: initialCompareAtPrice || undefined,
+            stockQuantity: initialStock || 0,
+            isDefault: true,
+          }),
+        });
+        if (!variantResponse.ok) {
+          setMessage((current) =>
+            current?.startsWith("Product created, but") ? current : "Product created, but the variant could not be added — add it below.",
+          );
+        }
+      }
+
+      setMessage((current) => (current?.startsWith("Product created, but") ? current : "Product created."));
+      await refresh();
+      await openEdit(newProductId);
+    } else {
+      setMessage("Product updated.");
+      await refresh();
     }
     setBusy(false);
   }
@@ -614,65 +693,104 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
               </div>
 
               <div className="admin-form-grid">
-                <label className="field-wide">
-                  <span>SEO title</span>
-                  <input value={draft.seoTitle ?? ""} onChange={(event) => setDraft({ ...draft, seoTitle: event.target.value })} />
+                <label>
+                  <span>Primary colour</span>
+                  <input value={draft.primaryColour ?? ""} onChange={(event) => setDraft({ ...draft, primaryColour: event.target.value })} />
                 </label>
-                <label className="field-wide">
-                  <span>SEO description</span>
-                  <textarea rows={2} value={draft.seoDescription ?? ""} onChange={(event) => setDraft({ ...draft, seoDescription: event.target.value })} />
-                </label>
-                {(draft.seoTitle || draft.name) && (
+                {/* SEO title/description are drafted automatically by AI from the fields above —
+                    see lib/ai/seo.ts — so there's nothing to fill in here. Only a read-only
+                    preview once the product actually exists and has real generated values. */}
+                {draft.id && (draft.seoTitle || draft.name) && (
                   <div className="field-wide" style={{ fontSize: 12, opacity: 0.7 }}>
                     <strong>Search preview:</strong> {draft.seoTitle || draft.name} — {draft.seoDescription || draft.shortDescription || ""}
                   </div>
                 )}
               </div>
 
-              <div className="admin-form-grid">
-                <label>
-                  <span>Pattern</span>
-                  <input value={draft.pattern ?? ""} onChange={(event) => setDraft({ ...draft, pattern: event.target.value })} />
-                </label>
-                <label>
-                  <span>Primary colour</span>
-                  <input value={draft.primaryColour ?? ""} onChange={(event) => setDraft({ ...draft, primaryColour: event.target.value })} />
-                </label>
-                <label>
-                  <span>Occasion</span>
-                  <input value={draft.occasion ?? ""} onChange={(event) => setDraft({ ...draft, occasion: event.target.value })} />
-                </label>
-                <label>
-                  <span>Style</span>
-                  <input value={draft.style ?? ""} onChange={(event) => setDraft({ ...draft, style: event.target.value })} />
-                </label>
-                <label>
-                  <span>Country of origin</span>
-                  <input value={draft.countryOfOrigin ?? ""} onChange={(event) => setDraft({ ...draft, countryOfOrigin: event.target.value })} />
-                </label>
-                <label>
-                  <span>Gender</span>
-                  <select value={draft.gender} onChange={(event) => setDraft({ ...draft, gender: event.target.value })}>
-                    <option value="female">Female</option>
-                    <option value="male">Male</option>
-                    <option value="unisex">Unisex</option>
-                  </select>
-                </label>
-                <label className="field-wide">
-                  <span>Google product category</span>
-                  <input
-                    value={draft.googleProductCategory ?? ""}
-                    onChange={(event) => setDraft({ ...draft, googleProductCategory: event.target.value })}
-                  />
-                </label>
-              </div>
+              <details className="admin-advanced-details">
+                <summary>Advanced details (optional)</summary>
+                <div className="admin-form-grid">
+                  <label>
+                    <span>Pattern</span>
+                    <input value={draft.pattern ?? ""} onChange={(event) => setDraft({ ...draft, pattern: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Occasion</span>
+                    <input value={draft.occasion ?? ""} onChange={(event) => setDraft({ ...draft, occasion: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Style</span>
+                    <input value={draft.style ?? ""} onChange={(event) => setDraft({ ...draft, style: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Country of origin</span>
+                    <input value={draft.countryOfOrigin ?? ""} onChange={(event) => setDraft({ ...draft, countryOfOrigin: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Gender</span>
+                    <select value={draft.gender} onChange={(event) => setDraft({ ...draft, gender: event.target.value })}>
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                      <option value="unisex">Unisex</option>
+                    </select>
+                  </label>
+                  <label className="field-wide">
+                    <span>Google product category</span>
+                    <input
+                      value={draft.googleProductCategory ?? ""}
+                      onChange={(event) => setDraft({ ...draft, googleProductCategory: event.target.value })}
+                    />
+                  </label>
+                </div>
+              </details>
+
+              {!draft.id && (
+                <div className="admin-new-product-quickstart">
+                  <label className="admin-check">
+                    <input type="checkbox" checked={multiVariant} onChange={(event) => setMultiVariant(event.target.checked)} />
+                    <span>Multi-variant product (comes in more than one color/size)</span>
+                  </label>
+
+                  {!multiVariant && (
+                    <div className="admin-form-grid">
+                      <label>
+                        <span>SKU</span>
+                        <input required value={initialSku} onChange={(event) => setInitialSku(event.target.value)} placeholder="MS-SCF-LIL-PUR" />
+                      </label>
+                      <label>
+                        <span>Price (PKR)</span>
+                        <input required type="number" min="0" value={initialPrice} onChange={(event) => setInitialPrice(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Compare-at price</span>
+                        <input type="number" min="0" value={initialCompareAtPrice} onChange={(event) => setInitialCompareAtPrice(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Opening stock</span>
+                        <input type="number" min="0" value={initialStock} onChange={(event) => setInitialStock(event.target.value)} />
+                      </label>
+                    </div>
+                  )}
+                  {multiVariant && <p className="admin-hint">Add each color/size as its own variant once the product is created below.</p>}
+
+                  <label>
+                    <span>Product photo</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) => setInitialImageFile(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <small>Optional here — you can always add or replace photos afterwards.</small>
+                </div>
+              )}
 
               <footer>
                 <button type="button" onClick={closeDrawer}>
                   Cancel
                 </button>
                 <button className="admin-primary" disabled={busy}>
-                  {busy ? "Saving…" : draft.id ? "Save changes" : "Create product"}
+                  {busy ? message || "Saving…" : draft.id ? "Save changes" : "Create product"}
                 </button>
               </footer>
             </form>

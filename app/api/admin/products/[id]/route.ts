@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { productImages, products, productVariants } from "@/db/schema";
+import { categories, productImages, products, productVariants } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { deleteObject } from "@/lib/r2";
 import { variantKeyFor } from "@/lib/image-variants";
+import { generateSeoFields } from "@/lib/ai/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,33 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   const becomingPublished = data.status === "published" && existing.status !== "published";
 
+  // Regenerate SEO metadata whenever anything it's drafted from actually changed — the admin form
+  // no longer exposes these fields directly (see products-manager.tsx), so this is the only way
+  // they ever stay in sync with the product's real name/description/etc.
+  const seoRelevantFieldsChanged = [
+    data.name,
+    data.typeLabel,
+    data.categoryId,
+    data.primaryColour,
+    data.material,
+    data.shortDescription,
+    data.description,
+  ].some((value) => value !== undefined);
+  let seo: { seoTitle: string; seoDescription: string } | null = null;
+  if (seoRelevantFieldsChanged) {
+    const categoryId = data.categoryId ?? existing.categoryId;
+    const [category] = categoryId ? await db.select({ name: categories.name }).from(categories).where(eq(categories.id, categoryId)).limit(1) : [];
+    seo = await generateSeoFields({
+      name: data.name ?? existing.name,
+      typeLabel: data.typeLabel ?? existing.typeLabel,
+      categoryName: category?.name,
+      color: data.primaryColour ?? existing.primaryColour ?? undefined,
+      material: data.material ?? existing.material ?? undefined,
+      shortDescription: data.shortDescription ?? existing.shortDescription ?? undefined,
+      description: data.description ?? existing.description ?? undefined,
+    });
+  }
+
   const [row] = await db
     .update(products)
     .set({
@@ -90,8 +118,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       ...(data.status !== undefined ? { status: data.status } : {}),
       ...(data.featured !== undefined ? { featured: data.featured } : {}),
       ...(data.badge !== undefined ? { badge: data.badge || null } : {}),
-      ...(data.seoTitle !== undefined ? { seoTitle: data.seoTitle || null } : {}),
-      ...(data.seoDescription !== undefined ? { seoDescription: data.seoDescription || null } : {}),
+      ...(seo ? { seoTitle: seo.seoTitle, seoDescription: seo.seoDescription } : {}),
+      ...(!seo && data.seoTitle !== undefined ? { seoTitle: data.seoTitle || null } : {}),
+      ...(!seo && data.seoDescription !== undefined ? { seoDescription: data.seoDescription || null } : {}),
       ...(data.pattern !== undefined ? { pattern: data.pattern || null } : {}),
       ...(data.primaryColour !== undefined ? { primaryColour: data.primaryColour || null } : {}),
       ...(data.occasion !== undefined ? { occasion: data.occasion || null } : {}),
