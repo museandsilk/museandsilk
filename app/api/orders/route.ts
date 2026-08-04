@@ -19,6 +19,7 @@ import { isCheckoutRateLimited } from "@/lib/auth/rate-limit";
 import { expireReservations } from "@/lib/orders";
 import { cleanPhone } from "@/lib/slug";
 import { checkCoupon, computeDiscountAmount } from "@/lib/coupons";
+import { isOtpTokenValid } from "@/lib/checkout/otp";
 
 export const dynamic = "force-dynamic";
 
@@ -114,7 +115,8 @@ export async function POST(request: Request) {
 
   const customerName = String(body.customerName ?? "").trim();
   const customerPhone = cleanPhone(String(body.customerPhone ?? ""));
-  const customerEmail = String(body.customerEmail ?? "").trim() || null;
+  const customerEmail = String(body.customerEmail ?? "").trim().toLowerCase() || null;
+  const otpToken = String(body.otpToken ?? "").trim() || null;
   const city = String(body.city ?? "").trim();
   const province = String(body.province ?? "").trim();
   const address = String(body.address ?? "").trim();
@@ -127,6 +129,7 @@ export async function POST(request: Request) {
   if (
     !customerName ||
     customerPhone.replace(/\D/g, "").length < 10 ||
+    !customerEmail ||
     !city ||
     !province ||
     !address ||
@@ -134,6 +137,10 @@ export async function POST(request: Request) {
     !paymentMethod
   ) {
     return Response.json({ error: "Complete all required details before placing the order." }, { status: 400 });
+  }
+
+  if (!otpToken || !(await isOtpTokenValid(customerEmail, otpToken))) {
+    return Response.json({ error: "Please verify your email before placing the order." }, { status: 400 });
   }
   if (!items.length || items.length > 20) {
     return Response.json({ error: "Your bag must contain between 1 and 20 items." }, { status: 400 });
@@ -219,7 +226,7 @@ export async function POST(request: Request) {
   }
 
   const total = subtotal + deliveryCharge - discount;
-  const reservationHours = paymentMethod === "cod" ? settings?.codReservationHours ?? 12 : settings?.bankReservationHours ?? 24;
+  const reservationHours = paymentMethod === "cod" ? settings?.codReservationHours ?? 6 : settings?.bankReservationHours ?? 6;
   const reservationExpiresAt = new Date(Date.now() + reservationHours * 60 * 60 * 1000);
   const orderId = randomUUID();
   const orderNumber = generateOrderNumber();

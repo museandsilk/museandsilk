@@ -23,7 +23,7 @@ const policies: Record<string, Policy> = {
     sections: [
       [
         "Order confirmation",
-        `Cash-on-delivery orders reserve your stock for ${COD_HOURS_PLACEHOLDER} hours while we confirm the order by phone or WhatsApp. Bank-deposit orders reserve stock for ${BANK_HOURS_PLACEHOLDER} hours while your payment is verified. If confirmation or payment is not completed within that window, the reservation may expire and the stock is released.`,
+        `Cash-on-delivery orders reserve your stock for ${COD_HOURS_PLACEHOLDER} hours while we confirm the order. Bank-deposit orders reserve stock for ${BANK_HOURS_PLACEHOLDER} hours while your payment is verified. If confirmation or payment is not completed within that window, the reservation may expire and the stock is released.`,
       ],
       [
         "Delivery charges",
@@ -105,7 +105,7 @@ const policies: Record<string, Policy> = {
       ],
       [
         "Placing an order",
-        "An order is accepted once it has been confirmed — by phone or WhatsApp for cash-on-delivery orders, or once payment has been verified for bank-deposit orders. We may decline or cancel an order affected by a pricing error, unavailable stock, suspected fraud, or where the customer cannot be reached.",
+        "An order is accepted once it has been confirmed for cash-on-delivery orders, or once payment has been verified for bank-deposit orders. We may decline or cancel an order affected by a pricing error, unavailable stock, suspected fraud, or where the customer cannot be reached.",
       ],
       [
         "Payments and reservations",

@@ -8,9 +8,20 @@ export type CartItem = {
   price: number;
   quantity: number;
   imageUrl?: string;
+  // Stock ceiling captured when the item was added/last refreshed — used to cap quantity client
+  // side so a customer can't stack more in their bag than actually exists. Optional only for
+  // backward compatibility with carts saved before this field existed; falls back to a
+  // conservative cap of 10 when absent. The cart/checkout pages re-check this against the live
+  // database via /api/cart-availability, since stock can change after an item was added.
+  available?: number;
 };
 
 const KEY = "muse-and-silk-cart";
+const FALLBACK_MAX = 10;
+
+function capFor(item: Pick<CartItem, "available">): number {
+  return typeof item.available === "number" ? item.available : FALLBACK_MAX;
+}
 
 export function readCart(): CartItem[] {
   if (typeof window === "undefined") return [];
@@ -30,8 +41,12 @@ export function writeCart(items: CartItem[]) {
 export function addCartItem(item: CartItem) {
   const items = readCart();
   const existing = items.find((entry) => entry.variantId === item.variantId);
-  if (existing) existing.quantity = Math.min(10, existing.quantity + item.quantity);
-  else items.push(item);
+  if (existing) {
+    existing.available = item.available ?? existing.available;
+    existing.quantity = Math.min(capFor(existing), existing.quantity + item.quantity);
+  } else {
+    items.push({ ...item, quantity: Math.min(capFor(item), item.quantity) });
+  }
   writeCart(items);
 }
 
@@ -47,7 +62,7 @@ export function updateCartItemQuantity(variantId: string, quantity: number) {
     writeCart(items.filter((entry) => entry.variantId !== variantId));
     return;
   }
-  item.quantity = Math.min(10, quantity);
+  item.quantity = Math.min(capFor(item), quantity);
   writeCart(items);
 }
 

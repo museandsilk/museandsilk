@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Script from "next/script";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { StoreHeader } from "@/app/(store)/_components/store-components";
 import { clearCart, readCart, type CartItem } from "@/lib/cart";
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 type Zone = { id: string; name: string; deliveryCharge: number; estimatedDaysMin: number; estimatedDaysMax: number };
 type Settings = {
@@ -56,6 +59,91 @@ export default function CheckoutPage() {
   const [coupon, setCoupon] = useState<CouponState>(null);
   const [couponError, setCouponError] = useState("");
   const [couponBusy, setCouponBusy] = useState(false);
+
+  // Email verification gate — see /api/checkout/request-otp and /api/checkout/verify-otp. The
+  // order can't be placed until otpToken is set; editing the email after verifying clears it so a
+  // switched-in address can't ride on a code that was sent to a different one.
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpToken, setOtpToken] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpMessage, setOtpMessage] = useState("");
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = window.setInterval(() => setOtpCooldown((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [otpCooldown]);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY) return;
+    (window as Window & { onTurnstileSuccess?: (token: string) => void }).onTurnstileSuccess = (token: string) =>
+      setTurnstileToken(token);
+  }, []);
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail);
+
+  async function requestOtp() {
+    if (!emailValid || otpBusy || (TURNSTILE_SITE_KEY && !turnstileToken)) return;
+    setOtpBusy(true);
+    setOtpMessage("");
+    try {
+      const response = await fetch("/api/checkout/request-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: customerEmail, turnstileToken }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setOtpMessage(data.error ?? "Could not send the code.");
+        return;
+      }
+      setOtpSent(true);
+      setOtpCooldown(60);
+      setOtpMessage("Code sent — check your inbox.");
+    } catch {
+      setOtpMessage("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setOtpBusy(false);
+    }
+  }
+
+  async function verifyOtpCode() {
+    if (!/^\d{6}$/.test(otpCode) || otpBusy) return;
+    setOtpBusy(true);
+    setOtpMessage("");
+    try {
+      const response = await fetch("/api/checkout/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: customerEmail, code: otpCode }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setOtpMessage(data.error ?? "That code is incorrect.");
+        return;
+      }
+      setOtpToken(data.verifiedToken);
+      setOtpMessage("Email verified.");
+    } catch {
+      setOtpMessage("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setOtpBusy(false);
+    }
+  }
+
+  function onEmailChange(value: string) {
+    setCustomerEmail(value);
+    if (otpToken || otpSent) {
+      setOtpToken("");
+      setOtpSent(false);
+      setOtpCode("");
+      setOtpMessage("");
+    }
+  }
   // Generated once per page load / checkout attempt. Reusing it across retries of the same submit
   // (network errors, double-clicks) lets the server treat a retry as the same order via
   // findOrderByIdempotencyKey instead of creating a duplicate.
@@ -122,6 +210,10 @@ export default function CheckoutPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!otpToken) {
+      setError("Verify your email before placing the order.");
+      return;
+    }
     setBusy(true);
     setError("");
     const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
@@ -134,6 +226,7 @@ export default function CheckoutPage() {
           zoneId,
           paymentMethod: payment,
           couponCode: coupon?.code,
+          otpToken,
           items: items.map(({ variantId, quantity }) => ({ variantId, quantity })),
         }),
       });
@@ -176,10 +269,6 @@ export default function CheckoutPage() {
   }
 
   if (result) {
-    const whatsappNumber = result.whatsappNumber;
-    const whatsappMessage = encodeURIComponent(
-      `Hi Muse & Silk, I've placed order ${result.orderNumber} (total ${money.format(result.total)}). Please confirm.`,
-    );
     return (
       <main>
         <StoreHeader />
@@ -189,7 +278,7 @@ export default function CheckoutPage() {
           <h1>
             Thank you.
             <br />
-            Your pieces are reserved.
+            Your order is confirmed.
           </h1>
           <div>
             <span>Order number</span>
@@ -197,23 +286,9 @@ export default function CheckoutPage() {
             <button onClick={() => navigator.clipboard.writeText(result.orderNumber)}>Copy</button>
           </div>
           <p>
-            Your reservation remains active until{" "}
-            {result.reservationExpiresAt ? new Date(result.reservationExpiresAt).toLocaleString("en-PK") : "soon"}. We
-            will confirm the order by phone or WhatsApp.
+            We&apos;ve sent a confirmation to your email.
             {result.discount > 0 && <> Your coupon saved you {money.format(result.discount)}.</>}
           </p>
-          {whatsappNumber && (
-            <p>
-              <a
-                className="button button-dark"
-                href={`https://wa.me/${whatsappNumber}?text=${whatsappMessage}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Message us on WhatsApp
-              </a>
-            </p>
-          )}
           {result.paymentMethod === "bank_deposit" && result.bank && (
             <aside>
               <h2>Bank deposit details</h2>
@@ -269,9 +344,69 @@ export default function CheckoutPage() {
                     <input required name="customerPhone" autoComplete="tel" placeholder="+923001234567" />
                   </label>
                   <label className="field-wide">
-                    <span>Email (optional)</span>
-                    <input type="email" name="customerEmail" autoComplete="email" />
+                    <span>Email *</span>
+                    <input
+                      required
+                      type="email"
+                      name="customerEmail"
+                      autoComplete="email"
+                      value={customerEmail}
+                      onChange={(event) => onEmailChange(event.target.value)}
+                      readOnly={Boolean(otpToken)}
+                    />
                   </label>
+                  <div className="field-wide checkout-otp">
+                    {TURNSTILE_SITE_KEY && !otpToken && (
+                      <>
+                        <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />
+                        <div className="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-callback="onTurnstileSuccess" />
+                      </>
+                    )}
+                    {otpToken ? (
+                      <p className="checkout-otp-verified">✓ Email verified</p>
+                    ) : !otpSent ? (
+                      <button
+                        type="button"
+                        className="text-link"
+                        disabled={!emailValid || otpBusy || Boolean(TURNSTILE_SITE_KEY) && !turnstileToken}
+                        onClick={requestOtp}
+                      >
+                        {otpBusy ? (
+                          <span className="busy-label">
+                            <span className="spinner" aria-hidden="true" /> Sending…
+                          </span>
+                        ) : (
+                          "Send verification code"
+                        )}
+                      </button>
+                    ) : (
+                      <div className="checkout-otp-verify">
+                        <label>
+                          <span>Enter the 6-digit code</span>
+                          <input
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                            placeholder="000000"
+                          />
+                        </label>
+                        <button type="button" className="text-link" disabled={otpCode.length !== 6 || otpBusy} onClick={verifyOtpCode}>
+                          {otpBusy ? (
+                            <span className="busy-label">
+                              <span className="spinner" aria-hidden="true" /> Verifying…
+                            </span>
+                          ) : (
+                            "Verify code"
+                          )}
+                        </button>
+                        <button type="button" className="text-link" disabled={otpCooldown > 0 || otpBusy} onClick={requestOtp}>
+                          {otpCooldown > 0 ? `Resend in ${otpCooldown}s` : "Resend code"}
+                        </button>
+                      </div>
+                    )}
+                    {otpMessage && <p className="checkout-otp-message">{otpMessage}</p>}
+                  </div>
                 </div>
               </fieldset>
               <fieldset>
@@ -316,7 +451,7 @@ export default function CheckoutPage() {
                     <input type="radio" name="payment" checked={payment === "cod"} onChange={() => setPayment("cod")} />
                     <span>
                       <strong>Cash on delivery</strong>
-                      <small>Reserved for {settings?.codReservationHours ?? 12} hours while we confirm by phone or WhatsApp.</small>
+                      <small>Reserved for {settings?.codReservationHours ?? 6} hours while we confirm your order.</small>
                     </span>
                   </label>
                   <label className={payment === "bank_deposit" ? "active" : ""}>
@@ -328,7 +463,7 @@ export default function CheckoutPage() {
                     />
                     <span>
                       <strong>Bank deposit</strong>
-                      <small>Reserved for {settings?.bankReservationHours ?? 24} hours while payment is verified.</small>
+                      <small>Reserved for {settings?.bankReservationHours ?? 6} hours while payment is verified.</small>
                     </span>
                   </label>
                 </div>
@@ -415,7 +550,7 @@ export default function CheckoutPage() {
                 </p>
               </div>
               {error && <p className="checkout-error">{error}</p>}
-              <button className="add-button" disabled={busy || !zoneId}>
+              <button className="add-button" disabled={busy || !zoneId || !otpToken}>
                 {busy ? (
                   <span className="busy-label">
                     <span className="spinner spinner-light" aria-hidden="true" /> Placing order…
@@ -425,6 +560,7 @@ export default function CheckoutPage() {
                 )}
                 <span>→︎</span>
               </button>
+              {!otpToken && <small className="checkout-otp-hint">Verify your email above to place the order.</small>}
               <small>By placing the order, you agree to the store terms and reservation policy.</small>
             </aside>
           </form>

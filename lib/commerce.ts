@@ -437,7 +437,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     metaPixelId: row?.metaPixelId ?? "",
     gaMeasurementId: row?.gaMeasurementId ?? "",
     brandName: row?.brandName ?? "Muse & Silk",
-    codReservationHours: row?.codReservationHours ?? 12,
-    bankReservationHours: row?.bankReservationHours ?? 24,
+    codReservationHours: row?.codReservationHours ?? 6,
+    bankReservationHours: row?.bankReservationHours ?? 6,
   };
 }

@@ -17,7 +17,7 @@ export default async function ShopPage() {
   const products = await getCatalogProducts();
   return (
     <main className="page-fade-in">
-      <StoreHeader />
+      <StoreHeader theme="dark" />
       <section className="collection-hero">
         <Image src="/category-still-life.webp" alt="" fill priority sizes="100vw" />
         <div />

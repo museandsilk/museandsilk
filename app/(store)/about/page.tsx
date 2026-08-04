@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <main>
-      <StoreHeader />
+      <StoreHeader theme="dark" />
       <section className="story-page">
         <div className="story-image">
           <Image src="/campaign-hero.webp" alt="Muse & Silk campaign portrait" fill priority sizes="50vw" />

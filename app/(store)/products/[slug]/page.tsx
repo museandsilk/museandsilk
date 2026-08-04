@@ -103,7 +103,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </nav>
           <p className="eyebrow">{product.type}</p>
           <h1>{product.name}</h1>
-          <p className="product-price">PKR {product.price.toLocaleString("en-PK")}</p>
+          <p className="product-price">
+            {product.compareAtPrice && product.compareAtPrice > product.price && (
+              <span className="product-price-compare">PKR {product.compareAtPrice.toLocaleString("en-PK")}</span>
+            )}
+            PKR {product.price.toLocaleString("en-PK")}
+          </p>
           <p className="product-intro">
             {product.shortDescription || "A composed study in line, texture and warm neutral color—designed to make even the simplest look feel intentional."}
           </p>

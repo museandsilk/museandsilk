@@ -18,7 +18,7 @@ export default async function FaqPage() {
   const faqs: [string, string][] = [
     [
       "Do you offer cash on delivery?",
-      `Yes. Cash on delivery is available nationwide. Once you place a COD order, we reserve your stock for ${settings.codReservationHours} hours while we confirm the order with you by phone or WhatsApp.`,
+      `Yes. Cash on delivery is available nationwide. Once you place a COD order, we reserve your stock for ${settings.codReservationHours} hours while we confirm the order.`,
     ],
     [
       "Can I pay by bank deposit instead?",

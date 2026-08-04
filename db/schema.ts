@@ -29,6 +29,24 @@ export const loginAttempts = pgTable("login_attempts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("login_attempts_email_idx").on(table.email, table.createdAt)]);
 
+// Checkout email verification: a customer requests a 6-digit code, receives it via Resend, and
+// submits it back before the order can be created. `verifiedToken` is only set once the code
+// checks out and is what /api/orders actually validates — the code itself never travels past
+// verify-otp. `otpHash` is a SHA-256 digest, not a password hash: OTPs are short-lived, single-use,
+// and rate-limited, so a fast hash is fine here (see lib/checkout/otp.ts).
+export const checkoutVerifications = pgTable("checkout_verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull(),
+  ip: text("ip").notNull(),
+  otpHash: text("otp_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  verified: boolean("verified").notNull().default(false),
+  verifiedToken: text("verified_token").unique(),
+  verifiedUntil: timestamp("verified_until", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("checkout_verifications_email_idx").on(table.email, table.createdAt)]);
+
 export const adminAuditLog = pgTable("admin_audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   actorEmail: text("actor_email").notNull(),
@@ -282,8 +300,8 @@ export const siteSettings = pgTable("site_settings", {
   metaPixelId: text("meta_pixel_id").notNull().default(""),
   gaMeasurementId: text("ga_measurement_id").notNull().default(""),
   freeDeliveryThreshold: integer("free_delivery_threshold").notNull().default(4000),
-  codReservationHours: integer("cod_reservation_hours").notNull().default(12),
-  bankReservationHours: integer("bank_reservation_hours").notNull().default(24),
+  codReservationHours: integer("cod_reservation_hours").notNull().default(6),
+  bankReservationHours: integer("bank_reservation_hours").notNull().default(6),
   taxEnabled: boolean("tax_enabled").notNull().default(false),
   currency: text("currency").notNull().default("PKR"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

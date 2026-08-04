@@ -11,7 +11,7 @@ export default async function Home() {
   const [products, campaignSlides, settings] = await Promise.all([getCatalogProducts(), getCampaignSlides(), getPublicSettings()]);
   return (
     <main className="page-fade-in">
-      <StoreHeader />
+      <StoreHeader theme="dark" />
       <CampaignCarousel slides={campaignSlides} />
 
       <section className="service-strip" aria-label="Store benefits">

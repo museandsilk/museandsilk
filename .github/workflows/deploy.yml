@@ -43,6 +43,7 @@ jobs:
           echo "${{ secrets.WHATSAPP_DEFAULT_NUMBER }}" | npx wrangler secret put WHATSAPP_DEFAULT_NUMBER
           echo "${{ secrets.CRON_SECRET }}" | npx wrangler secret put CRON_SECRET
           echo "${{ secrets.GROQ_API_KEY }}" | npx wrangler secret put GROQ_API_KEY
+          echo "${{ secrets.TURNSTILE_SECRET_KEY }}" | npx wrangler secret put TURNSTILE_SECRET_KEY
 
       # NEXT_PUBLIC_* vars must be present at build time — they get inlined into client bundles.
       - name: Build
@@ -50,6 +51,7 @@ jobs:
           NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
           NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
           NEXT_PUBLIC_META_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_META_PIXEL_ID }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npm run cf:build
 

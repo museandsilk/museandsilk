@@ -9,7 +9,7 @@ import { cropForCategory } from "@/lib/slug";
 
 const money = new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 });
 
-export function StoreHeader() {
+export function StoreHeader({ theme = "light" }: { theme?: "dark" | "light" }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -64,7 +64,7 @@ export function StoreHeader() {
           })}
         </div>
       </div>
-      <header className="header">
+      <header className={`header ${theme === "light" ? "header-light" : ""}`}>
         <button className="mobile-menu-button" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><i /><i /></button>
         <nav className="main-nav" aria-label="Primary navigation"><Link href="/shop">New</Link><Link href="/collections/scarves">Scarves</Link><Link href="/collections/bandanas">Bandanas</Link><Link href="/collections/glasses">Eyewear</Link><Link href="/journal">The edit</Link></nav>
         <Link href="/" className="wordmark" aria-label="Muse and Silk, home">MUSE <i>&amp;</i> SILK</Link>
@@ -90,13 +90,13 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
   const crop = cropForCategory(product.category);
   return (
     <article className="product-card">
-      <Link href={`/products/${product.slug}`} className={`product-image crop-${crop}`}><Image src={product.imageUrl ?? "/category-still-life.webp"} alt={product.name} fill sizes="(max-width: 760px) 50vw, 25vw" {...(product.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: product.blurDataUrl } : {})} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-view">View piece</span></Link>
+      <Link href={`/products/${product.slug}`} className={`product-image crop-${crop}`}><Image src={product.imageUrl ?? "/category-still-life.webp"} alt={product.name} fill sizes="(max-width: 760px) 50vw, 25vw" {...(product.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: product.blurDataUrl } : {})} />{product.stock < 1 ? <span className="product-badge product-badge-soldout">Sold out</span> : product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-view">View piece</span></Link>
       <button className={`save-button ${saved ? "saved" : ""}`} onClick={() => setSaved(!saved)} aria-label={saved ? `Remove ${product.name} from saved pieces` : `Save ${product.name}`}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} aria-hidden="true">
           <path d="M12 21s-7.5-4.6-10.2-9.1C.2 8.9 1.4 5 5 4c2.4-.7 4.6.4 7 3 2.4-2.6 4.6-3.7 7-3 3.6 1 4.8 4.9 3.2 7.9C19.5 16.4 12 21 12 21z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
         </svg>
       </button>
-      <div className="product-info"><div><p>{product.type}</p><Link href={`/products/${product.slug}`}>{product.name}</Link></div><strong>{money.format(product.price)}</strong></div>
+      <div className="product-info"><div><p>{product.type}</p><Link href={`/products/${product.slug}`}>{product.name}</Link></div><strong>{product.compareAtPrice && product.compareAtPrice > product.price && <span className="product-price-compare">{money.format(product.compareAtPrice)}</span>}{money.format(product.price)}</strong></div>
       <div className="product-color"><i className={`swatch swatch-${crop}`} />{product.color}</div>
     </article>
   );
