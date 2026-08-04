@@ -319,8 +319,10 @@ export default function CheckoutPage() {
       <StoreHeader />
       <section className="checkout-page">
         <header>
-          <p className="eyebrow">Secure checkout</p>
-          <h1>Delivery &amp; payment</h1>
+          <div>
+            <p className="eyebrow">Secure checkout</p>
+            <h1>Delivery &amp; payment</h1>
+          </div>
         </header>
         {!items.length ? (
           <div className="cart-empty">

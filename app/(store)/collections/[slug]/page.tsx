@@ -53,7 +53,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
         <p className="eyebrow">The signature edit</p>
         <h1>{title}</h1>
       </section>
-      <ShopGrid products={products} />
+      <ShopGrid products={products} showCategoryFilter={false} />
 
       <footer className="footer">
         <div className="footer-brand">

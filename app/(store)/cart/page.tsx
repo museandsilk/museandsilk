@@ -98,8 +98,10 @@ export default function CartPage() {
       <StoreHeader />
       <section className="cart-page">
         <header>
-          <p className="eyebrow">Your selection</p>
-          <h1>The bag</h1>
+          <div>
+            <p className="eyebrow">Your selection</p>
+            <h1>The bag</h1>
+          </div>
           <span>{items.length} pieces</span>
         </header>
         {stockNotice && <p className="cart-stock-notice">{stockNotice}</p>}

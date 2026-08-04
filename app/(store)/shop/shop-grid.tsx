@@ -4,30 +4,41 @@ import { useMemo, useState } from "react";
 import { ProductCard } from "../_components/store-components";
 import type { CatalogProduct } from "@/lib/commerce";
 
-export function ShopGrid({ products }: { products: CatalogProduct[] }) {
+/**
+ * `showCategoryFilter` defaults to true for /shop, where "All / Scarves / Bandanas / Eyewear"
+ * makes sense across the whole catalog. Collection pages (/collections/[slug]) already scope
+ * `products` to a single category via the page's own hero/breadcrumb, so they pass this as false —
+ * otherwise the exact same category tabs re-render redundantly underneath a page that's already
+ * one specific category (e.g. an "All / Scarves / Bandanas / Eyewear" bar sitting inside Eyewear).
+ */
+export function ShopGrid({ products, showCategoryFilter = true }: { products: CatalogProduct[]; showCategoryFilter?: boolean }) {
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("featured");
   const visible = useMemo(() => {
-    const filtered = category === "all" ? [...products] : products.filter((product) => product.category === category);
+    const filtered = !showCategoryFilter || category === "all" ? [...products] : products.filter((product) => product.category === category);
     if (sort === "low") filtered.sort((a, b) => a.price - b.price);
     if (sort === "high") filtered.sort((a, b) => b.price - a.price);
     return filtered;
-  }, [category, products, sort]);
+  }, [category, products, sort, showCategoryFilter]);
   return (
     <section className="shop-shell">
       <div className="shop-toolbar">
-        <div className="filter-tabs" aria-label="Filter products by category">
-          {[
-            ["all", "All"],
-            ["scarves", "Scarves"],
-            ["bandanas", "Bandanas"],
-            ["glasses", "Eyewear"],
-          ].map(([value, label]) => (
-            <button key={value} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>
-              {label}
-            </button>
-          ))}
-        </div>
+        {showCategoryFilter ? (
+          <div className="filter-tabs" aria-label="Filter products by category">
+            {[
+              ["all", "All"],
+              ["scarves", "Scarves"],
+              ["bandanas", "Bandanas"],
+              ["glasses", "Eyewear"],
+            ].map(([value, label]) => (
+              <button key={value} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span />
+        )}
         <label>
           Sort{" "}
           <select value={sort} onChange={(event) => setSort(event.target.value)}>
