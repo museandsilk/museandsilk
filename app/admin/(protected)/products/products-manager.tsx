@@ -78,12 +78,14 @@ type ProductImage = {
   status: string;
 };
 
+type ImportImageJob = { file: string; isPrimary: boolean; order: number; alt: string };
+
 type ImportResult = {
   index: number;
   name: string;
   success: boolean;
   productId?: string;
-  imageUrls?: string[];
+  images?: ImportImageJob[];
   imageErrors?: string[];
   variantErrors?: string[];
   error?: string;
@@ -140,10 +142,12 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
   // Bulk JSON import — see lib/import/product-import-schema.ts for the accepted shapes. Image
   // processing/resizing never happens on the server (that's what caused the earlier Worker
-  // resource-limit crashes), so any `imageUrls` are fetched and resized right here in the browser,
-  // through the same pipeline as a manual upload, after the products themselves are created.
+  // resource-limit crashes): each product's `variants[].images[].file` is just a plain filename,
+  // matched here against whatever photo files the admin picks alongside the JSON, then processed
+  // through the same client-side pipeline as a manual upload before ever leaving the browser.
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
+  const [importImageFiles, setImportImageFiles] = useState<File[]>([]);
   const [importBusy, setImportBusy] = useState(false);
   const [importResults, setImportResults] = useState<ImportResult[]>([]);
 
@@ -173,23 +177,26 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
       setImportResults(result.results);
 
+      const filesByName = new Map(importImageFiles.map((file) => [file.name, file]));
       const withImageErrors: ImportResult[] = [];
       for (const item of result.results) {
         const imageErrors: string[] = [];
-        if (item.success && item.productId && item.imageUrls?.length) {
-          for (let i = 0; i < item.imageUrls.length; i++) {
+        if (item.success && item.productId && item.images?.length) {
+          const sorted = [...item.images].sort((a, b) => a.order - b.order);
+          for (const image of sorted) {
+            const file = filesByName.get(image.file);
+            if (!file) {
+              imageErrors.push(`"${image.file}" wasn't among the photos you selected — add it manually.`);
+              continue;
+            }
             try {
-              const fetched = await fetch(item.imageUrls[i]);
-              if (!fetched.ok) throw new Error("fetch failed");
-              const blob = await fetched.blob();
-              const file = new File([blob], `import-${i}.jpg`, { type: blob.type || "image/jpeg" });
               const processed = await processImageClientSide(file);
               if (!processed) throw new Error("processing failed");
 
               const imageForm = new FormData();
               imageForm.set("productId", item.productId);
-              imageForm.set("altText", item.name);
-              imageForm.set("isPrimary", i === 0 ? "true" : "false");
+              imageForm.set("altText", image.alt);
+              imageForm.set("isPrimary", image.isPrimary ? "true" : "false");
               imageForm.set("width", String(processed.width));
               imageForm.set("height", String(processed.height));
               imageForm.set("blurDataUrl", processed.blurDataUrl);
@@ -203,7 +210,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
               const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
               if (!imageResponse.ok) throw new Error("upload failed");
             } catch {
-              imageErrors.push(`Image ${i + 1} (${item.imageUrls[i]}) couldn't be fetched or uploaded — add it manually.`);
+              imageErrors.push(`"${image.file}" couldn't be processed or uploaded — add it manually.`);
             }
           }
         }
@@ -595,6 +602,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
             onClick={() => {
               setImportOpen(true);
               setImportText("");
+              setImportImageFiles([]);
               setImportResults([]);
             }}
           >
@@ -1108,32 +1116,44 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
             <div className="admin-product-form">
               <p className="admin-hint">
-                Paste one product object, or <code>{"{ \"products\": [...] }"}</code> for several. Each product is either{" "}
-                <strong>single-variant</strong> (top-level <code>sku</code> + <code>price</code>) or{" "}
-                <strong>multi-variant</strong> (a <code>variants</code> array) — not both. <code>category</code> must match an existing
-                category name. <code>imageUrls</code> is optional and best-effort: only direct, public, CORS-enabled image links can be
-                fetched — anything else will need the photo added manually afterwards.
+                Paste one product object, or <code>{"{ \"products\": [...] }"}</code> for several. Every product has a <code>variants</code>{" "}
+                array (min 1) — single-variant is just one entry. <code>category</code> must match an existing category name.{" "}
+                <code>variants[].images[].file</code> is a plain filename — pick the matching photo files below and they&apos;ll be matched
+                by name, processed, and uploaded automatically. <code>seo.title</code>/<code>seo.description</code> are optional; when
+                omitted, SEO copy is drafted automatically from the rest of the product.
               </p>
 
               <label className="field-wide">
                 <span>Single-variant example (scarf)</span>
                 <textarea
-                  rows={3}
+                  rows={4}
                   readOnly
                   value={JSON.stringify(
                     {
-                      category: "Scarves",
                       name: "The Nomad Silk Scarf",
+                      slug: "the-nomad-silk-scarf",
+                      category: "Scarves",
                       typeLabel: "Luxury Silk Scarf",
-                      shortDescription: "A hand-rolled silk scarf in deep chocolate brown.",
-                      material: "100% Mulberry Silk",
+                      visibility: "draft",
+                      featured: true,
+                      badge: "New",
+                      shortDescription: "A luxurious chocolate brown silk scarf with an elegant equestrian-inspired print.",
+                      material: "Premium Satin Silk",
+                      dimensions: { length: 90, width: 90, unit: "cm" },
+                      careInstructions: ["Hand wash with cold water.", "Do not bleach.", "Iron on low heat."],
                       primaryColour: "Chocolate Brown",
-                      status: "draft",
-                      sku: "MS-SCF-NOM-BRN",
-                      price: 4500,
-                      compareAtPrice: 5200,
-                      stockQuantity: 10,
-                      imageUrls: ["https://example.com/scarf-1.jpg", "https://example.com/scarf-2.jpg"],
+                      attributes: { pattern: "Equestrian Chain & Monogram Print", gender: "Women", countryOfOrigin: "Pakistan" },
+                      variants: [
+                        {
+                          name: "Chocolate Brown",
+                          color: "Chocolate Brown",
+                          sku: "MS-SCF-NOM-BRN",
+                          price: 3490,
+                          compareAtPrice: 4490,
+                          stockQuantity: 25,
+                          images: [{ file: "nomad-desert.jpg", isPrimary: true, order: 0, alt: "The Nomad Silk Scarf in a desert setting." }],
+                        },
+                      ],
                     },
                     null,
                     2,
@@ -1142,20 +1162,33 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
               </label>
 
               <label className="field-wide">
-                <span>Multi-variant example (bandana)</span>
+                <span>Multi-variant example (colorways)</span>
                 <textarea
-                  rows={3}
+                  rows={4}
                   readOnly
                   value={JSON.stringify(
                     {
-                      category: "Bandanas",
-                      name: "The Atlas Bandana",
-                      typeLabel: "Cotton Bandana",
-                      description: "A lightweight cotton bandana in three colorways.",
-                      status: "draft",
+                      name: "The Atlas Silk Scarf",
+                      category: "Scarves",
+                      typeLabel: "Luxury Silk Scarf",
+                      visibility: "published",
                       variants: [
-                        { name: "Atlas — Rust", color: "Rust", sku: "MS-BND-ATL-RST", price: 1800, stockQuantity: 8, isDefault: true },
-                        { name: "Atlas — Indigo", color: "Indigo", sku: "MS-BND-ATL-IND", price: 1800, stockQuantity: 5 },
+                        {
+                          name: "Chocolate Brown",
+                          color: "Chocolate Brown",
+                          sku: "MS-SCF-ATL-BRN",
+                          price: 3490,
+                          stockQuantity: 12,
+                          images: [{ file: "atlas-brown-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Chocolate Brown." }],
+                        },
+                        {
+                          name: "Emerald Green",
+                          color: "Emerald Green",
+                          sku: "MS-SCF-ATL-GRN",
+                          price: 3490,
+                          stockQuantity: 8,
+                          images: [{ file: "atlas-green-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Emerald Green." }],
+                        },
                       ],
                     },
                     null,
@@ -1184,6 +1217,17 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                     if (file) loadImportFile(file);
                   }}
                 />
+              </label>
+
+              <label>
+                <span>Product photos (matched to variants[].images[].file by filename)</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) => setImportImageFiles(Array.from(event.target.files ?? []))}
+                />
+                {importImageFiles.length > 0 && <small className="admin-hint">{importImageFiles.length} photo(s) selected.</small>}
               </label>
 
               {importResults.length > 0 && (

@@ -6,16 +6,25 @@ import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { generateSeoFields } from "@/lib/ai/seo";
 import { isUniqueViolation } from "@/lib/db/errors";
-import { productImportBatchSchema, type ProductImport } from "@/lib/import/product-import-schema";
+import {
+  formatDimensions,
+  joinCareInstructions,
+  joinListField,
+  normalizeGender,
+  productImportBatchSchema,
+  type ProductImport,
+} from "@/lib/import/product-import-schema";
 
 export const dynamic = "force-dynamic";
+
+type ImageJob = { file: string; isPrimary: boolean; order: number; alt: string };
 
 type ImportResult = {
   index: number;
   name: string;
   success: boolean;
   productId?: string;
-  imageUrls?: string[];
+  images?: ImageJob[];
   variantErrors?: string[];
   error?: string;
 };
@@ -27,15 +36,32 @@ async function importOne(item: ProductImport, index: number): Promise<ImportResu
   }
 
   const slug = slugify(item.slug || item.name);
-  const seo = await generateSeoFields({
-    name: item.name,
-    typeLabel: item.typeLabel,
-    categoryName: category.name,
-    color: item.primaryColour,
-    material: item.material,
-    shortDescription: item.shortDescription,
-    description: item.description,
-  });
+  const dimensions = formatDimensions(item.dimensions);
+  const careInstructions = joinCareInstructions(item.careInstructions);
+  const pattern = item.attributes?.pattern;
+  const style = joinListField(item.attributes?.style);
+  const occasion = joinListField(item.attributes?.occasion);
+  const gender = normalizeGender(item.attributes?.gender);
+  const countryOfOrigin = item.attributes?.countryOfOrigin;
+  const googleProductCategory = item.attributes?.googleProductCategory;
+
+  // Honor explicitly-authored SEO copy when provided — the admin form never exposes these fields
+  // (drafted automatically instead, see lib/ai/seo.ts), but a prepared JSON import is a deliberate
+  // power-user path where hand-written SEO copy should win over an AI guess.
+  const seoTitle = item.seo?.title;
+  const seoDescription = item.seo?.description;
+  const seo =
+    seoTitle || seoDescription
+      ? null
+      : await generateSeoFields({
+          name: item.name,
+          typeLabel: item.typeLabel,
+          categoryName: category.name,
+          color: item.primaryColour,
+          material: item.material,
+          shortDescription: item.shortDescription,
+          description: item.description,
+        });
 
   let productRow;
   try {
@@ -49,21 +75,21 @@ async function importOne(item: ProductImport, index: number): Promise<ImportResu
         shortDescription: item.shortDescription || null,
         description: item.description || null,
         material: item.material || null,
-        dimensions: item.dimensions || null,
-        careInstructions: item.careInstructions || null,
-        status: item.status ?? "draft",
+        dimensions: dimensions || null,
+        careInstructions: careInstructions || null,
+        status: item.visibility ?? "draft",
         featured: item.featured ?? false,
         badge: item.badge || null,
-        seoTitle: seo?.seoTitle ?? null,
-        seoDescription: seo?.seoDescription ?? null,
-        pattern: item.pattern || null,
+        seoTitle: seoTitle || seo?.seoTitle || null,
+        seoDescription: seoDescription || seo?.seoDescription || null,
+        pattern: pattern || null,
         primaryColour: item.primaryColour || null,
-        occasion: item.occasion || null,
-        style: item.style || null,
-        countryOfOrigin: item.countryOfOrigin || null,
-        gender: item.gender ?? "female",
-        googleProductCategory: item.googleProductCategory || null,
-        publishedAt: item.status === "published" ? new Date() : null,
+        occasion: occasion || null,
+        style: style || null,
+        countryOfOrigin: countryOfOrigin || null,
+        gender,
+        googleProductCategory: googleProductCategory || null,
+        publishedAt: item.visibility === "published" ? new Date() : null,
       })
       .returning();
   } catch (error) {
@@ -73,24 +99,10 @@ async function importOne(item: ProductImport, index: number): Promise<ImportResu
     throw error;
   }
 
-  const variantInputs = item.variants?.length
-    ? item.variants
-    : [
-        {
-          name: item.name,
-          color: item.primaryColour || item.name,
-          sku: item.sku!,
-          price: item.price!,
-          compareAtPrice: item.compareAtPrice,
-          stockQuantity: item.stockQuantity,
-          lowStockThreshold: item.lowStockThreshold,
-          isDefault: true,
-        },
-      ];
-
   const variantErrors: string[] = [];
-  for (let variantIndex = 0; variantIndex < variantInputs.length; variantIndex++) {
-    const variant = variantInputs[variantIndex];
+  const images: ImageJob[] = [];
+  for (let variantIndex = 0; variantIndex < item.variants.length; variantIndex++) {
+    const variant = item.variants[variantIndex];
     try {
       await db.insert(productVariants).values({
         productId: productRow.id,
@@ -114,14 +126,40 @@ async function importOne(item: ProductImport, index: number): Promise<ImportResu
         throw error;
       }
     }
+
+    // Images are only ever stored at the product level today (no per-variant gallery yet), so
+    // every variant's images are flattened into one shared gallery here. `order` is offset by
+    // variant index so two variants both listing order:0 don't collide in the flattened sequence.
+    // `isPrimary` is deliberately NOT copied through yet — see below, exactly one image across the
+    // whole flattened set gets marked primary, not one per variant.
+    for (const image of variant.images ?? []) {
+      images.push({
+        file: image.file,
+        isPrimary: Boolean(image.isPrimary),
+        order: variantIndex * 100 + (image.order ?? 0),
+        alt: image.alt || `${item.name} — ${variant.color}`,
+      });
+    }
   }
+
+  // Exactly one image should end up primary for the product overall: the images route unsets any
+  // existing primary flag every time a new one is uploaded as primary, so naively forwarding each
+  // variant's own isPrimary:true would just leave whichever image uploads *last* as the winner.
+  // Prefer whichever image the JSON explicitly marked primary (in flattened order); otherwise fall
+  // back to the very first image.
+  images.sort((a, b) => a.order - b.order);
+  const explicitPrimaryIndex = images.findIndex((image) => image.isPrimary);
+  const primaryIndex = explicitPrimaryIndex === -1 ? 0 : explicitPrimaryIndex;
+  images.forEach((image, i) => {
+    image.isPrimary = i === primaryIndex;
+  });
 
   return {
     index,
     name: item.name,
     success: true,
     productId: productRow.id,
-    imageUrls: item.imageUrls,
+    images: images.length ? images : undefined,
     variantErrors: variantErrors.length ? variantErrors : undefined,
   };
 }

@@ -1,7 +1,41 @@
 import { z } from "zod";
 
-const genderEnum = z.enum(["female", "male", "unisex"]);
-const statusEnum = z.enum(["draft", "published", "archived"]);
+const visibilityEnum = z.enum(["draft", "published", "archived"]);
+
+const dimensionsSchema = z.object({
+  length: z.number().positive().optional(),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  unit: z.string().optional(),
+});
+
+const attributesSchema = z.object({
+  pattern: z.string().optional(),
+  style: z.union([z.string(), z.array(z.string())]).optional(),
+  occasion: z.union([z.string(), z.array(z.string())]).optional(),
+  gender: z.string().optional(),
+  countryOfOrigin: z.string().optional(),
+  googleProductCategory: z.string().optional(),
+});
+
+const seoSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  // Meta keywords have no effect on modern search ranking (Google has ignored the tag for over a
+  // decade) — accepted here only so the field doesn't fail validation if included, never used.
+  keywords: z.array(z.string()).optional(),
+});
+
+/** `file` is a plain filename (e.g. "nomad-desert.jpg") — matched client-side, by name, against
+ * whatever photo files the admin picks alongside the JSON in the import drawer. Nothing here is a
+ * URL: images are never fetched by the server, only ever processed in the browser (same pipeline
+ * as a manual upload), so large originals never hit the Worker. */
+const imageRefSchema = z.object({
+  file: z.string().min(1),
+  isPrimary: z.boolean().optional(),
+  order: z.coerce.number().int().min(0).optional(),
+  alt: z.string().optional(),
+});
 
 const importVariantSchema = z.object({
   name: z.string().min(1).optional(),
@@ -15,51 +49,65 @@ const importVariantSchema = z.object({
   stockQuantity: z.coerce.number().int().min(0).optional(),
   lowStockThreshold: z.coerce.number().int().min(0).optional(),
   isDefault: z.boolean().optional(),
+  images: z.array(imageRefSchema).optional(),
 });
 
-/**
- * One product per JSON object. A product is either single-variant (top-level sku/price, no
- * `variants` array) or multi-variant (a `variants` array, no top-level sku/price) — never both,
- * never neither. `imageUrls` is optional and best-effort only: the browser fetches each URL and
- * runs it through the same client-side resize/WebP pipeline as a manual upload (see
- * lib/client-image-processing.ts) — nothing is resized on the server, so this only works for
- * direct, public, CORS-enabled image URLs.
- */
-export const productImportSchema = z
-  .object({
-    category: z.string().min(1),
-    name: z.string().min(1),
-    slug: z.string().optional(),
-    typeLabel: z.string().min(1),
-    shortDescription: z.string().optional(),
-    description: z.string().optional(),
-    material: z.string().optional(),
-    dimensions: z.string().optional(),
-    careInstructions: z.string().optional(),
-    status: statusEnum.optional(),
-    featured: z.boolean().optional(),
-    badge: z.string().optional(),
-    pattern: z.string().optional(),
-    primaryColour: z.string().optional(),
-    occasion: z.string().optional(),
-    style: z.string().optional(),
-    countryOfOrigin: z.string().optional(),
-    gender: genderEnum.optional(),
-    googleProductCategory: z.string().optional(),
-    imageUrls: z.array(z.string().url()).optional(),
-
-    sku: z.string().min(1).optional(),
-    price: z.coerce.number().int().min(0).optional(),
-    compareAtPrice: z.coerce.number().int().min(0).optional(),
-    stockQuantity: z.coerce.number().int().min(0).optional(),
-    lowStockThreshold: z.coerce.number().int().min(0).optional(),
-
-    variants: z.array(importVariantSchema).min(1).optional(),
-  })
-  .refine((data) => Boolean(data.variants?.length) !== Boolean(data.sku && data.price !== undefined), {
-    message: 'Provide either top-level "sku" + "price" (single-variant) or a "variants" array (multi-variant) — not both, not neither.',
-  });
+/** One product per JSON object. Always has a `variants` array (min 1) — a single-variant product
+ * is simply a `variants` array with one entry. `category` is matched against an existing category
+ * name (case-insensitive); it is not created automatically. */
+export const productImportSchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().optional(),
+  category: z.string().min(1),
+  typeLabel: z.string().min(1),
+  visibility: visibilityEnum.optional(),
+  featured: z.boolean().optional(),
+  badge: z.string().optional(),
+  shortDescription: z.string().optional(),
+  description: z.string().optional(),
+  material: z.string().optional(),
+  dimensions: dimensionsSchema.optional(),
+  careInstructions: z.union([z.string(), z.array(z.string())]).optional(),
+  primaryColour: z.string().optional(),
+  attributes: attributesSchema.optional(),
+  seo: seoSchema.optional(),
+  variants: z.array(importVariantSchema).min(1),
+});
 
 export type ProductImport = z.infer<typeof productImportSchema>;
+export type ProductImportVariant = z.infer<typeof importVariantSchema>;
 
 export const productImportBatchSchema = z.union([productImportSchema, z.object({ products: z.array(productImportSchema).min(1) })]);
+
+const GENDER_MAP: Record<string, "female" | "male" | "unisex"> = {
+  female: "female",
+  women: "female",
+  woman: "female",
+  w: "female",
+  male: "male",
+  men: "male",
+  man: "male",
+  m: "male",
+};
+
+export function normalizeGender(input: string | undefined): "female" | "male" | "unisex" {
+  return GENDER_MAP[(input ?? "").trim().toLowerCase()] ?? "unisex";
+}
+
+export function joinListField(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value.join(", ") || undefined : value || undefined;
+}
+
+export function formatDimensions(dimensions: z.infer<typeof dimensionsSchema> | undefined): string | undefined {
+  if (!dimensions) return undefined;
+  const { length, width, height, unit = "cm" } = dimensions;
+  const parts = [length, width, height].filter((n): n is number => typeof n === "number");
+  if (!parts.length) return undefined;
+  return `${parts.join(" × ")} ${unit}`.trim();
+}
+
+export function joinCareInstructions(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value.join(" ") || undefined : value || undefined;
+}
