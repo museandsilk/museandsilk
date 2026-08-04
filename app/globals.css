@@ -13,7 +13,16 @@
   --sans: var(--font-manrope), "Helvetica Neue", "Segoe UI", Arial, sans-serif;
 }
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scrollbar-color: var(--gold) transparent; scrollbar-width: thin; }
+/* Custom scrollbar everywhere — without this, every scrollable area (admin drawers, horizontal
+   filter tabs, admin tables) falls back to the browser/OS default, which on a dark-mode system
+   renders as a stark native scrollbar that clashes with the page underneath it. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--gold) 55%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); background-clip: padding-box; }
+.admin-drawer { scrollbar-color: #9c7658 transparent; }
+.admin-drawer::-webkit-scrollbar-thumb { background: color-mix(in srgb, #9c7658 60%, transparent); background-clip: padding-box; }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 15px var(--sans); -webkit-font-smoothing: antialiased; }
 body, button, input { font-family: var(--sans); }
 a { color: inherit; text-decoration: none; }
@@ -128,8 +137,10 @@ img { object-fit: cover; }
 .save-button.saved { color: var(--oxblood); }
 .product-info { padding-top: 15px; display: flex; justify-content: space-between; gap: 15px; }
 .product-info p, .product-color { margin: 0 0 5px; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
-.product-info a { font-family: var(--display); font-size: 17px; }
-.product-info strong { font-size: 11px; font-weight: 500; white-space: nowrap; }
+.product-info { min-width: 0; }
+.product-info > div { min-width: 0; }
+.product-info a { display: block; overflow: hidden; font-family: var(--display); font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.product-info strong { flex-shrink: 0; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .product-color { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
 .swatch { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
 .swatch-left { background: var(--oxblood); }.swatch-center { background: #d8c7ad; }.swatch-right { background: #4c3026; }
