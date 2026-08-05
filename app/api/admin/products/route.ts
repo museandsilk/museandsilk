@@ -121,20 +121,25 @@ export async function POST(request: Request) {
   const data = parsed.data;
   const slug = slugify(data.slug || data.name);
 
-  // The admin never fills these in directly (see products-manager.tsx — the SEO fields were
-  // deliberately removed from the create/edit form to keep adding a product simple); drafted here
-  // from whatever else was provided. Best-effort: getProductBySlug/generateMetadata already fall
-  // back to the plain name/shortDescription when these come back null.
+  // The admin never fills these in directly through the manual form (see products-manager.tsx —
+  // the SEO fields were deliberately removed from the create/edit form to keep adding a product
+  // simple); drafted here from whatever else was provided. The JSON-import pre-fill flow is the
+  // one path that CAN supply seoTitle/seoDescription explicitly (hand-authored seo.title/
+  // seo.description) — when present, that always wins over an AI guess, so AI generation is
+  // skipped entirely rather than risking it silently overwriting deliberate copy.
   const [category] = data.categoryId ? await db.select({ name: categories.name }).from(categories).where(eq(categories.id, data.categoryId)).limit(1) : [];
-  const seo = await generateSeoFields({
-    name: data.name,
-    typeLabel: data.typeLabel,
-    categoryName: category?.name,
-    color: data.primaryColour,
-    material: data.material,
-    shortDescription: data.shortDescription,
-    description: data.description,
-  });
+  const seo =
+    data.seoTitle || data.seoDescription
+      ? null
+      : await generateSeoFields({
+          name: data.name,
+          typeLabel: data.typeLabel,
+          categoryName: category?.name,
+          color: data.primaryColour,
+          material: data.material,
+          shortDescription: data.shortDescription,
+          description: data.description,
+        });
 
   let row;
   try {

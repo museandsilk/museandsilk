@@ -5,6 +5,14 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { slugify } from "@/lib/slug";
 import { processImageClientSide } from "@/lib/client-image-processing";
+import {
+  formatDimensions,
+  joinCareInstructions,
+  joinListField,
+  normalizeGender,
+  productImportSchema,
+  type ProductImportVariant,
+} from "@/lib/import/product-import-schema";
 
 type Category = { id: string; name: string };
 
@@ -91,6 +99,74 @@ type ImportResult = {
   error?: string;
 };
 
+// Shared with the "Download sample JSON" buttons below — one source of truth for what the example
+// structure actually looks like, so the on-screen example and the downloadable file can't drift.
+const SINGLE_VARIANT_EXAMPLE = {
+  name: "The Nomad Silk Scarf",
+  slug: "the-nomad-silk-scarf",
+  category: "Scarves",
+  typeLabel: "Luxury Silk Scarf",
+  visibility: "draft",
+  featured: true,
+  badge: "New",
+  shortDescription: "A luxurious chocolate brown silk scarf with an elegant equestrian-inspired print.",
+  description: "Inspired by classic equestrian heritage, this scarf blends rich chocolate brown tones with refined golden accents and intricate chain motifs.",
+  material: "Premium Satin Silk",
+  dimensions: { length: 90, width: 90, unit: "cm" },
+  careInstructions: ["Hand wash with cold water.", "Do not bleach.", "Iron on low heat."],
+  primaryColour: "Chocolate Brown",
+  attributes: { pattern: "Equestrian Chain & Monogram Print", gender: "Women", countryOfOrigin: "Pakistan" },
+  seo: { title: "The Nomad Silk Scarf | Muse & Silk", description: "Premium chocolate brown luxury silk scarf." },
+  variants: [
+    {
+      name: "Chocolate Brown",
+      color: "Chocolate Brown",
+      sku: "MS-SCF-NOM-BRN",
+      price: 3490,
+      compareAtPrice: 4490,
+      stockQuantity: 25,
+      images: [{ file: "nomad-desert.jpg", isPrimary: true, order: 0, alt: "The Nomad Silk Scarf in a desert setting." }],
+    },
+  ],
+};
+
+const MULTI_VARIANT_EXAMPLE = {
+  name: "The Atlas Silk Scarf",
+  category: "Scarves",
+  typeLabel: "Luxury Silk Scarf",
+  visibility: "published",
+  variants: [
+    {
+      name: "Chocolate Brown",
+      color: "Chocolate Brown",
+      sku: "MS-SCF-ATL-BRN",
+      price: 3490,
+      stockQuantity: 12,
+      images: [{ file: "atlas-brown-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Chocolate Brown." }],
+    },
+    {
+      name: "Emerald Green",
+      color: "Emerald Green",
+      sku: "MS-SCF-ATL-GRN",
+      price: 3490,
+      stockQuantity: 8,
+      images: [{ file: "atlas-green-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Emerald Green." }],
+    },
+  ],
+};
+
+function downloadJson(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 const emptyDraft: ProductDetail = {
   id: "",
   categoryId: "",
@@ -127,6 +203,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [downloadChoiceOpen, setDownloadChoiceOpen] = useState(false);
 
   // Simplified single-variant creation path — see the "Multi-variant product" checkbox in the
   // create form. Left unchecked (the common case), the admin never has to visit a separate
@@ -150,6 +227,78 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   const [importImageFiles, setImportImageFiles] = useState<File[]>([]);
   const [importBusy, setImportBusy] = useState(false);
   const [importResults, setImportResults] = useState<ImportResult[]>([]);
+
+  // Set once "Open in Add Product form" parses valid JSON — see openFromImport() below. When
+  // non-null, saveProduct()'s create branch creates these variants (and their images) itself
+  // instead of using the quickstart single-variant fields, right after the admin reviews the
+  // pre-filled form and clicks "Create product" themselves.
+  const [pendingImportVariants, setPendingImportVariants] = useState<ProductImportVariant[] | null>(null);
+
+  /** Parses the pasted/uploaded JSON client-side (no server round-trip) and opens the normal
+   * create-product drawer pre-filled from it, for the admin to review before saving — this is the
+   * primary import path. The direct bulk-create button further down stays available for genuine
+   * multi-product batches, which don't map onto a single form. */
+  function openFromImport() {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(importText);
+    } catch {
+      setMessage("That's not valid JSON — check for a missing comma or bracket.");
+      return;
+    }
+    if (payload && typeof payload === "object" && "products" in (payload as Record<string, unknown>)) {
+      setMessage('This opens one product at a time — paste a single product object, not a "products" array. Use "Create all now" below for a batch.');
+      return;
+    }
+    const parsed = productImportSchema.safeParse(payload);
+    if (!parsed.success) {
+      setMessage(parsed.error.issues[0]?.message ?? "That JSON doesn't match the expected product structure.");
+      return;
+    }
+    const item = parsed.data;
+    const category = categories.find((entry) => entry.name.trim().toLowerCase() === item.category.trim().toLowerCase());
+    if (!category) {
+      setMessage(`Category "${item.category}" doesn't match an existing category — check spelling.`);
+      return;
+    }
+
+    setDraft({
+      id: "",
+      categoryId: category.id,
+      name: item.name,
+      slug: item.slug ? slugify(item.slug) : slugify(item.name),
+      typeLabel: item.typeLabel,
+      shortDescription: item.shortDescription ?? "",
+      description: item.description ?? "",
+      material: item.material ?? "",
+      dimensions: formatDimensions(item.dimensions) ?? "",
+      careInstructions: joinCareInstructions(item.careInstructions) ?? "",
+      status: item.visibility ?? "draft",
+      featured: item.featured ?? false,
+      badge: item.badge ?? "",
+      seoTitle: item.seo?.title ?? "",
+      seoDescription: item.seo?.description ?? "",
+      pattern: item.attributes?.pattern ?? "",
+      primaryColour: item.primaryColour ?? "",
+      occasion: joinListField(item.attributes?.occasion) ?? "",
+      style: joinListField(item.attributes?.style) ?? "",
+      countryOfOrigin: item.attributes?.countryOfOrigin ?? "",
+      gender: normalizeGender(item.attributes?.gender),
+      googleProductCategory: item.attributes?.googleProductCategory ?? "",
+    });
+    setSlugTouched(Boolean(item.slug));
+    setVariants([]);
+    setImages([]);
+    setMultiVariant(true); // hides the quickstart SKU/price fields — pendingImportVariants drives creation instead
+    setInitialSku("");
+    setInitialPrice("");
+    setInitialCompareAtPrice("");
+    setInitialStock("0");
+    setInitialImageFile(null);
+    setPendingImportVariants(item.variants);
+    setImportOpen(false);
+    setMessage("");
+  }
 
   async function runImport() {
     if (importBusy) return;
@@ -289,6 +438,8 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     setInitialCompareAtPrice("");
     setInitialStock("0");
     setInitialImageFile(null);
+    setPendingImportVariants(null);
+    setImportImageFiles([]);
   }
 
   async function openEdit(productId: string) {
@@ -308,6 +459,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     setDraft(null);
     setVariants([]);
     setImages([]);
+    setPendingImportVariants(null);
   }
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
@@ -315,7 +467,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     if (!draft || busy) return;
     const isCreating = !draft.id;
 
-    if (isCreating && !multiVariant && (!initialSku.trim() || !initialPrice)) {
+    if (isCreating && !pendingImportVariants && !multiVariant && (!initialSku.trim() || !initialPrice)) {
       setMessage("Add a SKU and price (or check “Multi-variant product” to add variants afterwards).");
       return;
     }
@@ -338,61 +490,150 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
       if (isCreating && result.product) {
         const newProductId = result.product.id;
 
-        if (initialImageFile) {
-          setMessage("Uploading photo…");
-          const processed = await processImageClientSide(initialImageFile);
-          if (!processed) {
-            // Never fall back to uploading the raw picked file — that's exactly what caused the
-            // "Worker exceeded resource limits" crash this whole pipeline exists to avoid (a phone
-            // photo can be tens of MB). Fail this step cleanly instead; the product itself is
-            // already saved, so the admin can just add the photo again from the edit view below.
-            setMessage("Product created, but that photo couldn't be processed — try a different file, or add it below.");
-          } else {
-            const imageForm = new FormData();
-            imageForm.set("productId", newProductId);
-            imageForm.set("altText", draft.name);
-            imageForm.set("isPrimary", "true");
-            imageForm.set("width", String(processed.width));
-            imageForm.set("height", String(processed.height));
-            imageForm.set("blurDataUrl", processed.blurDataUrl);
-            imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
-            for (const variant of processed.variants) {
-              imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+        if (pendingImportVariants) {
+          setMessage("Adding imported variant(s)…");
+          const filesByName = new Map(importImageFiles.map((file) => [file.name, file]));
+          const variantErrors: string[] = [];
+          const flattenedImages: { file: string; isPrimary: boolean; order: number; alt: string }[] = [];
+
+          for (let variantIndex = 0; variantIndex < pendingImportVariants.length; variantIndex++) {
+            const v = pendingImportVariants[variantIndex];
+            const variantResponse = await fetch("/api/admin/variants", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                productId: newProductId,
+                name: v.name || draft.name,
+                sku: v.sku,
+                color: v.color,
+                size: v.size,
+                fabric: v.fabric,
+                gtin: v.gtin,
+                price: v.price,
+                compareAtPrice: v.compareAtPrice,
+                stockQuantity: v.stockQuantity ?? 0,
+                lowStockThreshold: v.lowStockThreshold,
+                isDefault: v.isDefault ?? variantIndex === 0,
+              }),
+            });
+            if (!variantResponse.ok) {
+              const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string };
+              variantErrors.push(`${v.color}: ${variantResult.error ?? "could not be added"}`);
             }
-            const largest = processed.variants[processed.variants.length - 1];
-            imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
-            const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
-            if (!imageResponse.ok) setMessage("Product created, but the photo could not be uploaded — add it below.");
+            // Flattened into one shared gallery, same as the direct bulk-import path — see
+            // app/api/admin/products/import/route.ts for why (no per-variant gallery yet).
+            for (const image of v.images ?? []) {
+              flattenedImages.push({
+                file: image.file,
+                isPrimary: Boolean(image.isPrimary),
+                order: variantIndex * 100 + (image.order ?? 0),
+                alt: image.alt || `${draft.name} — ${v.color}`,
+              });
+            }
           }
-        }
 
-        if (!multiVariant) {
-          setMessage((current) => (current?.startsWith("Product created, but") ? current : "Adding variant…"));
-          const variantResponse = await fetch("/api/admin/variants", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productId: newProductId,
-              name: draft.name,
-              sku: initialSku.trim(),
-              color: draft.primaryColour || draft.name,
-              price: initialPrice,
-              compareAtPrice: initialCompareAtPrice || undefined,
-              stockQuantity: initialStock || 0,
-              isDefault: true,
-            }),
+          // Exactly one image across the whole set should end up primary — see the matching
+          // comment in the bulk-import route for why naively forwarding each variant's own
+          // isPrimary:true would leave whichever uploads last as the winner instead.
+          flattenedImages.sort((a, b) => a.order - b.order);
+          const explicitPrimaryIndex = flattenedImages.findIndex((image) => image.isPrimary);
+          const primaryIndex = explicitPrimaryIndex === -1 ? 0 : explicitPrimaryIndex;
+          flattenedImages.forEach((image, i) => {
+            image.isPrimary = i === primaryIndex;
           });
-          if (!variantResponse.ok) {
-            const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string };
-            setMessage((current) =>
-              current?.startsWith("Product created, but")
-                ? current
-                : `Product created, but ${(variantResult.error ?? "the variant could not be added").toLowerCase()} — add it below.`,
-            );
+
+          const imageErrors: string[] = [];
+          for (const image of flattenedImages) {
+            const file = filesByName.get(image.file);
+            if (!file) {
+              imageErrors.push(`"${image.file}" wasn't among the photos you selected — add it manually.`);
+              continue;
+            }
+            try {
+              const processed = await processImageClientSide(file);
+              if (!processed) throw new Error("processing failed");
+              const imageForm = new FormData();
+              imageForm.set("productId", newProductId);
+              imageForm.set("altText", image.alt);
+              imageForm.set("isPrimary", image.isPrimary ? "true" : "false");
+              imageForm.set("width", String(processed.width));
+              imageForm.set("height", String(processed.height));
+              imageForm.set("blurDataUrl", processed.blurDataUrl);
+              imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+              for (const variant of processed.variants) {
+                imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+              }
+              const largest = processed.variants[processed.variants.length - 1];
+              imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
+              const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
+              if (!imageResponse.ok) throw new Error("upload failed");
+            } catch {
+              imageErrors.push(`"${image.file}" couldn't be processed or uploaded — add it manually.`);
+            }
           }
+
+          const problems = [...variantErrors, ...imageErrors];
+          setMessage(problems.length ? `Product created, but: ${problems.join("; ")} — fix these below.` : "Product created with imported variant(s).");
+          setPendingImportVariants(null);
+          setImportImageFiles([]);
+        } else {
+          if (initialImageFile) {
+            setMessage("Uploading photo…");
+            const processed = await processImageClientSide(initialImageFile);
+            if (!processed) {
+              // Never fall back to uploading the raw picked file — that's exactly what caused the
+              // "Worker exceeded resource limits" crash this whole pipeline exists to avoid (a phone
+              // photo can be tens of MB). Fail this step cleanly instead; the product itself is
+              // already saved, so the admin can just add the photo again from the edit view below.
+              setMessage("Product created, but that photo couldn't be processed — try a different file, or add it below.");
+            } else {
+              const imageForm = new FormData();
+              imageForm.set("productId", newProductId);
+              imageForm.set("altText", draft.name);
+              imageForm.set("isPrimary", "true");
+              imageForm.set("width", String(processed.width));
+              imageForm.set("height", String(processed.height));
+              imageForm.set("blurDataUrl", processed.blurDataUrl);
+              imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+              for (const variant of processed.variants) {
+                imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+              }
+              const largest = processed.variants[processed.variants.length - 1];
+              imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
+              const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
+              if (!imageResponse.ok) setMessage("Product created, but the photo could not be uploaded — add it below.");
+            }
+          }
+
+          if (!multiVariant) {
+            setMessage((current) => (current?.startsWith("Product created, but") ? current : "Adding variant…"));
+            const variantResponse = await fetch("/api/admin/variants", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                productId: newProductId,
+                name: draft.name,
+                sku: initialSku.trim(),
+                color: draft.primaryColour || draft.name,
+                price: initialPrice,
+                compareAtPrice: initialCompareAtPrice || undefined,
+                stockQuantity: initialStock || 0,
+                isDefault: true,
+              }),
+            });
+            if (!variantResponse.ok) {
+              const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string };
+              setMessage((current) =>
+                current?.startsWith("Product created, but")
+                  ? current
+                  : `Product created, but ${(variantResult.error ?? "the variant could not be added").toLowerCase()} — add it below.`,
+              );
+            }
+          }
+
+          setMessage((current) => (current?.startsWith("Product created, but") ? current : "Product created."));
         }
 
-        setMessage((current) => (current?.startsWith("Product created, but") ? current : "Product created."));
         await refresh();
         await openEdit(newProductId);
       } else {
@@ -598,6 +839,29 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
           <Link href="/" target="_blank">
             View store ↗︎
           </Link>
+          {downloadChoiceOpen ? (
+            <>
+              <button
+                onClick={() => {
+                  downloadJson("product-sample-single-variant.json", SINGLE_VARIANT_EXAMPLE);
+                  setDownloadChoiceOpen(false);
+                }}
+              >
+                Single-variant
+              </button>
+              <button
+                onClick={() => {
+                  downloadJson("product-sample-multi-variant.json", MULTI_VARIANT_EXAMPLE);
+                  setDownloadChoiceOpen(false);
+                }}
+              >
+                Multi-variant
+              </button>
+              <button onClick={() => setDownloadChoiceOpen(false)}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={() => setDownloadChoiceOpen(true)}>Download sample JSON</button>
+          )}
           <button
             onClick={() => {
               setImportOpen(true);
@@ -850,9 +1114,10 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                   <input value={draft.primaryColour ?? ""} onChange={(event) => setDraft({ ...draft, primaryColour: event.target.value })} />
                 </label>
                 {/* SEO title/description are drafted automatically by AI from the fields above —
-                    see lib/ai/seo.ts — so there's nothing to fill in here. Only a read-only
-                    preview once the product actually exists and has real generated values. */}
-                {draft.id && (draft.seoTitle || draft.name) && (
+                    see lib/ai/seo.ts — so there's nothing to fill in here. Shown read-only once
+                    the product actually exists with real generated values, or immediately when an
+                    import already supplied explicit seo.title/seo.description to review. */}
+                {(draft.id || draft.seoTitle) && (draft.seoTitle || draft.name) && (
                   <div className="field-wide" style={{ fontSize: 12, opacity: 0.7 }}>
                     <strong>Search preview:</strong> {draft.seoTitle || draft.name} — {draft.seoDescription || draft.shortDescription || ""}
                   </div>
@@ -898,42 +1163,71 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
               {!draft.id && (
                 <div className="admin-new-product-quickstart">
-                  <label className="admin-check">
-                    <input type="checkbox" checked={multiVariant} onChange={(event) => setMultiVariant(event.target.checked)} />
-                    <span>Multi-variant product (comes in more than one color/size)</span>
-                  </label>
-
-                  {!multiVariant && (
-                    <div className="admin-form-grid">
-                      <label>
-                        <span>SKU</span>
-                        <input required value={initialSku} onChange={(event) => setInitialSku(event.target.value)} placeholder="MS-SCF-LIL-PUR" />
-                      </label>
-                      <label>
-                        <span>Price (PKR)</span>
-                        <input required type="number" min="0" value={initialPrice} onChange={(event) => setInitialPrice(event.target.value)} />
-                      </label>
-                      <label>
-                        <span>Compare-at price</span>
-                        <input type="number" min="0" value={initialCompareAtPrice} onChange={(event) => setInitialCompareAtPrice(event.target.value)} />
-                      </label>
-                      <label>
-                        <span>Opening stock</span>
-                        <input type="number" min="0" value={initialStock} onChange={(event) => setInitialStock(event.target.value)} />
-                      </label>
+                  {pendingImportVariants ? (
+                    <div>
+                      <p className="admin-hint">
+                        Imported {pendingImportVariants.length} variant{pendingImportVariants.length > 1 ? "s" : ""} from JSON — created
+                        automatically right after you click &ldquo;Create product&rdquo; below.
+                      </p>
+                      <ul className="admin-import-variant-list">
+                        {pendingImportVariants.map((variant, index) => (
+                          <li key={index}>
+                            <strong>{variant.color}</strong> · {variant.sku} · PKR {variant.price.toLocaleString("en-PK")}
+                            {variant.images?.length ? ` · ${variant.images.length} photo${variant.images.length > 1 ? "s" : ""}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                      <button
+                        type="button"
+                        className="text-link"
+                        onClick={() => {
+                          setPendingImportVariants(null);
+                          setMultiVariant(false);
+                        }}
+                      >
+                        Discard imported variants, enter details manually instead
+                      </button>
                     </div>
-                  )}
-                  {multiVariant && <p className="admin-hint">Add each color/size as its own variant once the product is created below.</p>}
+                  ) : (
+                    <>
+                      <label className="admin-check">
+                        <input type="checkbox" checked={multiVariant} onChange={(event) => setMultiVariant(event.target.checked)} />
+                        <span>Multi-variant product (comes in more than one color/size)</span>
+                      </label>
 
-                  <label>
-                    <span>Product photo</span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={(event) => setInitialImageFile(event.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                  <small>Optional here — you can always add or replace photos afterwards.</small>
+                      {!multiVariant && (
+                        <div className="admin-form-grid">
+                          <label>
+                            <span>SKU</span>
+                            <input required value={initialSku} onChange={(event) => setInitialSku(event.target.value)} placeholder="MS-SCF-LIL-PUR" />
+                          </label>
+                          <label>
+                            <span>Price (PKR)</span>
+                            <input required type="number" min="0" value={initialPrice} onChange={(event) => setInitialPrice(event.target.value)} />
+                          </label>
+                          <label>
+                            <span>Compare-at price</span>
+                            <input type="number" min="0" value={initialCompareAtPrice} onChange={(event) => setInitialCompareAtPrice(event.target.value)} />
+                          </label>
+                          <label>
+                            <span>Opening stock</span>
+                            <input type="number" min="0" value={initialStock} onChange={(event) => setInitialStock(event.target.value)} />
+                          </label>
+                        </div>
+                      )}
+                      {multiVariant && <p className="admin-hint">Add each color/size as its own variant once the product is created below.</p>}
+
+                      <label>
+                        <span>Product photo</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(event) => setInitialImageFile(event.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      <small>Optional here — you can always add or replace photos afterwards.</small>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1116,85 +1410,34 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
             <div className="admin-product-form">
               <p className="admin-hint">
-                Paste one product object, or <code>{"{ \"products\": [...] }"}</code> for several. Every product has a <code>variants</code>{" "}
-                array (min 1) — single-variant is just one entry. <code>category</code> must match an existing category name.{" "}
-                <code>variants[].images[].file</code> is a plain filename — pick the matching photo files below and they&apos;ll be matched
-                by name, processed, and uploaded automatically. <code>seo.title</code>/<code>seo.description</code> are optional; when
-                omitted, SEO copy is drafted automatically from the rest of the product.
+                Paste (or upload) <strong>one product object</strong> and click &ldquo;Open in Add Product form&rdquo; below — it opens the
+                normal create-product drawer pre-filled from the JSON, so you can review everything before it&apos;s actually saved. Every
+                product has a <code>variants</code> array (min 1) — single-variant is just one entry. <code>category</code> must match an
+                existing category name. <code>variants[].images[].file</code> is a plain filename — pick the matching photo files below and
+                they&apos;ll be matched by name, processed, and uploaded automatically once you save. <code>seo.title</code>/
+                <code>seo.description</code> are optional; when omitted, SEO copy is drafted automatically instead. For a genuine batch of
+                several products at once (<code>{"{ \"products\": [...] }"}</code>), use &ldquo;Create all now&rdquo; instead — that path
+                saves everything immediately, without a review step.
               </p>
 
               <label className="field-wide">
-                <span>Single-variant example (scarf)</span>
-                <textarea
-                  rows={4}
-                  readOnly
-                  value={JSON.stringify(
-                    {
-                      name: "The Nomad Silk Scarf",
-                      slug: "the-nomad-silk-scarf",
-                      category: "Scarves",
-                      typeLabel: "Luxury Silk Scarf",
-                      visibility: "draft",
-                      featured: true,
-                      badge: "New",
-                      shortDescription: "A luxurious chocolate brown silk scarf with an elegant equestrian-inspired print.",
-                      material: "Premium Satin Silk",
-                      dimensions: { length: 90, width: 90, unit: "cm" },
-                      careInstructions: ["Hand wash with cold water.", "Do not bleach.", "Iron on low heat."],
-                      primaryColour: "Chocolate Brown",
-                      attributes: { pattern: "Equestrian Chain & Monogram Print", gender: "Women", countryOfOrigin: "Pakistan" },
-                      variants: [
-                        {
-                          name: "Chocolate Brown",
-                          color: "Chocolate Brown",
-                          sku: "MS-SCF-NOM-BRN",
-                          price: 3490,
-                          compareAtPrice: 4490,
-                          stockQuantity: 25,
-                          images: [{ file: "nomad-desert.jpg", isPrimary: true, order: 0, alt: "The Nomad Silk Scarf in a desert setting." }],
-                        },
-                      ],
-                    },
-                    null,
-                    2,
-                  )}
-                />
+                <span className="ai-description-label">
+                  Single-variant example (scarf)
+                  <button type="button" className="ai-description-button" onClick={() => downloadJson("product-sample-single-variant.json", SINGLE_VARIANT_EXAMPLE)}>
+                    ↓ Download
+                  </button>
+                </span>
+                <textarea rows={4} readOnly value={JSON.stringify(SINGLE_VARIANT_EXAMPLE, null, 2)} />
               </label>
 
               <label className="field-wide">
-                <span>Multi-variant example (colorways)</span>
-                <textarea
-                  rows={4}
-                  readOnly
-                  value={JSON.stringify(
-                    {
-                      name: "The Atlas Silk Scarf",
-                      category: "Scarves",
-                      typeLabel: "Luxury Silk Scarf",
-                      visibility: "published",
-                      variants: [
-                        {
-                          name: "Chocolate Brown",
-                          color: "Chocolate Brown",
-                          sku: "MS-SCF-ATL-BRN",
-                          price: 3490,
-                          stockQuantity: 12,
-                          images: [{ file: "atlas-brown-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Chocolate Brown." }],
-                        },
-                        {
-                          name: "Emerald Green",
-                          color: "Emerald Green",
-                          sku: "MS-SCF-ATL-GRN",
-                          price: 3490,
-                          stockQuantity: 8,
-                          images: [{ file: "atlas-green-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Emerald Green." }],
-                        },
-                      ],
-                    },
-                    null,
-                    2,
-                  )}
-                />
+                <span className="ai-description-label">
+                  Multi-variant example (colorways)
+                  <button type="button" className="ai-description-button" onClick={() => downloadJson("product-sample-multi-variant.json", MULTI_VARIANT_EXAMPLE)}>
+                    ↓ Download
+                  </button>
+                </span>
+                <textarea rows={4} readOnly value={JSON.stringify(MULTI_VARIANT_EXAMPLE, null, 2)} />
               </label>
 
               <label className="field-wide">
@@ -1273,8 +1516,11 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                 <button type="button" onClick={() => setImportOpen(false)} disabled={importBusy}>
                   Close
                 </button>
-                <button type="button" className="admin-primary" disabled={importBusy || !importText.trim()} onClick={runImport}>
-                  {importBusy ? "Importing…" : "Validate & import"}
+                <button type="button" disabled={importBusy || !importText.trim()} onClick={runImport}>
+                  {importBusy ? "Importing…" : "Create all now (skip review)"}
+                </button>
+                <button type="button" className="admin-primary" disabled={importBusy || !importText.trim()} onClick={openFromImport}>
+                  Open in Add Product form
                 </button>
               </footer>
             </div>

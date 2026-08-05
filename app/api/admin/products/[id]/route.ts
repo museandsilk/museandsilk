@@ -90,7 +90,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     data.description,
   ].some((value) => value !== undefined);
   let seo: { seoTitle: string; seoDescription: string } | null = null;
-  if (seoRelevantFieldsChanged) {
+  if (seoRelevantFieldsChanged && data.seoTitle === undefined && data.seoDescription === undefined) {
     const categoryId = data.categoryId ?? existing.categoryId;
     const [category] = categoryId ? await db.select({ name: categories.name }).from(categories).where(eq(categories.id, categoryId)).limit(1) : [];
     seo = await generateSeoFields({
