@@ -5,14 +5,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { slugify } from "@/lib/slug";
 import { processImageClientSide } from "@/lib/client-image-processing";
-import {
-  formatDimensions,
-  joinCareInstructions,
-  joinListField,
-  normalizeGender,
-  productImportSchema,
-  type ProductImportVariant,
-} from "@/lib/import/product-import-schema";
+import { formatDimensions, joinCareInstructions, joinListField, normalizeGender, productImportSchema } from "@/lib/import/product-import-schema";
 
 type Category = { id: string; name: string };
 
@@ -84,19 +77,6 @@ type ProductImage = {
   sortOrder: number;
   isPrimary: boolean;
   status: string;
-};
-
-type ImportImageJob = { file: string; isPrimary: boolean; order: number; alt: string };
-
-type ImportResult = {
-  index: number;
-  name: string;
-  success: boolean;
-  productId?: string;
-  images?: ImportImageJob[];
-  imageErrors?: string[];
-  variantErrors?: string[];
-  error?: string;
 };
 
 // Shared with the "Download sample JSON" buttons below — one source of truth for what the example
@@ -217,27 +197,17 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   const [initialStock, setInitialStock] = useState("0");
   const [initialImageFile, setInitialImageFile] = useState<File | null>(null);
 
-  // Bulk JSON import — see lib/import/product-import-schema.ts for the accepted shapes. Image
-  // processing/resizing never happens on the server (that's what caused the earlier Worker
-  // resource-limit crashes): each product's `variants[].images[].file` is just a plain filename,
-  // matched here against whatever photo files the admin picks alongside the JSON, then processed
-  // through the same client-side pipeline as a manual upload before ever leaving the browser.
+  // Bulk JSON import — see lib/import/product-import-schema.ts for the accepted shapes.
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
-  const [importImageFiles, setImportImageFiles] = useState<File[]>([]);
-  const [importBusy, setImportBusy] = useState(false);
-  const [importResults, setImportResults] = useState<ImportResult[]>([]);
 
-  // Set once "Open in Add Product form" parses valid JSON — see openFromImport() below. When
-  // non-null, saveProduct()'s create branch creates these variants (and their images) itself
-  // instead of using the quickstart single-variant fields, right after the admin reviews the
-  // pre-filled form and clicks "Create product" themselves.
-  const [pendingImportVariants, setPendingImportVariants] = useState<ProductImportVariant[] | null>(null);
-
-  /** Parses the pasted/uploaded JSON client-side (no server round-trip) and opens the normal
-   * create-product drawer pre-filled from it, for the admin to review before saving — this is the
-   * primary import path. The direct bulk-create button further down stays available for genuine
-   * multi-product batches, which don't map onto a single form. */
+  /** Parses the pasted/uploaded JSON client-side (no server round-trip) and opens the exact same
+   * create-product drawer used for a manual add, pre-filled from it, so the admin reviews (and can
+   * still edit) everything before it's actually saved. A single-variant product pre-fills the same
+   * quickstart SKU/price/stock fields a manual single-variant entry would use; a multi-variant
+   * product just checks "Multi-variant product" (matching what an admin would do by hand) — each
+   * variant still gets added afterward the normal way, since the create form was never able to
+   * represent more than one variant inline. */
   function openFromImport() {
     let payload: unknown;
     try {
@@ -247,7 +217,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
       return;
     }
     if (payload && typeof payload === "object" && "products" in (payload as Record<string, unknown>)) {
-      setMessage('This opens one product at a time — paste a single product object, not a "products" array. Use "Create all now" below for a batch.');
+      setMessage('This opens one product at a time — paste a single product object, not a "products" array.');
       return;
     }
     const parsed = productImportSchema.safeParse(payload);
@@ -289,90 +259,25 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     setSlugTouched(Boolean(item.slug));
     setVariants([]);
     setImages([]);
-    setMultiVariant(true); // hides the quickstart SKU/price fields — pendingImportVariants drives creation instead
-    setInitialSku("");
-    setInitialPrice("");
-    setInitialCompareAtPrice("");
-    setInitialStock("0");
     setInitialImageFile(null);
-    setPendingImportVariants(item.variants);
+
+    if (item.variants.length === 1) {
+      const variant = item.variants[0];
+      setMultiVariant(false);
+      setInitialSku(variant.sku);
+      setInitialPrice(String(variant.price));
+      setInitialCompareAtPrice(variant.compareAtPrice != null ? String(variant.compareAtPrice) : "");
+      setInitialStock(String(variant.stockQuantity ?? 0));
+    } else {
+      setMultiVariant(true);
+      setInitialSku("");
+      setInitialPrice("");
+      setInitialCompareAtPrice("");
+      setInitialStock("0");
+    }
+
     setImportOpen(false);
     setMessage("");
-  }
-
-  async function runImport() {
-    if (importBusy) return;
-    let payload: unknown;
-    try {
-      payload = JSON.parse(importText);
-    } catch {
-      setMessage("That's not valid JSON — check for a missing comma or bracket.");
-      return;
-    }
-
-    setImportBusy(true);
-    setImportResults([]);
-    try {
-      const response = await fetch("/api/admin/products/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = (await response.json()) as { error?: string; results?: ImportResult[] };
-      if (!response.ok || !result.results) {
-        setMessage(result.error ?? "Import failed.");
-        return;
-      }
-
-      setImportResults(result.results);
-
-      const filesByName = new Map(importImageFiles.map((file) => [file.name, file]));
-      const withImageErrors: ImportResult[] = [];
-      for (const item of result.results) {
-        const imageErrors: string[] = [];
-        if (item.success && item.productId && item.images?.length) {
-          const sorted = [...item.images].sort((a, b) => a.order - b.order);
-          for (const image of sorted) {
-            const file = filesByName.get(image.file);
-            if (!file) {
-              imageErrors.push(`"${image.file}" wasn't among the photos you selected — add it manually.`);
-              continue;
-            }
-            try {
-              const processed = await processImageClientSide(file);
-              if (!processed) throw new Error("processing failed");
-
-              const imageForm = new FormData();
-              imageForm.set("productId", item.productId);
-              imageForm.set("altText", image.alt);
-              imageForm.set("isPrimary", image.isPrimary ? "true" : "false");
-              imageForm.set("width", String(processed.width));
-              imageForm.set("height", String(processed.height));
-              imageForm.set("blurDataUrl", processed.blurDataUrl);
-              imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
-              for (const variant of processed.variants) {
-                imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
-              }
-              const largest = processed.variants[processed.variants.length - 1];
-              imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
-
-              const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
-              if (!imageResponse.ok) throw new Error("upload failed");
-            } catch {
-              imageErrors.push(`"${image.file}" couldn't be processed or uploaded — add it manually.`);
-            }
-          }
-        }
-        withImageErrors.push(imageErrors.length ? { ...item, imageErrors } : item);
-      }
-      setImportResults(withImageErrors);
-      await refresh();
-    } catch (error) {
-      console.error("runImport failed", error);
-      setMessage("Something went wrong during import — check your connection and try again.");
-    } finally {
-      setImportBusy(false);
-    }
   }
 
   function loadImportFile(file: File) {
@@ -438,8 +343,6 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     setInitialCompareAtPrice("");
     setInitialStock("0");
     setInitialImageFile(null);
-    setPendingImportVariants(null);
-    setImportImageFiles([]);
   }
 
   async function openEdit(productId: string) {
@@ -459,7 +362,6 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     setDraft(null);
     setVariants([]);
     setImages([]);
-    setPendingImportVariants(null);
   }
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
@@ -467,7 +369,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     if (!draft || busy) return;
     const isCreating = !draft.id;
 
-    if (isCreating && !pendingImportVariants && !multiVariant && (!initialSku.trim() || !initialPrice)) {
+    if (isCreating && !multiVariant && (!initialSku.trim() || !initialPrice)) {
       setMessage("Add a SKU and price (or check “Multi-variant product” to add variants afterwards).");
       return;
     }
@@ -490,150 +392,61 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
       if (isCreating && result.product) {
         const newProductId = result.product.id;
 
-        if (pendingImportVariants) {
-          setMessage("Adding imported variant(s)…");
-          const filesByName = new Map(importImageFiles.map((file) => [file.name, file]));
-          const variantErrors: string[] = [];
-          const flattenedImages: { file: string; isPrimary: boolean; order: number; alt: string }[] = [];
-
-          for (let variantIndex = 0; variantIndex < pendingImportVariants.length; variantIndex++) {
-            const v = pendingImportVariants[variantIndex];
-            const variantResponse = await fetch("/api/admin/variants", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                productId: newProductId,
-                name: v.name || draft.name,
-                sku: v.sku,
-                color: v.color,
-                size: v.size,
-                fabric: v.fabric,
-                gtin: v.gtin,
-                price: v.price,
-                compareAtPrice: v.compareAtPrice,
-                stockQuantity: v.stockQuantity ?? 0,
-                lowStockThreshold: v.lowStockThreshold,
-                isDefault: v.isDefault ?? variantIndex === 0,
-              }),
-            });
-            if (!variantResponse.ok) {
-              const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string };
-              variantErrors.push(`${v.color}: ${variantResult.error ?? "could not be added"}`);
+        if (initialImageFile) {
+          setMessage("Uploading photo…");
+          const processed = await processImageClientSide(initialImageFile);
+          if (!processed) {
+            // Never fall back to uploading the raw picked file — that's exactly what caused the
+            // "Worker exceeded resource limits" crash this whole pipeline exists to avoid (a phone
+            // photo can be tens of MB). Fail this step cleanly instead; the product itself is
+            // already saved, so the admin can just add the photo again from the edit view below.
+            setMessage("Product created, but that photo couldn't be processed — try a different file, or add it below.");
+          } else {
+            const imageForm = new FormData();
+            imageForm.set("productId", newProductId);
+            imageForm.set("altText", draft.name);
+            imageForm.set("isPrimary", "true");
+            imageForm.set("width", String(processed.width));
+            imageForm.set("height", String(processed.height));
+            imageForm.set("blurDataUrl", processed.blurDataUrl);
+            imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+            for (const variant of processed.variants) {
+              imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
             }
-            // Flattened into one shared gallery, same as the direct bulk-import path — see
-            // app/api/admin/products/import/route.ts for why (no per-variant gallery yet).
-            for (const image of v.images ?? []) {
-              flattenedImages.push({
-                file: image.file,
-                isPrimary: Boolean(image.isPrimary),
-                order: variantIndex * 100 + (image.order ?? 0),
-                alt: image.alt || `${draft.name} — ${v.color}`,
-              });
-            }
+            const largest = processed.variants[processed.variants.length - 1];
+            imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
+            const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
+            if (!imageResponse.ok) setMessage("Product created, but the photo could not be uploaded — add it below.");
           }
-
-          // Exactly one image across the whole set should end up primary — see the matching
-          // comment in the bulk-import route for why naively forwarding each variant's own
-          // isPrimary:true would leave whichever uploads last as the winner instead.
-          flattenedImages.sort((a, b) => a.order - b.order);
-          const explicitPrimaryIndex = flattenedImages.findIndex((image) => image.isPrimary);
-          const primaryIndex = explicitPrimaryIndex === -1 ? 0 : explicitPrimaryIndex;
-          flattenedImages.forEach((image, i) => {
-            image.isPrimary = i === primaryIndex;
-          });
-
-          const imageErrors: string[] = [];
-          for (const image of flattenedImages) {
-            const file = filesByName.get(image.file);
-            if (!file) {
-              imageErrors.push(`"${image.file}" wasn't among the photos you selected — add it manually.`);
-              continue;
-            }
-            try {
-              const processed = await processImageClientSide(file);
-              if (!processed) throw new Error("processing failed");
-              const imageForm = new FormData();
-              imageForm.set("productId", newProductId);
-              imageForm.set("altText", image.alt);
-              imageForm.set("isPrimary", image.isPrimary ? "true" : "false");
-              imageForm.set("width", String(processed.width));
-              imageForm.set("height", String(processed.height));
-              imageForm.set("blurDataUrl", processed.blurDataUrl);
-              imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
-              for (const variant of processed.variants) {
-                imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
-              }
-              const largest = processed.variants[processed.variants.length - 1];
-              imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
-              const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
-              if (!imageResponse.ok) throw new Error("upload failed");
-            } catch {
-              imageErrors.push(`"${image.file}" couldn't be processed or uploaded — add it manually.`);
-            }
-          }
-
-          const problems = [...variantErrors, ...imageErrors];
-          setMessage(problems.length ? `Product created, but: ${problems.join("; ")} — fix these below.` : "Product created with imported variant(s).");
-          setPendingImportVariants(null);
-          setImportImageFiles([]);
-        } else {
-          if (initialImageFile) {
-            setMessage("Uploading photo…");
-            const processed = await processImageClientSide(initialImageFile);
-            if (!processed) {
-              // Never fall back to uploading the raw picked file — that's exactly what caused the
-              // "Worker exceeded resource limits" crash this whole pipeline exists to avoid (a phone
-              // photo can be tens of MB). Fail this step cleanly instead; the product itself is
-              // already saved, so the admin can just add the photo again from the edit view below.
-              setMessage("Product created, but that photo couldn't be processed — try a different file, or add it below.");
-            } else {
-              const imageForm = new FormData();
-              imageForm.set("productId", newProductId);
-              imageForm.set("altText", draft.name);
-              imageForm.set("isPrimary", "true");
-              imageForm.set("width", String(processed.width));
-              imageForm.set("height", String(processed.height));
-              imageForm.set("blurDataUrl", processed.blurDataUrl);
-              imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
-              for (const variant of processed.variants) {
-                imageForm.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
-              }
-              const largest = processed.variants[processed.variants.length - 1];
-              imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
-              const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
-              if (!imageResponse.ok) setMessage("Product created, but the photo could not be uploaded — add it below.");
-            }
-          }
-
-          if (!multiVariant) {
-            setMessage((current) => (current?.startsWith("Product created, but") ? current : "Adding variant…"));
-            const variantResponse = await fetch("/api/admin/variants", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                productId: newProductId,
-                name: draft.name,
-                sku: initialSku.trim(),
-                color: draft.primaryColour || draft.name,
-                price: initialPrice,
-                compareAtPrice: initialCompareAtPrice || undefined,
-                stockQuantity: initialStock || 0,
-                isDefault: true,
-              }),
-            });
-            if (!variantResponse.ok) {
-              const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string };
-              setMessage((current) =>
-                current?.startsWith("Product created, but")
-                  ? current
-                  : `Product created, but ${(variantResult.error ?? "the variant could not be added").toLowerCase()} — add it below.`,
-              );
-            }
-          }
-
-          setMessage((current) => (current?.startsWith("Product created, but") ? current : "Product created."));
         }
 
+        if (!multiVariant) {
+          setMessage((current) => (current?.startsWith("Product created, but") ? current : "Adding variant…"));
+          const variantResponse = await fetch("/api/admin/variants", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productId: newProductId,
+              name: draft.name,
+              sku: initialSku.trim(),
+              color: draft.primaryColour || draft.name,
+              price: initialPrice,
+              compareAtPrice: initialCompareAtPrice || undefined,
+              stockQuantity: initialStock || 0,
+              isDefault: true,
+            }),
+          });
+          if (!variantResponse.ok) {
+            const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string };
+            setMessage((current) =>
+              current?.startsWith("Product created, but")
+                ? current
+                : `Product created, but ${(variantResult.error ?? "the variant could not be added").toLowerCase()} — add it below.`,
+            );
+          }
+        }
+
+        setMessage((current) => (current?.startsWith("Product created, but") ? current : "Product created."));
         await refresh();
         await openEdit(newProductId);
       } else {
@@ -866,8 +679,6 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
             onClick={() => {
               setImportOpen(true);
               setImportText("");
-              setImportImageFiles([]);
-              setImportResults([]);
             }}
           >
             Import JSON
@@ -1163,71 +974,42 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
               {!draft.id && (
                 <div className="admin-new-product-quickstart">
-                  {pendingImportVariants ? (
-                    <div>
-                      <p className="admin-hint">
-                        Imported {pendingImportVariants.length} variant{pendingImportVariants.length > 1 ? "s" : ""} from JSON — created
-                        automatically right after you click &ldquo;Create product&rdquo; below.
-                      </p>
-                      <ul className="admin-import-variant-list">
-                        {pendingImportVariants.map((variant, index) => (
-                          <li key={index}>
-                            <strong>{variant.color}</strong> · {variant.sku} · PKR {variant.price.toLocaleString("en-PK")}
-                            {variant.images?.length ? ` · ${variant.images.length} photo${variant.images.length > 1 ? "s" : ""}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                      <button
-                        type="button"
-                        className="text-link"
-                        onClick={() => {
-                          setPendingImportVariants(null);
-                          setMultiVariant(false);
-                        }}
-                      >
-                        Discard imported variants, enter details manually instead
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <label className="admin-check">
-                        <input type="checkbox" checked={multiVariant} onChange={(event) => setMultiVariant(event.target.checked)} />
-                        <span>Multi-variant product (comes in more than one color/size)</span>
-                      </label>
+                  <label className="admin-check">
+                    <input type="checkbox" checked={multiVariant} onChange={(event) => setMultiVariant(event.target.checked)} />
+                    <span>Multi-variant product (comes in more than one color/size)</span>
+                  </label>
 
-                      {!multiVariant && (
-                        <div className="admin-form-grid">
-                          <label>
-                            <span>SKU</span>
-                            <input required value={initialSku} onChange={(event) => setInitialSku(event.target.value)} placeholder="MS-SCF-LIL-PUR" />
-                          </label>
-                          <label>
-                            <span>Price (PKR)</span>
-                            <input required type="number" min="0" value={initialPrice} onChange={(event) => setInitialPrice(event.target.value)} />
-                          </label>
-                          <label>
-                            <span>Compare-at price</span>
-                            <input type="number" min="0" value={initialCompareAtPrice} onChange={(event) => setInitialCompareAtPrice(event.target.value)} />
-                          </label>
-                          <label>
-                            <span>Opening stock</span>
-                            <input type="number" min="0" value={initialStock} onChange={(event) => setInitialStock(event.target.value)} />
-                          </label>
-                        </div>
-                      )}
-                      {multiVariant && <p className="admin-hint">Add each color/size as its own variant once the product is created below.</p>}
-
+                  {!multiVariant && (
+                    <div className="admin-form-grid">
                       <label>
-                        <span>Product photo</span>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={(event) => setInitialImageFile(event.target.files?.[0] ?? null)}
-                        />
+                        <span>SKU</span>
+                        <input required value={initialSku} onChange={(event) => setInitialSku(event.target.value)} placeholder="MS-SCF-LIL-PUR" />
                       </label>
-                      <small>Optional here — you can always add or replace photos afterwards.</small>
-                    </>
+                      <label>
+                        <span>Price (PKR)</span>
+                        <input required type="number" min="0" value={initialPrice} onChange={(event) => setInitialPrice(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Compare-at price</span>
+                        <input type="number" min="0" value={initialCompareAtPrice} onChange={(event) => setInitialCompareAtPrice(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Opening stock</span>
+                        <input type="number" min="0" value={initialStock} onChange={(event) => setInitialStock(event.target.value)} />
+                      </label>
+                    </div>
                   )}
+                  {multiVariant && <p className="admin-hint">Add each color/size as its own variant once the product is created below.</p>}
+
+                  <label>
+                    <span>Product photo</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) => setInitialImageFile(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <small>Optional here — you can always add or replace photos afterwards.</small>
                 </div>
               )}
 
@@ -1396,7 +1178,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
         <div
           className="admin-drawer-scrim"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !importBusy) setImportOpen(false);
+            if (event.target === event.currentTarget) setImportOpen(false);
           }}
         >
           <aside className="admin-drawer">
@@ -1405,53 +1187,28 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                 <p className="eyebrow">Bulk import</p>
                 <h2>Import products from JSON</h2>
               </div>
-              <button onClick={() => !importBusy && setImportOpen(false)}>×</button>
+              <button onClick={() => setImportOpen(false)}>×</button>
             </header>
 
             <div className="admin-product-form">
               <p className="admin-hint">
-                Paste (or upload) <strong>one product object</strong> and click &ldquo;Open in Add Product form&rdquo; below — it opens the
-                normal create-product drawer pre-filled from the JSON, so you can review everything before it&apos;s actually saved. Every
-                product has a <code>variants</code> array (min 1) — single-variant is just one entry. <code>category</code> must match an
-                existing category name. <code>variants[].images[].file</code> is a plain filename — pick the matching photo files below and
-                they&apos;ll be matched by name, processed, and uploaded automatically once you save. <code>seo.title</code>/
-                <code>seo.description</code> are optional; when omitted, SEO copy is drafted automatically instead. For a genuine batch of
-                several products at once (<code>{"{ \"products\": [...] }"}</code>), use &ldquo;Create all now&rdquo; instead — that path
-                saves everything immediately, without a review step.
+                Paste (or upload) one product object and click &ldquo;Open in Add Product form&rdquo; — it opens the normal create-product
+                form pre-filled from the JSON, so you review and save it the same way as any other product. Need the accepted structure?
+                Use &ldquo;Download sample JSON&rdquo; on the Products page.
               </p>
-
-              <label className="field-wide">
-                <span className="ai-description-label">
-                  Single-variant example (scarf)
-                  <button type="button" className="ai-description-button" onClick={() => downloadJson("product-sample-single-variant.json", SINGLE_VARIANT_EXAMPLE)}>
-                    ↓ Download
-                  </button>
-                </span>
-                <textarea rows={4} readOnly value={JSON.stringify(SINGLE_VARIANT_EXAMPLE, null, 2)} />
-              </label>
-
-              <label className="field-wide">
-                <span className="ai-description-label">
-                  Multi-variant example (colorways)
-                  <button type="button" className="ai-description-button" onClick={() => downloadJson("product-sample-multi-variant.json", MULTI_VARIANT_EXAMPLE)}>
-                    ↓ Download
-                  </button>
-                </span>
-                <textarea rows={4} readOnly value={JSON.stringify(MULTI_VARIANT_EXAMPLE, null, 2)} />
-              </label>
 
               <label className="field-wide">
                 <span>Your JSON</span>
                 <textarea
-                  rows={12}
+                  rows={16}
                   value={importText}
                   onChange={(event) => setImportText(event.target.value)}
-                  placeholder="Paste product JSON here, or upload a .json file below."
+                  placeholder="Paste product JSON here, or choose a .json file below."
                 />
               </label>
 
               <label>
-                <span>Or upload a .json file</span>
+                <span>Or choose a .json file</span>
                 <input
                   type="file"
                   accept="application/json,.json"
@@ -1462,64 +1219,11 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                 />
               </label>
 
-              <label>
-                <span>Product photos (matched to variants[].images[].file by filename)</span>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(event) => setImportImageFiles(Array.from(event.target.files ?? []))}
-                />
-                {importImageFiles.length > 0 && <small className="admin-hint">{importImageFiles.length} photo(s) selected.</small>}
-              </label>
-
-              {importResults.length > 0 && (
-                <div className="admin-table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Product</th>
-                        <th>Result</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importResults.map((result) => (
-                        <tr key={result.index}>
-                          <td>{result.name}</td>
-                          <td>
-                            {result.success ? (
-                              <>
-                                <span className="status-pill status-published">created</span>
-                                {result.variantErrors?.map((err, i) => (
-                                  <small key={i} className="stock-low" style={{ display: "block" }}>
-                                    {err}
-                                  </small>
-                                ))}
-                                {result.imageErrors?.map((err, i) => (
-                                  <small key={i} className="stock-low" style={{ display: "block" }}>
-                                    {err}
-                                  </small>
-                                ))}
-                              </>
-                            ) : (
-                              <span className="status-pill status-archived">{result.error}</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
               <footer>
-                <button type="button" onClick={() => setImportOpen(false)} disabled={importBusy}>
+                <button type="button" onClick={() => setImportOpen(false)}>
                   Close
                 </button>
-                <button type="button" disabled={importBusy || !importText.trim()} onClick={runImport}>
-                  {importBusy ? "Importing…" : "Create all now (skip review)"}
-                </button>
-                <button type="button" className="admin-primary" disabled={importBusy || !importText.trim()} onClick={openFromImport}>
+                <button type="button" className="admin-primary" disabled={!importText.trim()} onClick={openFromImport}>
                   Open in Add Product form
                 </button>
               </footer>
