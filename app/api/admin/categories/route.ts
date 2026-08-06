@@ -22,7 +22,9 @@ export async function GET() {
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const rows = await db.select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name));
-  return Response.json({ categories: rows });
+  return Response.json({
+    categories: rows.map((row) => ({ ...row, imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : null })),
+  });
 }
 
 export async function POST(request: Request) {

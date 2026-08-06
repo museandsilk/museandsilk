@@ -64,6 +64,15 @@ export const categories = pgTable("categories", {
   description: text("description"),
   status: text("status").notNull().default("active"),
   sortOrder: integer("sort_order").notNull().default(0),
+  // Cover image for the homepage "Objects of everyday elegance" cards and the collection hero
+  // banner — all nullable since a category can exist (and did, for every category before this
+  // feature) without one; the storefront falls back to a static placeholder in that case.
+  imageR2Key: text("image_r2_key"),
+  imageAltText: text("image_alt_text"),
+  imageContentType: text("image_content_type"),
+  imageByteSize: integer("image_byte_size"),
+  imageBlurDataUrl: text("image_blur_data_url"),
+  imageVariantWidths: jsonb("image_variant_widths").$type<number[]>(),
   ...timestamps,
 }, (table) => [index("categories_status_idx").on(table.status)]);
 

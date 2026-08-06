@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { campaignSlides, categories, collections, productCollections, productImages, products, productVariants, siteSettings } from "@/db/schema";
 
@@ -50,10 +50,69 @@ export type CatalogProduct = {
   blurDataUrl?: string;
   variants: CatalogVariant[];
   images: CatalogImage[];
+  /** One lead image per variant (in variant-creation order), for products with more than one
+   * variant — lets a product card cycle through each color/style instead of showing only the
+   * default variant's picture. Empty when variants have no images of their own yet. */
+  variantImages: CatalogImage[];
 };
 
 function imageUrlFor(imageId: string) {
   return `/api/media/${imageId}`;
+}
+
+/** For each given product, the first active image belonging to each of its active variants
+ * (ordered by that image's own sortOrder/createdAt), returned in variant-creation order. Used to
+ * drive the color-cycling product card on storefront listings — kept separate from the single
+ * product-level "primary" image query above so that query keeps its one-row-per-product guarantee
+ * (multiple variants each having their own primary image would otherwise multiply join rows). */
+async function getVariantLeadImages(productIds: string[]): Promise<Map<string, CatalogImage[]>> {
+  if (!productIds.length) return new Map();
+
+  const rows = await db
+    .selectDistinctOn([productImages.variantId], {
+      variantId: productImages.variantId,
+      productId: productImages.productId,
+      imageId: productImages.id,
+      altText: productImages.altText,
+      sortOrder: productImages.sortOrder,
+      isPrimary: productImages.isPrimary,
+      blurDataUrl: productImages.blurDataUrl,
+      variantCreatedAt: productVariants.createdAt,
+    })
+    .from(productImages)
+    .innerJoin(productVariants, eq(productVariants.id, productImages.variantId))
+    .where(
+      and(
+        inArray(productImages.productId, productIds),
+        eq(productImages.status, "active"),
+        eq(productVariants.status, "active"),
+      ),
+    )
+    .orderBy(productImages.variantId, asc(productImages.sortOrder), asc(productImages.createdAt));
+
+  const byProduct = new Map<string, { image: CatalogImage; variantCreatedAt: Date }[]>();
+  for (const row of rows) {
+    const list = byProduct.get(row.productId) ?? [];
+    list.push({
+      image: {
+        id: row.imageId,
+        url: imageUrlFor(row.imageId),
+        altText: row.altText,
+        sortOrder: row.sortOrder,
+        isPrimary: row.isPrimary,
+        blurDataUrl: row.blurDataUrl ?? undefined,
+      },
+      variantCreatedAt: row.variantCreatedAt,
+    });
+    byProduct.set(row.productId, list);
+  }
+
+  const result = new Map<string, CatalogImage[]>();
+  for (const [productId, entries] of byProduct) {
+    entries.sort((a, b) => a.variantCreatedAt.getTime() - b.variantCreatedAt.getTime());
+    result.set(productId, entries.map((entry) => entry.image));
+  }
+  return result;
 }
 
 /** Published products for storefront listing (shop grid, homepage "New arrivals", etc). Each product
@@ -92,6 +151,8 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     .where(eq(products.status, "published"))
     .orderBy(desc(products.publishedAt), desc(products.createdAt));
 
+  const variantImagesByProduct = await getVariantLeadImages(rows.map((row) => row.id));
+
   return rows.map((row) => ({
     id: row.id,
     slug: row.slug,
@@ -113,6 +174,7 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     dimensions: row.dimensions ?? "",
     variants: [],
     images: [],
+    variantImages: variantImagesByProduct.get(row.id) ?? [],
   }));
 }
 
@@ -170,6 +232,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
       .where(and(eq(productImages.productId, row.id), eq(productImages.status, "active")))
       .orderBy(desc(productImages.isPrimary), asc(productImages.sortOrder), asc(productImages.createdAt)),
   ]);
+  const variantImagesByProduct = await getVariantLeadImages([row.id]);
 
   const variants: CatalogVariant[] = variantRows.map((v) => ({
     id: v.id,
@@ -219,6 +282,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     seoDescription: row.seoDescription ?? undefined,
     variants,
     images,
+    variantImages: variantImagesByProduct.get(row.id) ?? [],
   };
 }
 
@@ -308,6 +372,8 @@ export async function getCollectionBySlug(
     .where(and(eq(productCollections.collectionId, collection.id), eq(products.status, "published")))
     .orderBy(desc(products.publishedAt));
 
+  const variantImagesByProduct = await getVariantLeadImages(rows.map((row) => row.id));
+
   return {
     name: collection.name,
     description: collection.description ?? "",
@@ -327,6 +393,7 @@ export async function getCollectionBySlug(
       stock: Math.max(0, row.stock - row.reserved),
       variants: [],
       images: [],
+      variantImages: variantImagesByProduct.get(row.id) ?? [],
     })),
   };
 }
@@ -338,6 +405,39 @@ export async function getActiveCollections(): Promise<{ id: string; slug: string
     .from(collections)
     .where(eq(collections.status, "active"))
     .orderBy(asc(collections.sortOrder));
+}
+
+export type CategoryWithImage = {
+  id: string;
+  name: string;
+  slug: string;
+  imageUrl?: string;
+  blurDataUrl?: string;
+};
+
+/** Active categories with their (optional) admin-uploaded cover photo — drives the homepage
+ * "Objects of everyday elegance" cards and each /collections/[slug] hero banner. Categories
+ * without an uploaded image simply omit imageUrl; callers fall back to a static placeholder. */
+export async function getActiveCategories(): Promise<CategoryWithImage[]> {
+  const rows = await db
+    .select({
+      id: categories.id,
+      name: categories.name,
+      slug: categories.slug,
+      imageR2Key: categories.imageR2Key,
+      blurDataUrl: categories.imageBlurDataUrl,
+    })
+    .from(categories)
+    .where(eq(categories.status, "active"))
+    .orderBy(asc(categories.sortOrder), asc(categories.name));
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : undefined,
+    blurDataUrl: row.blurDataUrl ?? undefined,
+  }));
 }
 
 export type FeedVariant = {

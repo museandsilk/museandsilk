@@ -1,14 +1,19 @@
 import Image from "next/image";
 import Link from "next/link";
 import { StoreHeader, ProductCard, NewsletterForm } from "./(store)/_components/store-components";
-import { getCampaignSlides, getCatalogProducts, getPublicSettings } from "@/lib/commerce";
+import { getActiveCategories, getCampaignSlides, getCatalogProducts, getPublicSettings } from "@/lib/commerce";
 import { CampaignCarousel } from "./(store)/_components/campaign-carousel";
 import { Reveal } from "./(store)/_components/reveal";
 
 export const revalidate = 300;
 
 export default async function Home() {
-  const [products, campaignSlides, settings] = await Promise.all([getCatalogProducts(), getCampaignSlides(), getPublicSettings()]);
+  const [products, campaignSlides, settings, categories] = await Promise.all([
+    getCatalogProducts(),
+    getCampaignSlides(),
+    getPublicSettings(),
+    getActiveCategories(),
+  ]);
   return (
     <main className="page-fade-in">
       <StoreHeader theme="dark" />
@@ -29,13 +34,22 @@ export default async function Home() {
               ["Scarves", "Fluid statements in silk and fine blends.", "left"],
               ["Bandanas", "A smaller gesture with a distinct point of view.", "center"],
               ["Eyewear", "Confident frames, softened by considered detail.", "right"],
-            ].map(([name, note, crop], index) => (
-              <Link href={`/collections/${name.toLowerCase()}`} className={`category-card crop-${crop}`} key={name}>
-                <Image src="/category-still-life.webp" alt="" fill sizes="(max-width: 760px) 100vw, 33vw" />
-                <span className="category-number">0{index + 1}</span>
-                <div className="category-label"><h3>{name}</h3><p>{note}</p><span className="round-arrow" aria-hidden="true">↗︎</span></div>
-              </Link>
-            ))}
+            ].map(([name, note, crop], index) => {
+              const category = categories.find((entry) => entry.name.trim().toLowerCase() === name.toLowerCase());
+              return (
+                <Link href={`/collections/${name.toLowerCase()}`} className={`category-card crop-${crop}`} key={name}>
+                  <Image
+                    src={category?.imageUrl ?? "/category-still-life.webp"}
+                    alt=""
+                    fill
+                    sizes="(max-width: 760px) 100vw, 33vw"
+                    {...(category?.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: category.blurDataUrl } : {})}
+                  />
+                  <span className="category-number">0{index + 1}</span>
+                  <div className="category-label"><h3>{name}</h3><p>{note}</p><span className="round-arrow" aria-hidden="true">↗︎</span></div>
+                </Link>
+              );
+            })}
           </div>
         </section>
       </Reveal>

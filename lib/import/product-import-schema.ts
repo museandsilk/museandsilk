@@ -26,10 +26,11 @@ const seoSchema = z.object({
   keywords: z.array(z.string()).optional(),
 });
 
-/** `file` is a plain filename (e.g. "nomad-desert.jpg") — matched client-side, by name, against
- * whatever photo files the admin picks alongside the JSON in the import drawer. Nothing here is a
- * URL: images are never fetched by the server, only ever processed in the browser (same pipeline
- * as a manual upload), so large originals never hit the Worker. */
+/** `file` is a plain filename (e.g. "nomad-desert.jpg") — shown back to the admin in the
+ * create-product drawer as a hint for which photo to pick for that variant (browsers can't read a
+ * local file by name, so it can't be matched automatically). Nothing here is a URL: images are
+ * never fetched by the server, only ever processed in the browser (same pipeline as a manual
+ * upload), so large originals never hit the Worker. */
 const imageRefSchema = z.object({
   file: z.string().min(1),
   isPrimary: z.boolean().optional(),

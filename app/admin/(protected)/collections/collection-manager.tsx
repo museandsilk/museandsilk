@@ -1,10 +1,20 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { processImageClientSide } from "@/lib/client-image-processing";
 
 type Product = { id: string; name: string; slug: string; status: string };
-type Category = { id: string; name: string; slug: string; description: string | null; status: string; sortOrder: number };
+type Category = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: string;
+  sortOrder: number;
+  imageUrl: string | null;
+};
 type Collection = {
   id: string;
   name: string;
@@ -23,6 +33,7 @@ export function CollectionManager({ products }: { products: Product[] }) {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selected, setSelected] = useState<Collection | null>(null);
   const [message, setMessage] = useState("");
+  const [imageBusyId, setImageBusyId] = useState<string | null>(null);
 
   const refreshCategories = useCallback(async () => {
     const response = await fetch("/api/admin/categories", { cache: "no-store" });
@@ -58,6 +69,50 @@ export function CollectionManager({ products }: { products: Product[] }) {
     if (response.ok) {
       event.currentTarget.reset();
       await refreshCategories();
+    }
+  }
+
+  async function uploadCategoryImage(category: Category, file: File) {
+    setImageBusyId(category.id);
+    setMessage("Processing image…");
+    try {
+      const processed = await processImageClientSide(file);
+      if (!processed) {
+        setMessage("That photo couldn't be processed — try a different file (JPEG, PNG or WebP).");
+        return;
+      }
+      const form = new FormData();
+      form.set("altText", category.name);
+      form.set("blurDataUrl", processed.blurDataUrl);
+      form.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+      for (const variant of processed.variants) {
+        form.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
+      }
+      const largest = processed.variants[processed.variants.length - 1];
+      form.set("file", largest.blob, `category-${largest.width}.webp`);
+
+      setMessage("Uploading…");
+      const response = await fetch(`/api/admin/categories/${category.id}/image`, { method: "POST", body: form });
+      const result = await response.json().catch(() => ({}));
+      setMessage(response.ok ? "Category image updated." : (result.error ?? "Image upload failed."));
+      if (response.ok) await refreshCategories();
+    } catch (error) {
+      console.error("uploadCategoryImage failed", error);
+      setMessage("Something went wrong uploading the image — check your connection and try again.");
+    } finally {
+      setImageBusyId(null);
+    }
+  }
+
+  async function removeCategoryImage(category: Category) {
+    if (!window.confirm(`Remove the cover photo for "${category.name}"?`)) return;
+    setImageBusyId(category.id);
+    try {
+      const response = await fetch(`/api/admin/categories/${category.id}/image`, { method: "DELETE" });
+      setMessage(response.ok ? "Category image removed." : "Image could not be removed.");
+      if (response.ok) await refreshCategories();
+    } finally {
+      setImageBusyId(null);
     }
   }
 
@@ -153,6 +208,7 @@ export function CollectionManager({ products }: { products: Product[] }) {
                 <table>
                   <thead>
                     <tr>
+                      <th>Photo</th>
                       <th>Name</th>
                       <th>Slug</th>
                       <th>Description</th>
@@ -164,6 +220,36 @@ export function CollectionManager({ products }: { products: Product[] }) {
                   <tbody>
                     {categories.map((category) => (
                       <tr key={category.id}>
+                        <td>
+                          <div className="category-photo-cell">
+                            <span className="category-photo-preview">
+                              {category.imageUrl ? (
+                                <Image src={category.imageUrl} alt="" fill sizes="60px" />
+                              ) : (
+                                <i aria-hidden="true">◇</i>
+                              )}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              disabled={imageBusyId === category.id}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                event.target.value = "";
+                                if (file) void uploadCategoryImage(category, file);
+                              }}
+                            />
+                            {category.imageUrl && (
+                              <button
+                                type="button"
+                                disabled={imageBusyId === category.id}
+                                onClick={() => removeCategoryImage(category)}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </td>
                         <td>
                           <input form={`category-${category.id}`} name="name" defaultValue={category.name} aria-label="Name" />
                         </td>

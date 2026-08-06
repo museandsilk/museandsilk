@@ -79,6 +79,25 @@ type ProductImage = {
   status: string;
 };
 
+/** One row of the per-variant quickstart shown after a multi-variant JSON import — pre-filled from
+ * the parsed JSON but still fully editable before the product is created. `imageFileName` is only
+ * ever a hint (the JSON's `file` value): browsers can't read a local file by name for security
+ * reasons, so the admin still has to pick it themselves via the file input below the hint. */
+type ImportedVariantDraft = {
+  name: string;
+  color: string;
+  sku: string;
+  size?: string;
+  fabric?: string;
+  gtin?: string;
+  price: string;
+  compareAtPrice: string;
+  stockQuantity: string;
+  lowStockThreshold?: string;
+  imageFileName?: string;
+  imageAlt: string;
+};
+
 // Shared with the "Download sample JSON" buttons below — one source of truth for what the example
 // structure actually looks like, so the on-screen example and the downloadable file can't drift.
 const SINGLE_VARIANT_EXAMPLE = {
@@ -197,6 +216,17 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
   const [initialStock, setInitialStock] = useState("0");
   const [initialImageFile, setInitialImageFile] = useState<File | null>(null);
 
+  // Populated only when a multi-variant JSON import opened this drawer — one editable draft per
+  // variant in the JSON, plus the (optional) photo the admin picks for it, so all of a
+  // multi-variant product's variants and photos are captured in this same create step instead of
+  // requiring a manual "add variant" round-trip per color afterwards.
+  const [importedVariants, setImportedVariants] = useState<ImportedVariantDraft[]>([]);
+  const [variantImageFiles, setVariantImageFiles] = useState<(File | null)[]>([]);
+
+  function updateImportedVariant(index: number, patch: Partial<ImportedVariantDraft>) {
+    setImportedVariants((current) => current.map((variant, i) => (i === index ? { ...variant, ...patch } : variant)));
+  }
+
   // Bulk JSON import — see lib/import/product-import-schema.ts for the accepted shapes.
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
@@ -268,12 +298,31 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
       setInitialPrice(String(variant.price));
       setInitialCompareAtPrice(variant.compareAtPrice != null ? String(variant.compareAtPrice) : "");
       setInitialStock(String(variant.stockQuantity ?? 0));
+      setImportedVariants([]);
+      setVariantImageFiles([]);
     } else {
       setMultiVariant(true);
       setInitialSku("");
       setInitialPrice("");
       setInitialCompareAtPrice("");
       setInitialStock("0");
+      setImportedVariants(
+        item.variants.map((variant) => ({
+          name: variant.name || variant.color,
+          color: variant.color,
+          sku: variant.sku,
+          size: variant.size,
+          fabric: variant.fabric,
+          gtin: variant.gtin,
+          price: String(variant.price),
+          compareAtPrice: variant.compareAtPrice != null ? String(variant.compareAtPrice) : "",
+          stockQuantity: String(variant.stockQuantity ?? 0),
+          lowStockThreshold: variant.lowStockThreshold != null ? String(variant.lowStockThreshold) : "",
+          imageFileName: variant.images?.[0]?.file,
+          imageAlt: variant.images?.[0]?.alt || `${item.name} — ${variant.color}`,
+        })),
+      );
+      setVariantImageFiles(item.variants.map(() => null));
     }
 
     setImportOpen(false);
@@ -343,6 +392,8 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     setInitialCompareAtPrice("");
     setInitialStock("0");
     setInitialImageFile(null);
+    setImportedVariants([]);
+    setVariantImageFiles([]);
   }
 
   async function openEdit(productId: string) {
@@ -371,6 +422,10 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
 
     if (isCreating && !multiVariant && (!initialSku.trim() || !initialPrice)) {
       setMessage("Add a SKU and price (or check “Multi-variant product” to add variants afterwards).");
+      return;
+    }
+    if (isCreating && multiVariant && importedVariants.length > 0 && importedVariants.some((variant) => !variant.sku.trim() || !variant.price)) {
+      setMessage("Every variant needs a SKU and price.");
       return;
     }
 
@@ -443,6 +498,67 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                 ? current
                 : `Product created, but ${(variantResult.error ?? "the variant could not be added").toLowerCase()} — add it below.`,
             );
+          }
+        } else if (importedVariants.length > 0) {
+          // Every variant from the imported JSON, in order — each gets its own SKU/price/stock
+          // (already reviewed/edited by the admin above) and, if a photo was picked for it, its own
+          // image tied via variantId so the storefront can cycle each variant's own picture.
+          const problems: string[] = [];
+          for (let index = 0; index < importedVariants.length; index++) {
+            const variant = importedVariants[index];
+            setMessage((current) => (current?.startsWith("Product created, but") ? current : `Adding ${variant.color}…`));
+            const variantResponse = await fetch("/api/admin/variants", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                productId: newProductId,
+                name: variant.name || variant.color,
+                sku: variant.sku.trim(),
+                color: variant.color,
+                size: variant.size || undefined,
+                fabric: variant.fabric || undefined,
+                gtin: variant.gtin || undefined,
+                price: variant.price,
+                compareAtPrice: variant.compareAtPrice || undefined,
+                stockQuantity: variant.stockQuantity || 0,
+                lowStockThreshold: variant.lowStockThreshold || undefined,
+                isDefault: index === 0,
+              }),
+            });
+            const variantResult = (await variantResponse.json().catch(() => ({}))) as { error?: string; variant?: { id: string } };
+            if (!variantResponse.ok || !variantResult.variant) {
+              problems.push(`${variant.color}: ${(variantResult.error ?? "could not be added").toLowerCase()}`);
+              continue;
+            }
+
+            const file = variantImageFiles[index];
+            if (file) {
+              setMessage((current) => (current?.startsWith("Product created, but") ? current : `Uploading photo for ${variant.color}…`));
+              const processed = await processImageClientSide(file);
+              if (!processed) {
+                problems.push(`${variant.color}: photo couldn't be processed`);
+              } else {
+                const imageForm = new FormData();
+                imageForm.set("productId", newProductId);
+                imageForm.set("variantId", variantResult.variant.id);
+                imageForm.set("altText", variant.imageAlt);
+                imageForm.set("isPrimary", index === 0 ? "true" : "false");
+                imageForm.set("width", String(processed.width));
+                imageForm.set("height", String(processed.height));
+                imageForm.set("blurDataUrl", processed.blurDataUrl);
+                imageForm.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
+                for (const imgVariant of processed.variants) {
+                  imageForm.set(`variant_${imgVariant.width}`, imgVariant.blob, `variant-${imgVariant.width}.webp`);
+                }
+                const largest = processed.variants[processed.variants.length - 1];
+                imageForm.set("file", largest.blob, `product-${largest.width}.webp`);
+                const imageResponse = await fetch("/api/admin/images", { method: "POST", body: imageForm });
+                if (!imageResponse.ok) problems.push(`${variant.color}: photo could not be uploaded`);
+              }
+            }
+          }
+          if (problems.length) {
+            setMessage(`Product created, but some variants need attention — ${problems.join("; ")}. Fix these below.`);
           }
         }
 
@@ -999,17 +1115,93 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                       </label>
                     </div>
                   )}
-                  {multiVariant && <p className="admin-hint">Add each color/size as its own variant once the product is created below.</p>}
 
-                  <label>
-                    <span>Product photo</span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={(event) => setInitialImageFile(event.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                  <small>Optional here — you can always add or replace photos afterwards.</small>
+                  {multiVariant && importedVariants.length === 0 && (
+                    <p className="admin-hint">Add each color/size as its own variant once the product is created below.</p>
+                  )}
+
+                  {multiVariant && importedVariants.length > 0 && (
+                    <div className="admin-import-variants">
+                      <p className="admin-hint">
+                        Every variant from your JSON, ready to review — edit anything that needs it, and add each variant&rsquo;s photo below.
+                      </p>
+                      {importedVariants.map((variant, index) => (
+                        <div className="admin-import-variant-row" key={index}>
+                          <strong>{variant.color || `Variant ${index + 1}`}</strong>
+                          <div className="admin-form-grid">
+                            <label>
+                              <span>Variant name</span>
+                              <input required value={variant.name} onChange={(event) => updateImportedVariant(index, { name: event.target.value })} />
+                            </label>
+                            <label>
+                              <span>Color</span>
+                              <input required value={variant.color} onChange={(event) => updateImportedVariant(index, { color: event.target.value })} />
+                            </label>
+                            <label>
+                              <span>SKU</span>
+                              <input required value={variant.sku} onChange={(event) => updateImportedVariant(index, { sku: event.target.value })} />
+                            </label>
+                            <label>
+                              <span>Price (PKR)</span>
+                              <input
+                                required
+                                type="number"
+                                min="0"
+                                value={variant.price}
+                                onChange={(event) => updateImportedVariant(index, { price: event.target.value })}
+                              />
+                            </label>
+                            <label>
+                              <span>Compare-at price</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={variant.compareAtPrice}
+                                onChange={(event) => updateImportedVariant(index, { compareAtPrice: event.target.value })}
+                              />
+                            </label>
+                            <label>
+                              <span>Opening stock</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={variant.stockQuantity}
+                                onChange={(event) => updateImportedVariant(index, { stockQuantity: event.target.value })}
+                              />
+                            </label>
+                          </div>
+                          <label>
+                            <span>Photo for {variant.color || `variant ${index + 1}`}{variant.imageFileName ? ` — expects "${variant.imageFileName}"` : ""}</span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              onChange={(event) =>
+                                setVariantImageFiles((current) => {
+                                  const next = [...current];
+                                  next[index] = event.target.files?.[0] ?? null;
+                                  return next;
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!(multiVariant && importedVariants.length > 0) && (
+                    <>
+                      <label>
+                        <span>Product photo</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(event) => setInitialImageFile(event.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      <small>Optional here — you can always add or replace photos afterwards.</small>
+                    </>
+                  )}
                 </div>
               )}
 
