@@ -35,7 +35,19 @@ const nextConfig: NextConfig = {
     loaderFile: "./lib/image-loader.ts",
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      // Content-hashed build assets (a new filename every deploy — see scripts/purge-isr-cache.ts)
+      // never change once built, so they're safe to cache for a year. Without this, the broad
+      // "/:path*" rule below was the only thing touching these responses, which left them on
+      // whatever Cache-Control the platform defaults to for an unmatched-by-name static response —
+      // `max-age=0, must-revalidate`, forcing a revalidation request on every single load of every
+      // JS/CSS chunk on every page view.
+      {
+        source: "/_next/static/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      { source: "/:path*", headers: securityHeaders },
+    ];
   },
 };
 
