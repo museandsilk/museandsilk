@@ -30,13 +30,13 @@ export async function matchEdgeCache(request: Request): Promise<Response | null>
   }
 }
 
-export async function putEdgeCache(request: Request, response: Response): Promise<void> {
+export async function putEdgeCache(request: Request, response: Response): Promise<string> {
   const cache = defaultCache();
-  if (!cache) return;
+  if (!cache) return "no-cache-api";
   try {
-    const { ctx } = await getCloudflareContext({ async: true });
-    ctx.waitUntil(cache.put(request, response));
-  } catch {
-    // No Workers execution context (e.g. local dev) — nothing to wait on, skip.
+    await cache.put(request, response);
+    return "put-ok";
+  } catch (err) {
+    return "put-error:" + String(err).slice(0, 150);
   }
 }

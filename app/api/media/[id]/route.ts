@@ -36,9 +36,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const variant = await getObjectBytes(variantKeyFor(image.r2Key, width));
     if (variant) {
       const response = new Response(Buffer.from(variant.body), {
-        headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable", "X-Debug-Edge-Cache": "MISS" },
+        headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable" },
       });
-      await putEdgeCache(request, response.clone());
+      const putStatus = await putEdgeCache(request, response.clone());
+      response.headers.set("X-Debug-Edge-Cache", "MISS/" + putStatus);
       return response;
     }
   }
@@ -50,9 +51,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     headers: {
       "Content-Type": image.contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
-      "X-Debug-Edge-Cache": "MISS",
     },
   });
-  await putEdgeCache(request, response.clone());
+  const putStatus = await putEdgeCache(request, response.clone());
+  response.headers.set("X-Debug-Edge-Cache", "MISS/" + putStatus);
   return response;
 }
