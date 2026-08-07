@@ -425,19 +425,24 @@ export type CategoryWithImage = {
   id: string;
   name: string;
   slug: string;
+  sortOrder: number;
+  description?: string;
   imageUrl?: string;
   blurDataUrl?: string;
 };
 
 /** Active categories with their (optional) admin-uploaded cover photo — drives the homepage
- * "Objects of everyday elegance" cards and each /collections/[slug] hero banner. Categories
- * without an uploaded image simply omit imageUrl; callers fall back to a static placeholder. */
+ * "Objects of everyday elegance" cards (in sortOrder) and each /collections/[slug] hero banner.
+ * Categories without an uploaded image simply omit imageUrl; callers fall back to a static
+ * placeholder. */
 export async function getActiveCategories(): Promise<CategoryWithImage[]> {
   const rows = await db
     .select({
       id: categories.id,
       name: categories.name,
       slug: categories.slug,
+      sortOrder: categories.sortOrder,
+      description: categories.description,
       imageR2Key: categories.imageR2Key,
       blurDataUrl: categories.imageBlurDataUrl,
     })
@@ -449,6 +454,8 @@ export async function getActiveCategories(): Promise<CategoryWithImage[]> {
     id: row.id,
     name: row.name,
     slug: row.slug,
+    sortOrder: row.sortOrder,
+    description: row.description ?? undefined,
     imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : undefined,
     blurDataUrl: row.blurDataUrl ?? undefined,
   }));

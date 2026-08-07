@@ -36,7 +36,11 @@ img { object-fit: cover; }
    necessary — these should read as brief, quiet confirmations, not spectacle. */
 @keyframes ms-spin { to { transform: rotate(360deg); } }
 @keyframes ms-shimmer { 100% { transform: translateX(100%); } }
-@keyframes ms-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+/* opacity-only: animating `transform` here (even a subtle translateY) would make `.page-fade-in`
+   a containing block for every `position: fixed` descendant for as long as the "both" fill-mode
+   keeps the animation's end keyframe applied — i.e. permanently — which pins things like the
+   add-to-bag toast to the bottom of the page's content instead of the actual viewport. */
+@keyframes ms-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ms-progress-indeterminate { 0% { transform: translateX(-100%) scaleX(0.4); } 50% { transform: translateX(20%) scaleX(0.6); } 100% { transform: translateX(120%) scaleX(0.4); } }
 
 .spinner { display: inline-block; width: 1em; height: 1em; border: 2px solid rgba(25,22,18,.18); border-top-color: var(--oxblood); border-radius: 50%; animation: ms-spin .7s linear infinite; vertical-align: -0.15em; }

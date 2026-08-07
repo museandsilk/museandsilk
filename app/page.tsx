@@ -8,6 +8,16 @@ import { Reveal } from "./(store)/_components/reveal";
 
 export const revalidate = 300;
 
+// Used only when a category has no admin-set description — keyed by slug and, as a fallback for
+// older data, lowercase name, so the three founding categories keep their original copy even
+// though the homepage card order now comes from sortOrder instead of a fixed array.
+const CATEGORY_NOTES: Record<string, string> = {
+  scarves: "Fluid statements in silk and fine blends.",
+  bandanas: "A smaller gesture with a distinct point of view.",
+  glasses: "Confident frames, softened by considered detail.",
+  eyewear: "Confident frames, softened by considered detail.",
+};
+
 export default async function Home() {
   const [products, campaignSlides, settings, categories] = await Promise.all([
     getCatalogProducts(),
@@ -36,26 +46,26 @@ export default async function Home() {
             <p>A tightly considered collection designed around tactile materials, sculptural form and expressive ease.</p>
           </div>
           <div className="category-grid">
-            {[
-              ["Scarves", "Fluid statements in silk and fine blends.", "left"],
-              ["Bandanas", "A smaller gesture with a distinct point of view.", "center"],
-              ["Eyewear", "Confident frames, softened by considered detail.", "right"],
-            ].map(([name, note, crop], index) => {
-              const category = categories.find((entry) => entry.name.trim().toLowerCase() === name.toLowerCase());
-              return (
-                <Link href={`/collections/${name.toLowerCase()}`} className={`category-card crop-${crop}`} key={name}>
-                  <Image
-                    src={category?.imageUrl ?? "/category-still-life.webp"}
-                    alt=""
-                    fill
-                    sizes="(max-width: 760px) 100vw, 33vw"
-                    {...(category?.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: category.blurDataUrl } : {})}
-                  />
-                  <span className="category-number">0{index + 1}</span>
-                  <div className="category-label"><h3>{name}</h3><p>{note}</p><span className="round-arrow" aria-hidden="true">↗︎</span></div>
-                </Link>
-              );
-            })}
+            {[...categories]
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .slice(0, 3)
+              .map((category, index) => {
+                const note = CATEGORY_NOTES[category.slug] ?? CATEGORY_NOTES[category.name.trim().toLowerCase()] ?? category.description ?? "";
+                const crop = ["left", "center", "right"][index] ?? "center";
+                return (
+                  <Link href={`/collections/${category.slug}`} className={`category-card crop-${crop}`} key={category.id}>
+                    <Image
+                      src={category.imageUrl ?? "/category-still-life.webp"}
+                      alt=""
+                      fill
+                      sizes="(max-width: 760px) 100vw, 33vw"
+                      {...(category.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: category.blurDataUrl } : {})}
+                    />
+                    <span className="category-number">0{index + 1}</span>
+                    <div className="category-label"><h3>{category.name}</h3><p>{note}</p><span className="round-arrow" aria-hidden="true">↗︎</span></div>
+                  </Link>
+                );
+              })}
           </div>
         </section>
       </Reveal>
