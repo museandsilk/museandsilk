@@ -18,7 +18,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
 
-  const [existing] = await db.select({ imageR2Key: categories.imageR2Key }).from(categories).where(eq(categories.id, id)).limit(1);
+  const [existing] = await db
+    .select({ imageR2Key: categories.imageR2Key, imageVariantWidths: categories.imageVariantWidths })
+    .from(categories)
+    .where(eq(categories.id, id))
+    .limit(1);
   if (!existing) return Response.json({ error: "Category not found." }, { status: 404 });
 
   const form = await request.formData();
@@ -74,9 +78,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     .where(eq(categories.id, id))
     .returning();
 
-  // Old object is only removed after the new one is safely written and the row updated, so a
-  // failed upload never leaves the category without any image.
-  if (existing.imageR2Key) await deleteObject(existing.imageR2Key).catch(() => {});
+  // Old objects are only removed after the new ones are safely written and the row updated, so a
+  // failed upload never leaves the category without any image. Old variant files are cleaned up
+  // too, not just the base — otherwise every replace leaves its previous resized copies behind.
+  if (existing.imageR2Key) {
+    await deleteObject(existing.imageR2Key).catch(() => {});
+    if (existing.imageVariantWidths?.length) {
+      await Promise.all(
+        existing.imageVariantWidths.map((w) => deleteObject(variantKeyFor(existing.imageR2Key as string, w)).catch(() => {})),
+      );
+    }
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "category.image.update", entityType: "category", entityId: id });
 
@@ -88,7 +100,11 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
 
-  const [existing] = await db.select({ imageR2Key: categories.imageR2Key }).from(categories).where(eq(categories.id, id)).limit(1);
+  const [existing] = await db
+    .select({ imageR2Key: categories.imageR2Key, imageVariantWidths: categories.imageVariantWidths })
+    .from(categories)
+    .where(eq(categories.id, id))
+    .limit(1);
   if (!existing) return Response.json({ error: "Category not found." }, { status: 404 });
 
   const [row] = await db
@@ -105,7 +121,14 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     .where(eq(categories.id, id))
     .returning();
 
-  if (existing.imageR2Key) await deleteObject(existing.imageR2Key).catch(() => {});
+  if (existing.imageR2Key) {
+    await deleteObject(existing.imageR2Key).catch(() => {});
+    if (existing.imageVariantWidths?.length) {
+      await Promise.all(
+        existing.imageVariantWidths.map((w) => deleteObject(variantKeyFor(existing.imageR2Key as string, w)).catch(() => {})),
+      );
+    }
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "category.image.remove", entityType: "category", entityId: id });
 
