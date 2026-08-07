@@ -298,6 +298,16 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
   };
 }
 
+/** Appends a cache-busting version to a media URL derived from the row's updatedAt. Necessary
+ * because /api/media, /api/category-media and /api/campaign-media are now cached at Cloudflare's
+ * edge as `immutable` for a year (see lib/edge-cache.ts) — correct for product images, which
+ * always get a brand-new row/id per upload, but categories and campaign slides *replace* their
+ * image in place under the same id/URL. Without a version in the URL, replacing a photo would
+ * silently keep serving the old cached bytes at the same URL for up to a year. */
+function versionedMediaUrl(base: string, updatedAt: Date): string {
+  return `${base}${base.includes("?") ? "&" : "?"}v=${updatedAt.getTime()}`;
+}
+
 export type CampaignSlide = {
   id: string;
   imageUrl: string;
@@ -328,6 +338,7 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
       active: campaignSlides.active,
       blurDataUrl: campaignSlides.blurDataUrl,
       mobileR2Key: campaignSlides.mobileR2Key,
+      updatedAt: campaignSlides.updatedAt,
     })
     .from(campaignSlides)
     .where(includeInactive ? undefined : eq(campaignSlides.active, true))
@@ -335,8 +346,8 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
 
   return rows.map((row) => ({
     id: row.id,
-    imageUrl: `/api/campaign-media/${row.id}`,
-    mobileImageUrl: row.mobileR2Key ? `/api/campaign-media/${row.id}?variant=mobile` : null,
+    imageUrl: versionedMediaUrl(`/api/campaign-media/${row.id}`, row.updatedAt),
+    mobileImageUrl: row.mobileR2Key ? versionedMediaUrl(`/api/campaign-media/${row.id}?variant=mobile`, row.updatedAt) : null,
     altText: row.altText,
     eyebrow: row.eyebrow,
     headline: row.headline,
@@ -452,6 +463,7 @@ export async function getActiveCategories(): Promise<CategoryWithImage[]> {
       blurDataUrl: categories.imageBlurDataUrl,
       heroR2Key: categories.heroR2Key,
       heroBlurDataUrl: categories.heroBlurDataUrl,
+      updatedAt: categories.updatedAt,
     })
     .from(categories)
     .where(eq(categories.status, "active"))
@@ -463,9 +475,9 @@ export async function getActiveCategories(): Promise<CategoryWithImage[]> {
     slug: row.slug,
     sortOrder: row.sortOrder,
     description: row.description ?? undefined,
-    imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : undefined,
+    imageUrl: row.imageR2Key ? versionedMediaUrl(`/api/category-media/${row.id}`, row.updatedAt) : undefined,
     blurDataUrl: row.blurDataUrl ?? undefined,
-    heroImageUrl: row.heroR2Key ? `/api/category-media/${row.id}?variant=hero` : undefined,
+    heroImageUrl: row.heroR2Key ? versionedMediaUrl(`/api/category-media/${row.id}?variant=hero`, row.updatedAt) : undefined,
     heroBlurDataUrl: row.heroBlurDataUrl ?? undefined,
   }));
 }

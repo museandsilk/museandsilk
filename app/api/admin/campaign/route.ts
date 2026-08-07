@@ -15,7 +15,10 @@ export async function GET() {
 
   const rows = await db.select().from(campaignSlides).orderBy(asc(campaignSlides.sortOrder), asc(campaignSlides.createdAt));
   return Response.json({
-    slides: rows.map((row) => ({ ...row, imageUrl: `/api/campaign-media/${row.id}` })),
+    // Versioned so the admin's own preview thumbnail updates immediately after a replace —
+    // /api/campaign-media is cached at Cloudflare's edge as immutable for a year, keyed by URL,
+    // and this row's id (unlike a fresh upload's r2Key) never changes across replacements.
+    slides: rows.map((row) => ({ ...row, imageUrl: `/api/campaign-media/${row.id}?v=${row.updatedAt.getTime()}` })),
   });
 }
 

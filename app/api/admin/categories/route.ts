@@ -25,8 +25,11 @@ export async function GET() {
   return Response.json({
     categories: rows.map((row) => ({
       ...row,
-      imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : null,
-      heroImageUrl: row.heroR2Key ? `/api/category-media/${row.id}?variant=hero` : null,
+      // Versioned so the admin's own preview thumbnail updates immediately after a replace —
+      // /api/category-media is cached at Cloudflare's edge as immutable for a year, keyed by URL,
+      // and this row's id (unlike a fresh upload's r2Key) never changes across replacements.
+      imageUrl: row.imageR2Key ? `/api/category-media/${row.id}?v=${row.updatedAt.getTime()}` : null,
+      heroImageUrl: row.heroR2Key ? `/api/category-media/${row.id}?variant=hero&v=${row.updatedAt.getTime()}` : null,
     })),
   });
 }
