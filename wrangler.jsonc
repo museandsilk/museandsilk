@@ -8,6 +8,12 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  // Backs OpenNext's incremental (ISR) cache — see open-next.config.ts. Reuses the same bucket
+  // already used for product/campaign/category images, under its own "incremental-cache" prefix,
+  // rather than provisioning a second bucket.
+  "r2_buckets": [
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "muse-and-silk-media" }
+  ],
   "observability": {
     "enabled": true
   },
