@@ -24,3 +24,11 @@ export function cloudflareImageLoader({ src, width }: ImageLoaderProps): string 
 export function preWarmWidths(): readonly number[] {
   return STANDARD_WIDTHS;
 }
+
+/** Builds a width-descriptor srcset against our own resizing origin routes — used with a raw
+ * <picture><source media="…"> pair wherever a page needs to show a genuinely different crop per
+ * breakpoint (not just a smaller version of the same crop), since next/image doesn't render a
+ * <picture> element directly. See CampaignCarousel for the original use of this pattern. */
+export function buildSrcSet(url: string): string {
+  return STANDARD_WIDTHS.map((width) => `${url}${url.includes("?") ? "&" : "?"}w=${width} ${width}w`).join(", ");
+}

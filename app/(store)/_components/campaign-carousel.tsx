@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignSlide } from "@/lib/commerce";
-import { STANDARD_WIDTHS } from "@/lib/image-variants";
+import { buildSrcSet } from "@/lib/images";
 
 const fallback: CampaignSlide = {
   id: "campaign-default",
@@ -17,14 +17,6 @@ const fallback: CampaignSlide = {
   ctaHref: "/shop",
   sortOrder: 0,
 };
-
-/** Builds a width-descriptor srcset against our own resizing origin route (see lib/images.ts for
- * the equivalent next/image loader) — used here instead of next/image because art-directing a
- * distinct mobile crop needs a real <picture><source media="…"> pair, which next/image doesn't
- * render directly. */
-function buildSrcSet(url: string): string {
-  return STANDARD_WIDTHS.map((width) => `${url}${url.includes("?") ? "&" : "?"}w=${width} ${width}w`).join(", ");
-}
 
 export function CampaignCarousel({ slides }: { slides: CampaignSlide[] }) {
   const items = slides.length ? slides : [fallback];

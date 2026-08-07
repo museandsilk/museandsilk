@@ -209,7 +209,7 @@ img { object-fit: cover; }
 .search-suggestions button { border: 0; background: transparent; border-bottom: 1px solid var(--line); cursor: pointer; }
 
 .collection-hero { position: relative; height: min(56vh, 540px); min-height: 390px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 65px 25px; overflow: hidden; color: white; text-align: center; }
-.collection-hero img { object-position: center 58%; }
+.collection-hero-media { position: absolute; inset: 0; background-size: cover; background-position: center; }.collection-hero-media picture, .collection-hero-media img { display: block; width: 100%; height: 100%; object-fit: cover; }.collection-hero img { object-position: center 58%; }
 .collection-hero > div { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(18,12,8,.7), rgba(18,12,8,.12)); }
 .collection-hero .eyebrow, .collection-hero h1 { position: relative; z-index: 2; }
 .collection-hero .eyebrow { color: #e5c9a7; }

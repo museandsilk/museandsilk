@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { StoreHeader } from "../../_components/store-components";
 import { StoreFooter } from "../../_components/store-footer";
 import { ShopGrid } from "../../shop/shop-grid";
 import { getActiveCategories, getCatalogProducts, getCollectionBySlug } from "@/lib/commerce";
+import { buildSrcSet } from "@/lib/images";
 
 const names: Record<string, string> = { scarves: "Scarves", bandanas: "Bandanas", glasses: "Eyewear", eyewear: "Eyewear" };
 
@@ -49,17 +49,25 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
       <StoreHeader theme="dark" />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <section className={`collection-hero collection-${normalized}`}>
-        <Image
-          src={heroCategory?.heroImageUrl ?? heroCategory?.imageUrl ?? "/category-still-life.webp"}
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          {...(() => {
-            const blurDataURL = heroCategory?.heroImageUrl ? heroCategory.heroBlurDataUrl : heroCategory?.blurDataUrl;
-            return blurDataURL ? { placeholder: "blur" as const, blurDataURL } : {};
-          })()}
-        />
+        {(() => {
+          // Mobile gets the same tall 3:4 crop as the homepage card — the wide hero crop is
+          // specifically framed for a short, wide banner and looks wrong cropped down further for
+          // a narrow screen. Desktop/laptop gets the wide hero crop (falling back to the card crop
+          // if no hero was ever uploaded for this category). next/image can't render this — art-
+          // directing a genuinely different crop per breakpoint needs a real <picture><source
+          // media="…"> pair (see CampaignCarousel for the same pattern).
+          const mobileSrc = heroCategory?.imageUrl ?? "/category-still-life.webp";
+          const desktopSrc = heroCategory?.heroImageUrl ?? heroCategory?.imageUrl ?? "/category-still-life.webp";
+          const blurDataUrl = heroCategory?.heroImageUrl ? heroCategory.heroBlurDataUrl : heroCategory?.blurDataUrl;
+          return (
+            <div className="collection-hero-media" style={blurDataUrl ? { backgroundImage: `url(${blurDataUrl})` } : undefined}>
+              <picture>
+                <source media="(max-width: 760px)" srcSet={buildSrcSet(mobileSrc)} sizes="100vw" />
+                <img src={desktopSrc} srcSet={buildSrcSet(desktopSrc)} sizes="100vw" alt="" fetchPriority="high" />
+              </picture>
+            </div>
+          );
+        })()}
         <div />
         <p className="eyebrow">The signature edit</p>
         <h1>{title}</h1>
