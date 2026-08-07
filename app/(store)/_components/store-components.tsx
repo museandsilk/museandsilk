@@ -90,12 +90,43 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
   const crop = cropForCategory(product.category);
 
   // Products with more than one variant image cycle through each color/style automatically —
-  // one shared interval per card, crossfading via opacity so nothing ever pops.
+  // one shared interval per card, sliding left (each new image enters from the right edge and
+  // pushes the current one off the left edge) rather than a plain crossfade.
+  //
+  // A naive "translateX((index - active) * 100%)" reverses direction the moment the cycle wraps
+  // back to image 0 (with only 2 images — the common case — every other tick would visibly slide
+  // right instead of left). Instead each slide's offset is tracked explicitly: the outgoing slide
+  // is pushed to -100% and the incoming one pulled to 0%, and once that exit transition finishes,
+  // the outgoing slide is snapped back to +100% with transitions off for one frame — invisible,
+  // since it's parked off-screen — so it's ready to enter from the right again next lap.
   const gallery = product.variantImages.length > 1 ? product.variantImages : null;
   const [activeImage, setActiveImage] = useState(0);
+  const [offsets, setOffsets] = useState<number[]>(() => (gallery ? gallery.map((_, i) => (i === 0 ? 0 : 100)) : []));
+  const [instantIndex, setInstantIndex] = useState<number | null>(null);
+
   useEffect(() => {
     if (!gallery) return;
-    const timer = window.setInterval(() => setActiveImage((index) => (index + 1) % gallery.length), 4000);
+    const timer = window.setInterval(() => {
+      setActiveImage((current) => {
+        const next = (current + 1) % gallery.length;
+        setOffsets((prev) => {
+          const copy = [...prev];
+          copy[current] = -100;
+          copy[next] = 0;
+          return copy;
+        });
+        window.setTimeout(() => {
+          setInstantIndex(current);
+          setOffsets((prev) => {
+            const copy = [...prev];
+            copy[current] = 100;
+            return copy;
+          });
+          window.requestAnimationFrame(() => setInstantIndex(null));
+        }, 700);
+        return next;
+      });
+    }, 4000);
     return () => window.clearInterval(timer);
   }, [gallery]);
 
@@ -110,7 +141,8 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
               alt={product.name}
               fill
               sizes="(max-width: 760px) 50vw, 25vw"
-              className={`product-image-slide ${index === activeImage ? "is-active" : ""}`}
+              className={`product-image-slide ${index === activeImage ? "is-active" : ""} ${index === instantIndex ? "no-transition" : ""}`}
+              style={{ transform: `translateX(${offsets[index] ?? 0}%)` }}
               {...(image.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: image.blurDataUrl } : {})}
             />
           ))

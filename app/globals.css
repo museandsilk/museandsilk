@@ -129,8 +129,9 @@ img { object-fit: cover; }
 .product-image { position: relative; display: block; aspect-ratio: 3 / 4; overflow: hidden; background: #d8c9b9; }
 .product-image img { transform: scale(1); transition: transform .6s cubic-bezier(.2,.7,.2,1); }
 .product-image:hover img { transform: scale(1.04); }
-.product-image-slide { opacity: 0; transition: opacity 1s ease; }
-.product-image-slide.is-active { opacity: 1; }
+.product-image-slide { transition: transform .7s cubic-bezier(.4,0,.2,1); }
+.product-image-slide.is-active { z-index: 1; }
+.product-image-slide.no-transition { transition: none; }
 .product-badge { position: absolute; top: 13px; left: 13px; padding: 7px 9px; background: rgba(250,247,241,.92); font-size: 8px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
 .quick-view { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 14px; background: rgba(25,22,18,.92); color: white; text-align: center; font-size: 9px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; transform: translateY(calc(100% + 14px)); transition: transform .25s ease; }
 .product-image:hover .quick-view { transform: translateY(0); }
