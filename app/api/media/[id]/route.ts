@@ -9,11 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const cached = await matchEdgeCache(request);
-  if (cached) {
-    const debugged = new Response(cached.body, cached);
-    debugged.headers.set("X-Debug-Edge-Cache", "HIT");
-    return debugged;
-  }
+  if (cached) return cached;
 
   const { id } = await context.params;
   const requestedWidth = Number(new URL(request.url).searchParams.get("w"));
@@ -38,8 +34,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       const response = new Response(Buffer.from(variant.body), {
         headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable" },
       });
-      const putStatus = await putEdgeCache(request, response.clone());
-      response.headers.set("X-Debug-Edge-Cache", "MISS/" + putStatus);
+      putEdgeCache(request, response.clone());
       return response;
     }
   }
@@ -53,7 +48,6 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       "Cache-Control": "public, max-age=31536000, immutable",
     },
   });
-  const putStatus = await putEdgeCache(request, response.clone());
-  response.headers.set("X-Debug-Edge-Cache", "MISS/" + putStatus);
+  putEdgeCache(request, response.clone());
   return response;
 }

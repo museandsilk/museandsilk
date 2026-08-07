@@ -44,7 +44,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       const response = new Response(Buffer.from(variant.body), {
         headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable" },
       });
-      await putEdgeCache(request, response.clone());
+      putEdgeCache(request, response.clone());
       return response;
     }
   }
