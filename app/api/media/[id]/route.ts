@@ -36,7 +36,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const variant = await getObjectBytes(variantKeyFor(image.r2Key, width));
     if (variant) {
       const response = new Response(Buffer.from(variant.body), {
-        headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable" },
+        headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable", "X-Debug-Edge-Cache": "MISS" },
       });
       await putEdgeCache(request, response.clone());
       return response;
