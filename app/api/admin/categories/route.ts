@@ -23,7 +23,11 @@ export async function GET() {
 
   const rows = await db.select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name));
   return Response.json({
-    categories: rows.map((row) => ({ ...row, imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : null })),
+    categories: rows.map((row) => ({
+      ...row,
+      imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : null,
+      heroImageUrl: row.heroR2Key ? `/api/category-media/${row.id}?variant=hero` : null,
+    })),
   });
 }
 

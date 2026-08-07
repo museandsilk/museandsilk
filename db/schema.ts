@@ -64,15 +64,25 @@ export const categories = pgTable("categories", {
   description: text("description"),
   status: text("status").notNull().default("active"),
   sortOrder: integer("sort_order").notNull().default(0),
-  // Cover image for the homepage "Objects of everyday elegance" cards and the collection hero
-  // banner — all nullable since a category can exist (and did, for every category before this
-  // feature) without one; the storefront falls back to a static placeholder in that case.
+  // Cover image for the homepage "Objects of everyday elegance" cards (a tall 3:4 crop) — all
+  // nullable since a category can exist (and did, for every category before this feature) without
+  // one; the storefront falls back to a static placeholder in that case.
   imageR2Key: text("image_r2_key"),
   imageAltText: text("image_alt_text"),
   imageContentType: text("image_content_type"),
   imageByteSize: integer("image_byte_size"),
   imageBlurDataUrl: text("image_blur_data_url"),
   imageVariantWidths: jsonb("image_variant_widths").$type<number[]>(),
+  // A separate, wide crop for the /collections/[slug] hero banner — that section is short and
+  // wide, nothing like the tall card above, so stretching the same crop into both places always
+  // looked wrong in one of them. Optional: falls back to the card image above if never set, so
+  // every category created before this feature keeps working unchanged.
+  heroR2Key: text("hero_r2_key"),
+  heroAltText: text("hero_alt_text"),
+  heroContentType: text("hero_content_type"),
+  heroByteSize: integer("hero_byte_size"),
+  heroBlurDataUrl: text("hero_blur_data_url"),
+  heroVariantWidths: jsonb("hero_variant_widths").$type<number[]>(),
   ...timestamps,
 }, (table) => [index("categories_status_idx").on(table.status)]);
 

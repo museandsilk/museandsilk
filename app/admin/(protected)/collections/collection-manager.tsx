@@ -3,7 +3,29 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { processImageClientSide } from "@/lib/client-image-processing";
+import { cropImageClientSide, processImageClientSide } from "@/lib/client-image-processing";
+import { ImageCropper } from "../campaign/image-cropper";
+
+const CARD_ASPECT = 3 / 4;
+const HERO_ASPECT = 21 / 9;
+
+type PixelCrop = { x: number; y: number; width: number; height: number };
+type ImageSlot = { file: File | null; crop: PixelCrop | null; previewUrl: string | null };
+const EMPTY_SLOT: ImageSlot = { file: null, crop: null, previewUrl: null };
+
+async function makePreview(file: File, crop: PixelCrop): Promise<string> {
+  const bitmap = await cropImageClientSide(file, crop);
+  const previewWidth = 240;
+  const previewHeight = Math.max(1, Math.round((bitmap.height / bitmap.width) * previewWidth));
+  const canvas = document.createElement("canvas");
+  canvas.width = previewWidth;
+  canvas.height = previewHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+  ctx.drawImage(bitmap, 0, 0, previewWidth, previewHeight);
+  bitmap.close();
+  return canvas.toDataURL("image/webp", 0.7);
+}
 
 type Product = { id: string; name: string; slug: string; status: string };
 type Category = {
@@ -14,6 +36,7 @@ type Category = {
   status: string;
   sortOrder: number;
   imageUrl: string | null;
+  heroImageUrl: string | null;
 };
 type Collection = {
   id: string;
@@ -34,6 +57,15 @@ export function CollectionManager({ products }: { products: Product[] }) {
   const [selected, setSelected] = useState<Collection | null>(null);
   const [message, setMessage] = useState("");
   const [imageBusyId, setImageBusyId] = useState<string | null>(null);
+
+  // Which category's photo picker is currently open, plus its pending (uncropped-yet-confirmed or
+  // already-cropped) card/hero slots — one shared pair reused across rows, mirroring how the
+  // campaign slide manager tracks a single editingSlideId rather than per-row state for every
+  // category at once.
+  const [photoEditId, setPhotoEditId] = useState<string | null>(null);
+  const [cardSlot, setCardSlot] = useState<ImageSlot>(EMPTY_SLOT);
+  const [heroSlot, setHeroSlot] = useState<ImageSlot>(EMPTY_SLOT);
+  const [cropTarget, setCropTarget] = useState<"card" | "hero" | null>(null);
 
   const refreshCategories = useCallback(async () => {
     const response = await fetch("/api/admin/categories", { cache: "no-store" });
@@ -72,44 +104,92 @@ export function CollectionManager({ products }: { products: Product[] }) {
     }
   }
 
-  async function uploadCategoryImage(category: Category, file: File) {
+  function startPhotoEdit(categoryId: string) {
+    setPhotoEditId(categoryId);
+    setCardSlot(EMPTY_SLOT);
+    setHeroSlot(EMPTY_SLOT);
+  }
+
+  function cancelPhotoEdit() {
+    setPhotoEditId(null);
+    setCardSlot(EMPTY_SLOT);
+    setHeroSlot(EMPTY_SLOT);
+  }
+
+  function pickPhoto(target: "card" | "hero", file: File | null) {
+    if (!file) return;
+    (target === "card" ? setCardSlot : setHeroSlot)({ file, crop: null, previewUrl: null });
+    setCropTarget(target);
+  }
+
+  async function confirmPhotoCrop(crop: PixelCrop) {
+    const target = cropTarget;
+    setCropTarget(null);
+    if (!target) return;
+    const setSlot = target === "card" ? setCardSlot : setHeroSlot;
+    setSlot((slot) => (slot.file ? { ...slot, crop } : slot));
+    const file = target === "card" ? cardSlot.file : heroSlot.file;
+    if (!file) return;
+    try {
+      const previewUrl = await makePreview(file, crop);
+      setSlot((slot) => ({ ...slot, previewUrl }));
+    } catch {
+      // Preview is a nicety only — the stored crop rect is what actually matters at upload time.
+    }
+  }
+
+  async function processPhotoSlot(slot: ImageSlot, prefix: string, form: FormData) {
+    if (!slot.file || !slot.crop) return;
+    const bitmap = await cropImageClientSide(slot.file, slot.crop);
+    const processed = await processImageClientSide(bitmap);
+    if (!processed) return;
+    const largest = processed.variants[processed.variants.length - 1];
+    form.set(prefix ? `${prefix}File` : "file", largest.blob, `category-${prefix || "card"}.webp`);
+    form.set(`${prefix}blurDataUrl`, processed.blurDataUrl);
+    form.set(`${prefix}variantWidths`, JSON.stringify(processed.variants.map((v) => v.width)));
+    for (const variant of processed.variants) {
+      form.set(`${prefix}variant_${variant.width}`, variant.blob, `${prefix}variant-${variant.width}.webp`);
+    }
+  }
+
+  async function saveCategoryPhotos(category: Category) {
+    if (!cardSlot.crop && !heroSlot.crop) {
+      setMessage("Choose and crop at least one photo first.");
+      return;
+    }
     setImageBusyId(category.id);
     setMessage("Processing image…");
     try {
-      const processed = await processImageClientSide(file);
-      if (!processed) {
-        setMessage("That photo couldn't be processed — try a different file (JPEG, PNG or WebP).");
-        return;
-      }
       const form = new FormData();
       form.set("altText", category.name);
-      form.set("blurDataUrl", processed.blurDataUrl);
-      form.set("variantWidths", JSON.stringify(processed.variants.map((v) => v.width)));
-      for (const variant of processed.variants) {
-        form.set(`variant_${variant.width}`, variant.blob, `variant-${variant.width}.webp`);
-      }
-      const largest = processed.variants[processed.variants.length - 1];
-      form.set("file", largest.blob, `category-${largest.width}.webp`);
+      await processPhotoSlot(cardSlot, "", form);
+      await processPhotoSlot(heroSlot, "hero", form);
 
       setMessage("Uploading…");
       const response = await fetch(`/api/admin/categories/${category.id}/image`, { method: "POST", body: form });
       const result = await response.json().catch(() => ({}));
-      setMessage(response.ok ? "Category image updated." : (result.error ?? "Image upload failed."));
-      if (response.ok) await refreshCategories();
+      setMessage(response.ok ? "Category photos updated." : (result.error ?? "Image upload failed."));
+      if (response.ok) {
+        cancelPhotoEdit();
+        await refreshCategories();
+      }
     } catch (error) {
-      console.error("uploadCategoryImage failed", error);
+      console.error("saveCategoryPhotos failed", error);
       setMessage("Something went wrong uploading the image — check your connection and try again.");
     } finally {
       setImageBusyId(null);
     }
   }
 
-  async function removeCategoryImage(category: Category) {
-    if (!window.confirm(`Remove the cover photo for "${category.name}"?`)) return;
+  async function removeCategoryImage(category: Category, target: "card" | "hero" = "card") {
+    const label = target === "hero" ? "hero banner photo" : "cover photo";
+    if (!window.confirm(`Remove the ${label} for "${category.name}"?`)) return;
     setImageBusyId(category.id);
     try {
-      const response = await fetch(`/api/admin/categories/${category.id}/image`, { method: "DELETE" });
-      setMessage(response.ok ? "Category image removed." : "Image could not be removed.");
+      const response = await fetch(`/api/admin/categories/${category.id}/image${target === "hero" ? "?target=hero" : ""}`, {
+        method: "DELETE",
+      });
+      setMessage(response.ok ? "Photo removed." : "Photo could not be removed.");
       if (response.ok) await refreshCategories();
     } finally {
       setImageBusyId(null);
@@ -222,33 +302,72 @@ export function CollectionManager({ products }: { products: Product[] }) {
                       <tr key={category.id}>
                         <td>
                           <div className="category-photo-cell">
-                            <span className="category-photo-preview">
-                              {category.imageUrl ? (
-                                <Image src={category.imageUrl} alt="" fill sizes="60px" />
-                              ) : (
-                                <i aria-hidden="true">◇</i>
+                            <div className="category-photo-slot">
+                              <span className="category-photo-preview category-photo-preview-card">
+                                {category.imageUrl ? <Image src={category.imageUrl} alt="" fill sizes="60px" /> : <i aria-hidden="true">◇</i>}
+                              </span>
+                              <small>Card 3:4</small>
+                              {category.imageUrl && (
+                                <button type="button" disabled={imageBusyId === category.id} onClick={() => removeCategoryImage(category, "card")}>
+                                  Remove
+                                </button>
                               )}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              disabled={imageBusyId === category.id}
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                event.target.value = "";
-                                if (file) void uploadCategoryImage(category, file);
-                              }}
-                            />
-                            {category.imageUrl && (
-                              <button
-                                type="button"
-                                disabled={imageBusyId === category.id}
-                                onClick={() => removeCategoryImage(category)}
-                              >
-                                Remove
+                            </div>
+                            <div className="category-photo-slot">
+                              <span className="category-photo-preview category-photo-preview-hero">
+                                {category.heroImageUrl ? <Image src={category.heroImageUrl} alt="" fill sizes="90px" /> : <i aria-hidden="true">◇</i>}
+                              </span>
+                              <small>Hero wide</small>
+                              {category.heroImageUrl && (
+                                <button type="button" disabled={imageBusyId === category.id} onClick={() => removeCategoryImage(category, "hero")}>
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                            {photoEditId === category.id ? (
+                              <button type="button" disabled={imageBusyId === category.id} onClick={cancelPhotoEdit}>
+                                Cancel
+                              </button>
+                            ) : (
+                              <button type="button" disabled={imageBusyId === category.id} onClick={() => startPhotoEdit(category.id)}>
+                                Change photos
                               </button>
                             )}
                           </div>
+                          {photoEditId === category.id && (
+                            <div className="category-photo-editor">
+                              <div className="category-photo-slot">
+                                <span className="category-photo-preview category-photo-preview-card">
+                                  {cardSlot.previewUrl ? (
+                                    <Image src={cardSlot.previewUrl} alt="" fill unoptimized sizes="60px" />
+                                  ) : (
+                                    <i aria-hidden="true">◇</i>
+                                  )}
+                                </span>
+                                <small>New card (3:4)</small>
+                                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => pickPhoto("card", event.target.files?.[0] ?? null)} />
+                              </div>
+                              <div className="category-photo-slot">
+                                <span className="category-photo-preview category-photo-preview-hero">
+                                  {heroSlot.previewUrl ? (
+                                    <Image src={heroSlot.previewUrl} alt="" fill unoptimized sizes="90px" />
+                                  ) : (
+                                    <i aria-hidden="true">◇</i>
+                                  )}
+                                </span>
+                                <small>New hero (wide)</small>
+                                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => pickPhoto("hero", event.target.files?.[0] ?? null)} />
+                              </div>
+                              <button
+                                type="button"
+                                className="admin-primary"
+                                disabled={imageBusyId === category.id || (!cardSlot.crop && !heroSlot.crop)}
+                                onClick={() => saveCategoryPhotos(category)}
+                              >
+                                {imageBusyId === category.id ? "Saving…" : "Save photos"}
+                              </button>
+                            </div>
+                          )}
                         </td>
                         <td>
                           <input form={`category-${category.id}`} name="name" defaultValue={category.name} aria-label="Name" />
@@ -417,6 +536,15 @@ export function CollectionManager({ products }: { products: Product[] }) {
             <button className="admin-primary">Create collection</button>
           </form>
         </div>
+      )}
+      {cropTarget && (cropTarget === "card" ? cardSlot.file : heroSlot.file) && (
+        <ImageCropper
+          file={(cropTarget === "card" ? cardSlot.file : heroSlot.file) as File}
+          aspect={cropTarget === "card" ? CARD_ASPECT : HERO_ASPECT}
+          label={cropTarget === "card" ? "Crop card photo (3:4)" : "Crop hero photo (wide banner)"}
+          onConfirm={confirmPhotoCrop}
+          onCancel={() => setCropTarget(null)}
+        />
       )}
     </section>
   );

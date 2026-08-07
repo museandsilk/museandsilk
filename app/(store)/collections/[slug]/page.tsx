@@ -50,12 +50,15 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <section className={`collection-hero collection-${normalized}`}>
         <Image
-          src={heroCategory?.imageUrl ?? "/category-still-life.webp"}
+          src={heroCategory?.heroImageUrl ?? heroCategory?.imageUrl ?? "/category-still-life.webp"}
           alt=""
           fill
           priority
           sizes="100vw"
-          {...(heroCategory?.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: heroCategory.blurDataUrl } : {})}
+          {...(() => {
+            const blurDataURL = heroCategory?.heroImageUrl ? heroCategory.heroBlurDataUrl : heroCategory?.blurDataUrl;
+            return blurDataURL ? { placeholder: "blur" as const, blurDataURL } : {};
+          })()}
         />
         <div />
         <p className="eyebrow">The signature edit</p>

@@ -12,22 +12,35 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (cached) return cached;
 
   const { id } = await context.params;
-  const requestedWidth = Number(new URL(request.url).searchParams.get("w"));
+  const url = new URL(request.url);
+  const requestedWidth = Number(url.searchParams.get("w"));
+  const wantsHero = url.searchParams.get("variant") === "hero";
 
   const [category] = await db
     .select({
       imageR2Key: categories.imageR2Key,
       imageContentType: categories.imageContentType,
       imageVariantWidths: categories.imageVariantWidths,
+      heroR2Key: categories.heroR2Key,
+      heroContentType: categories.heroContentType,
+      heroVariantWidths: categories.heroVariantWidths,
     })
     .from(categories)
     .where(and(eq(categories.id, id), eq(categories.status, "active")))
     .limit(1);
-  if (!category?.imageR2Key || !category.imageContentType) return new Response("Image not found", { status: 404 });
+  if (!category) return new Response("Image not found", { status: 404 });
 
-  if (Number.isFinite(requestedWidth) && requestedWidth > 0 && category.imageVariantWidths?.length) {
-    const width = nearestVariantWidth(requestedWidth, category.imageVariantWidths);
-    const variant = await getObjectBytes(variantKeyFor(category.imageR2Key, width));
+  // Fall back to the card image whenever no separate hero crop was ever set, so categories
+  // created before this feature existed keep working unchanged.
+  const useHero = wantsHero && !!category.heroR2Key;
+  const r2Key = useHero ? category.heroR2Key : category.imageR2Key;
+  const contentType = useHero ? category.heroContentType : category.imageContentType;
+  const variantWidths = useHero ? category.heroVariantWidths : category.imageVariantWidths;
+  if (!r2Key || !contentType) return new Response("Image not found", { status: 404 });
+
+  if (Number.isFinite(requestedWidth) && requestedWidth > 0 && variantWidths?.length) {
+    const width = nearestVariantWidth(requestedWidth, variantWidths);
+    const variant = await getObjectBytes(variantKeyFor(r2Key, width));
     if (variant) {
       const response = new Response(Buffer.from(variant.body), {
         headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable" },
@@ -37,15 +50,15 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
   }
 
-  const object = await getObjectBytes(category.imageR2Key);
+  const object = await getObjectBytes(r2Key);
   if (!object) return new Response("Image not found", { status: 404 });
 
   const response = new Response(Buffer.from(object.body), {
     headers: {
-      "Content-Type": category.imageContentType,
+      "Content-Type": contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
     },
   });
-  await putEdgeCache(request, response.clone());
+  putEdgeCache(request, response.clone());
   return response;
 }

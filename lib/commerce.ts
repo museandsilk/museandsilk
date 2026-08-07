@@ -429,12 +429,17 @@ export type CategoryWithImage = {
   description?: string;
   imageUrl?: string;
   blurDataUrl?: string;
+  // The wide /collections/[slug] hero crop — undefined whenever no separate hero photo was ever
+  // uploaded, so callers should fall back to `imageUrl` (the tall homepage-card crop) in that case
+  // rather than treat a category as having no image at all.
+  heroImageUrl?: string;
+  heroBlurDataUrl?: string;
 };
 
-/** Active categories with their (optional) admin-uploaded cover photo — drives the homepage
- * "Objects of everyday elegance" cards (in sortOrder) and each /collections/[slug] hero banner.
- * Categories without an uploaded image simply omit imageUrl; callers fall back to a static
- * placeholder. */
+/** Active categories with their (optional) admin-uploaded cover photos — drives the homepage
+ * "Objects of everyday elegance" cards (in sortOrder, via imageUrl) and each /collections/[slug]
+ * hero banner (via heroImageUrl, falling back to imageUrl). Categories without an uploaded image
+ * simply omit imageUrl/heroImageUrl; callers fall back to a static placeholder. */
 export async function getActiveCategories(): Promise<CategoryWithImage[]> {
   const rows = await db
     .select({
@@ -445,6 +450,8 @@ export async function getActiveCategories(): Promise<CategoryWithImage[]> {
       description: categories.description,
       imageR2Key: categories.imageR2Key,
       blurDataUrl: categories.imageBlurDataUrl,
+      heroR2Key: categories.heroR2Key,
+      heroBlurDataUrl: categories.heroBlurDataUrl,
     })
     .from(categories)
     .where(eq(categories.status, "active"))
@@ -458,6 +465,8 @@ export async function getActiveCategories(): Promise<CategoryWithImage[]> {
     description: row.description ?? undefined,
     imageUrl: row.imageR2Key ? `/api/category-media/${row.id}` : undefined,
     blurDataUrl: row.blurDataUrl ?? undefined,
+    heroImageUrl: row.heroR2Key ? `/api/category-media/${row.id}?variant=hero` : undefined,
+    heroBlurDataUrl: row.heroBlurDataUrl ?? undefined,
   }));
 }
 
