@@ -122,47 +122,58 @@ export function CouponsManager() {
 
   async function toggleActive(coupon: Coupon) {
     setBusy(true);
-    const response = await fetch(`/api/admin/coupons/${coupon.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: !coupon.active }),
-    });
-    const result = await response.json();
-    setMessage(response.ok ? `${coupon.code} ${coupon.active ? "disabled" : "enabled"}.` : result.error ?? "Could not update coupon.");
-    setBusy(false);
-    if (response.ok) await refresh();
+    try {
+      const response = await fetch(`/api/admin/coupons/${coupon.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !coupon.active }),
+      });
+      const result = await response.json();
+      setMessage(response.ok ? `${coupon.code} ${coupon.active ? "disabled" : "enabled"}.` : result.error ?? "Could not update coupon.");
+      if (response.ok) await refresh();
+    } catch (error) {
+      console.error("toggleActive failed", error);
+      setMessage("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft) return;
     setBusy(true);
+    try {
+      const payload = {
+        code: draft.code.trim().toUpperCase(),
+        description: draft.description.trim() || null,
+        type: draft.type,
+        value: Number(draft.value),
+        minOrderAmount: draft.minOrderAmount === "" ? 0 : Number(draft.minOrderAmount),
+        maxDiscountAmount: draft.type === "percentage" && draft.maxDiscountAmount !== "" ? Number(draft.maxDiscountAmount) : null,
+        maxRedemptions: draft.maxRedemptions === "" ? null : Number(draft.maxRedemptions),
+        appliesToDelivery: draft.appliesToDelivery,
+        startsAt: draft.startsAt || null,
+        expiresAt: draft.expiresAt || null,
+        active: draft.active,
+      };
 
-    const payload = {
-      code: draft.code.trim().toUpperCase(),
-      description: draft.description.trim() || null,
-      type: draft.type,
-      value: Number(draft.value),
-      minOrderAmount: draft.minOrderAmount === "" ? 0 : Number(draft.minOrderAmount),
-      maxDiscountAmount: draft.type === "percentage" && draft.maxDiscountAmount !== "" ? Number(draft.maxDiscountAmount) : null,
-      maxRedemptions: draft.maxRedemptions === "" ? null : Number(draft.maxRedemptions),
-      appliesToDelivery: draft.appliesToDelivery,
-      startsAt: draft.startsAt || null,
-      expiresAt: draft.expiresAt || null,
-      active: draft.active,
-    };
-
-    const response = await fetch(draft.id ? `/api/admin/coupons/${draft.id}` : "/api/admin/coupons", {
-      method: draft.id ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const result = await response.json();
-    setMessage(response.ok ? "Coupon saved." : result.error ?? "Coupon could not be saved.");
-    setBusy(false);
-    if (response.ok) {
-      closeDrawer();
-      await refresh();
+      const response = await fetch(draft.id ? `/api/admin/coupons/${draft.id}` : "/api/admin/coupons", {
+        method: draft.id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      setMessage(response.ok ? "Coupon saved." : result.error ?? "Coupon could not be saved.");
+      if (response.ok) {
+        closeDrawer();
+        await refresh();
+      }
+    } catch (error) {
+      console.error("save coupon failed", error);
+      setMessage("Something went wrong saving the coupon — check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   }
 

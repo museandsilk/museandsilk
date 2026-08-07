@@ -106,22 +106,32 @@ export function CampaignManager() {
     }
     setBusy(true);
     setMessage("Processing image…");
-    const form = new FormData(event.currentTarget);
+    const currentForm = event.currentTarget;
+    try {
+      const form = new FormData(currentForm);
 
-    await processSlot(desktopSlot, "", form);
-    if (mobileSlot.file && mobileSlot.crop) await processSlot(mobileSlot, "mobile", form);
+      await processSlot(desktopSlot, "", form);
+      if (mobileSlot.file && mobileSlot.crop) await processSlot(mobileSlot, "mobile", form);
 
-    setMessage("Uploading…");
-    const response = await fetch("/api/admin/campaign", { method: "POST", body: form });
-    const result = await response.json();
-    setMessage(response.ok ? "Campaign slide added." : result.error ?? "Slide could not be added.");
-    if (response.ok) {
-      event.currentTarget.reset();
-      setDesktopSlot(EMPTY_SLOT);
-      setMobileSlot(EMPTY_SLOT);
-      await refresh();
+      setMessage("Uploading…");
+      const response = await fetch("/api/admin/campaign", { method: "POST", body: form });
+      const result = await response.json();
+      setMessage(response.ok ? "Campaign slide added." : result.error ?? "Slide could not be added.");
+      if (response.ok) {
+        currentForm.reset();
+        setDesktopSlot(EMPTY_SLOT);
+        setMobileSlot(EMPTY_SLOT);
+        await refresh();
+      }
+    } catch (error) {
+      // Without this, any hiccup after the upload succeeded (a transient network blip during the
+      // refresh(), for instance) left `busy` stuck true forever — the button would show the
+      // spinner and "Campaign slide added." indefinitely even though the slide was already saved.
+      console.error("campaign upload failed", error);
+      setMessage("Something went wrong after the upload — check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function saveSlide(event: FormEvent<HTMLFormElement>, id: string) {

@@ -16,19 +16,25 @@ function LoginForm() {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const response = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const result = (await response.json()) as { error?: string };
-    if (!response.ok) {
-      setError(result.error ?? "Invalid email or password.");
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(result.error ?? "Invalid email or password.");
+        return;
+      }
+      router.push(returnTo);
+      router.refresh();
+    } catch (error) {
+      console.error("login failed", error);
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
       setBusy(false);
-      return;
     }
-    router.push(returnTo);
-    router.refresh();
   }
 
   return (

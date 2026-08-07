@@ -36,33 +36,39 @@ export function SettingsForm() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
-    const form = new FormData(event.currentTarget);
-    const body = {
-      brandName: form.get("brandName"),
-      whatsappNumber: form.get("whatsappNumber"),
-      supportPhone: form.get("supportPhone"),
-      supportEmail: form.get("supportEmail"),
-      instagramUrl: form.get("instagramUrl"),
-      bankName: form.get("bankName"),
-      bankAccountTitle: form.get("bankAccountTitle"),
-      bankAccountNumber: form.get("bankAccountNumber"),
-      bankIban: form.get("bankIban"),
-      metaPixelId: form.get("metaPixelId"),
-      gaMeasurementId: form.get("gaMeasurementId"),
-      freeDeliveryThreshold: form.get("freeDeliveryThreshold"),
-      codReservationHours: form.get("codReservationHours"),
-      bankReservationHours: form.get("bankReservationHours"),
-      taxEnabled: form.get("taxEnabled") === "on",
-    };
-    const response = await fetch("/api/admin/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const result = await response.json();
-    setMessage(response.ok ? "Store settings saved." : result.error ?? "Settings could not be saved.");
-    if (response.ok) setSettings(result.settings);
-    setBusy(false);
+    try {
+      const form = new FormData(event.currentTarget);
+      const body = {
+        brandName: form.get("brandName"),
+        whatsappNumber: form.get("whatsappNumber"),
+        supportPhone: form.get("supportPhone"),
+        supportEmail: form.get("supportEmail"),
+        instagramUrl: form.get("instagramUrl"),
+        bankName: form.get("bankName"),
+        bankAccountTitle: form.get("bankAccountTitle"),
+        bankAccountNumber: form.get("bankAccountNumber"),
+        bankIban: form.get("bankIban"),
+        metaPixelId: form.get("metaPixelId"),
+        gaMeasurementId: form.get("gaMeasurementId"),
+        freeDeliveryThreshold: form.get("freeDeliveryThreshold"),
+        codReservationHours: form.get("codReservationHours"),
+        bankReservationHours: form.get("bankReservationHours"),
+        taxEnabled: form.get("taxEnabled") === "on",
+      };
+      const response = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json();
+      setMessage(response.ok ? "Store settings saved." : result.error ?? "Settings could not be saved.");
+      if (response.ok) setSettings(result.settings);
+    } catch (error) {
+      console.error("save settings failed", error);
+      setMessage("Something went wrong saving settings — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

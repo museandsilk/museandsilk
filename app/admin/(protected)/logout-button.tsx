@@ -9,9 +9,14 @@ export function LogoutButton() {
 
   async function logout() {
     setBusy(true);
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin/login");
-    router.refresh();
+    try {
+      await fetch("/api/admin/logout", { method: "POST" });
+      router.push("/admin/login");
+      router.refresh();
+    } catch (error) {
+      console.error("logout failed", error);
+      setBusy(false);
+    }
   }
 
   return (

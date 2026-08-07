@@ -15,10 +15,13 @@ const securityHeaders = [
       // via URL.createObjectURL() entirely client-side before anything is uploaded.
       "img-src 'self' data: blob: https:",
       // 'unsafe-eval' is required by React Fast Refresh in dev only — never present in production.
-      `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net`,
+      // static.cloudflareinsights.com is Cloudflare's own Web Analytics beacon, auto-injected into
+      // every response by the zone itself (not something this app adds) — without it allowlisted
+      // here, the browser silently blocks it and logs a CSP violation on every page load.
+      `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com`,
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
-      `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net`,
+      `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com`,
       "frame-ancestors 'none'",
     ].join("; "),
   },
