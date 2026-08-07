@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { orderStatusHistory, orders } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { releaseOrderReservation } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     note: note || null,
     actorEmail: admin.email,
   });
+
+  // Cancelling or returning an order ends its claim on stock — without this, reservedQuantity
+  // (set once at order creation, see app/api/orders/route.ts) never comes back down for anything
+  // but the auto-expiry cron, and cancelled/returned units stay permanently unsellable.
+  if (toStatus === "cancelled" || toStatus === "returned") {
+    await releaseOrderReservation(id, `Order ${toStatus} by admin`, admin.email);
+  }
 
   await auditLogEntry({
     actorEmail: admin.email,

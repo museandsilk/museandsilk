@@ -43,31 +43,47 @@ export async function expireReservations(): Promise<void> {
       actorEmail: "system",
     });
 
-    const items = await db
-      .select({ variantId: orderItems.variantId, quantity: orderItems.quantity })
-      .from(orderItems)
-      .where(eq(orderItems.orderId, order.id));
+    await releaseOrderReservation(order.id, "Reservation expired", "system", now);
+  }
+}
 
-    for (const item of items) {
-      if (!item.variantId) continue;
-      await db
-        .update(productVariants)
-        .set({
-          reservedQuantity: sql`greatest(0, ${productVariants.reservedQuantity} - ${item.quantity})`,
-          updatedAt: now,
-        })
-        .where(eq(productVariants.id, item.variantId));
+/**
+ * Releases the reserved stock a single order is holding, e.g. after it's manually cancelled or
+ * returned by an admin (see app/api/admin/orders/[id]/status/route.ts) — mirrors the release loop
+ * expireReservations() runs for auto-cancelled orders. `greatest(0, ...)` guards against this
+ * running twice for the same order (e.g. a cancel racing the expiry cron) ever driving the count
+ * negative.
+ */
+export async function releaseOrderReservation(
+  orderId: string,
+  reason: string,
+  actorEmail: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const items = await db
+    .select({ variantId: orderItems.variantId, quantity: orderItems.quantity })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId));
 
-      await db.insert(inventoryMovements).values({
-        variantId: item.variantId,
-        type: "release",
-        quantity: -item.quantity,
-        reason: "Reservation expired",
-        referenceType: "order",
-        referenceId: order.id,
-        actorEmail: "system",
-      });
-    }
+  for (const item of items) {
+    if (!item.variantId) continue;
+    await db
+      .update(productVariants)
+      .set({
+        reservedQuantity: sql`greatest(0, ${productVariants.reservedQuantity} - ${item.quantity})`,
+        updatedAt: now,
+      })
+      .where(eq(productVariants.id, item.variantId));
+
+    await db.insert(inventoryMovements).values({
+      variantId: item.variantId,
+      type: "release",
+      quantity: -item.quantity,
+      reason,
+      referenceType: "order",
+      referenceId: orderId,
+      actorEmail,
+    });
   }
 }
 
