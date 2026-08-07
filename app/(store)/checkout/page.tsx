@@ -295,7 +295,7 @@ export default function CheckoutPage() {
               <p>{result.bank.name}</p>
               <p>{result.bank.accountTitle}</p>
               <p>{result.bank.accountNumber}</p>
-              <p>{result.bank.iban}</p>
+              {result.bank.iban && <p>{result.bank.iban}</p>}
               <form className="receipt-upload" onSubmit={uploadReceipt}>
                 <label>
                   <span>Upload payment receipt</span>
@@ -469,6 +469,16 @@ export default function CheckoutPage() {
                     </span>
                   </label>
                 </div>
+                {payment === "bank_deposit" && settings?.bankAccountNumber && (
+                  <aside className="bank-deposit-preview">
+                    <p>Send payment to:</p>
+                    <p>{settings.bankName}</p>
+                    <p>{settings.bankAccountTitle}</p>
+                    <p>{settings.bankAccountNumber}</p>
+                    {settings.bankIban && <p>{settings.bankIban}</p>}
+                    <small>You&apos;ll be asked to upload your payment receipt after placing the order.</small>
+                  </aside>
+                )}
               </fieldset>
               <fieldset>
                 <legend>04 · Coupon (optional)</legend>

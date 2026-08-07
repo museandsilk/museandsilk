@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { campaignSlides, categories, collections, productCollections, productImages, products, productVariants, siteSettings } from "@/db/schema";
@@ -539,7 +540,7 @@ export type PublicSettings = {
   bankReservationHours: number;
 };
 
-export async function getPublicSettings(): Promise<PublicSettings> {
+export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
   const [row] = await db.select().from(siteSettings).where(eq(siteSettings.id, "store")).limit(1);
   return {
     whatsappNumber: row?.whatsappNumber || process.env.WHATSAPP_DEFAULT_NUMBER || "",
@@ -553,4 +554,4 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     codReservationHours: row?.codReservationHours ?? 6,
     bankReservationHours: row?.bankReservationHours ?? 6,
   };
-}
+});
