@@ -8,10 +8,19 @@
 // image fields entirely, which meant a real --delete run wiped currently-in-use category cover
 // photos and a campaign slide's mobile crop, believing them orphaned. Ran once without --delete
 // first is the only way to catch a gap like that before it deletes anything.
+//
+// This script audits admin-uploaded IMAGES only. The same R2 bucket also holds Next.js's ISR page
+// cache (see open-next.config.ts) under its own "incremental-cache/" prefix — those objects are
+// never in any of this app's own tables (Next.js manages them itself), so without this exclusion
+// every single one of them would show up as a false-positive "orphan" and get deleted by --delete,
+// which would just make every page slow again rather than clean anything up. Any future
+// non-image, non-database-tracked prefix added to this bucket must be added here too.
 
 import { S3Client, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { db, schema } from "../db";
 import { variantKeyFor } from "../lib/image-variants";
+
+const NON_IMAGE_PREFIXES = ["incremental-cache/"];
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -57,7 +66,14 @@ async function main() {
         mobileVariantWidths: schema.campaignSlides.mobileVariantWidths,
       })
       .from(schema.campaignSlides),
-    db.select({ imageR2Key: schema.categories.imageR2Key, imageVariantWidths: schema.categories.imageVariantWidths }).from(schema.categories),
+    db
+      .select({
+        imageR2Key: schema.categories.imageR2Key,
+        imageVariantWidths: schema.categories.imageVariantWidths,
+        heroR2Key: schema.categories.heroR2Key,
+        heroVariantWidths: schema.categories.heroVariantWidths,
+      })
+      .from(schema.categories),
     db.select({ r2Key: schema.paymentProofs.r2Key }).from(schema.paymentProofs),
   ]);
 
@@ -84,15 +100,30 @@ async function main() {
     }
   }
   for (const row of categories) {
-    if (!row.imageR2Key) continue;
-    referenced.add(row.imageR2Key);
-    for (const width of row.imageVariantWidths ?? []) {
-      referenced.add(variantKeyFor(row.imageR2Key, width));
+    if (row.imageR2Key) {
+      referenced.add(row.imageR2Key);
+      for (const width of row.imageVariantWidths ?? []) {
+        referenced.add(variantKeyFor(row.imageR2Key, width));
+      }
+    }
+    // Categories carry a *second*, independent image (the wide collection-page hero crop, added
+    // after this script was first written) — same class of gap as campaign slides' mobile crop
+    // above: missing it here means every current hero photo reads as a false-positive orphan.
+    if (row.heroR2Key) {
+      referenced.add(row.heroR2Key);
+      for (const width of row.heroVariantWidths ?? []) {
+        referenced.add(variantKeyFor(row.heroR2Key, width));
+      }
     }
   }
   for (const row of proofs) referenced.add(row.r2Key);
 
-  const actual = await listAllKeys();
+  const allObjects = await listAllKeys();
+  const excluded = allObjects.filter((obj) => NON_IMAGE_PREFIXES.some((prefix) => obj.key.startsWith(prefix)));
+  const actual = allObjects.filter((obj) => !NON_IMAGE_PREFIXES.some((prefix) => obj.key.startsWith(prefix)));
+  if (excluded.length) {
+    console.log(`Skipping ${excluded.length} non-image objects under: ${NON_IMAGE_PREFIXES.join(", ")}`);
+  }
 
   const orphans = actual.filter((obj) => !referenced.has(obj.key));
   const totalOrphanBytes = orphans.reduce((sum, o) => sum + o.size, 0);

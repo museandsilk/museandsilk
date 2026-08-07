@@ -64,6 +64,17 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   if (existing.variantWidths?.length) {
     await Promise.all(existing.variantWidths.map((width) => deleteObject(variantKeyFor(existing.r2Key, width))));
   }
+  // The desktop image above was the only one ever cleaned up here — a slide with a separate mobile
+  // crop (see db/schema.ts's mobile* columns) left it and its variants permanently orphaned in R2
+  // every time the whole slide was deleted.
+  if (existing.mobileR2Key) {
+    await deleteObject(existing.mobileR2Key);
+    if (existing.mobileVariantWidths?.length) {
+      await Promise.all(
+        existing.mobileVariantWidths.map((width) => deleteObject(variantKeyFor(existing.mobileR2Key as string, width))),
+      );
+    }
+  }
 
   await auditLogEntry({ actorEmail: admin.email, action: "campaign.delete", entityType: "campaign-slide", entityId: id });
 
