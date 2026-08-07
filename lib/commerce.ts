@@ -51,6 +51,8 @@ export type CatalogProduct = {
   seoTitle?: string;
   seoDescription?: string;
   blurDataUrl?: string;
+  /** Admin-set "Featured on homepage" flag — see getCatalogProducts()'s use on the homepage. */
+  featured: boolean;
   variants: CatalogVariant[];
   images: CatalogImage[];
   /** One lead image per variant (in variant-creation order), for products with more than one
@@ -133,6 +135,7 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
       shortDescription: products.shortDescription,
       material: products.material,
       dimensions: products.dimensions,
+      featured: products.featured,
       categoryId: products.categoryId,
       categorySlug: categories.slug,
       variantId: productVariants.id,
@@ -175,6 +178,7 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     shortDescription: row.shortDescription ?? "",
     material: row.material ?? "",
     dimensions: row.dimensions ?? "",
+    featured: row.featured,
     variants: [],
     images: [],
     variantImages: variantImagesByProduct.get(row.id) ?? [],
@@ -196,6 +200,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
       careInstructions: products.careInstructions,
       seoTitle: products.seoTitle,
       seoDescription: products.seoDescription,
+      featured: products.featured,
       categoryId: products.categoryId,
       categorySlug: categories.slug,
     })
@@ -285,6 +290,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     careInstructions: row.careInstructions ?? "",
     seoTitle: row.seoTitle ?? undefined,
     seoDescription: row.seoDescription ?? undefined,
+    featured: row.featured,
     variants,
     images,
     variantImages: variantImagesByProduct.get(row.id) ?? [],
@@ -358,6 +364,7 @@ export async function getCollectionBySlug(
       name: products.name,
       type: products.typeLabel,
       badge: products.badge,
+      featured: products.featured,
       categoryId: products.categoryId,
       categorySlug: categories.slug,
       variantId: productVariants.id,
@@ -396,6 +403,7 @@ export async function getCollectionBySlug(
       imageUrl: row.imageId ? imageUrlFor(row.imageId) : undefined,
       blurDataUrl: row.blurDataUrl ?? undefined,
       stock: Math.max(0, row.stock - row.reserved),
+      featured: row.featured,
       variants: [],
       images: [],
       variantImages: variantImagesByProduct.get(row.id) ?? [],

@@ -14,6 +14,11 @@ export default async function Home() {
     getPublicSettings(),
     getActiveCategories(),
   ]);
+  // Admin-picked "Featured on homepage" products lead the spotlight (newest-featured first, since
+  // `products` already comes back sorted by publishedAt/createdAt desc); if fewer than 4 are
+  // marked featured, the newest non-featured products fill the remaining slots so the section is
+  // never sparse.
+  const spotlightProducts = [...products.filter((product) => product.featured), ...products.filter((product) => !product.featured)].slice(0, 4);
   return (
     <main className="page-fade-in">
       <StoreHeader theme="dark" />
@@ -60,7 +65,7 @@ export default async function Home() {
             <div><p className="eyebrow">Freshly arrived</p><h2 id="new-title">The Muse edit</h2></div>
             <Link href="/shop" className="text-link">View all pieces <span aria-hidden="true">→︎</span></Link>
           </div>
-          <div className="product-grid">{products.slice(0, 4).map((product) => <ProductCard key={product.slug} product={product} />)}</div>
+          <div className="product-grid">{spotlightProducts.map((product) => <ProductCard key={product.slug} product={product} />)}</div>
         </section>
       </Reveal>
 
