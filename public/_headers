@@ -1,0 +1,12 @@
+# Cloudflare's Workers Static Assets serves everything under /_next/static/* (and other files in
+# this public/ directory) directly through its own asset-serving path — Next.js's own
+# next.config.ts `headers()` never runs for these, since that config only applies to requests that
+# actually reach the Next.js/Worker request handler. This is the mechanism Cloudflare actually
+# checks for static-asset responses (same "_headers" file convention as Cloudflare Pages).
+#
+# /_next/static/* holds content-hashed build output — a fresh filename every deploy, the exact
+# same file's bytes never change once built — so it's safe to cache for a year. Without this it
+# was being served as max-age=0, must-revalidate, forcing a revalidation request for every JS/CSS
+# chunk on every single page view.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
