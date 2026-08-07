@@ -18,10 +18,12 @@ const securityHeaders = [
       // static.cloudflareinsights.com is Cloudflare's own Web Analytics beacon, auto-injected into
       // every response by the zone itself (not something this app adds) — without it allowlisted
       // here, the browser silently blocks it and logs a CSP violation on every page load.
-      `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com`,
+      `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com https://challenges.cloudflare.com`,
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
-      `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com`,
+      `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com`,
+      // Turnstile's checkout widget renders inside an iframe served from challenges.cloudflare.com.
+      "frame-src https://challenges.cloudflare.com",
       "frame-ancestors 'none'",
     ].join("; "),
   },
