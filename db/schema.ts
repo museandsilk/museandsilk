@@ -268,7 +268,10 @@ export const orderStatusHistory = pgTable("order_status_history", {
 
 export const orderIdempotencyKeys = pgTable("order_idempotency_keys", {
   key: text("key").primaryKey(),
-  orderId: uuid("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  // Nullable: the key is claimed (this row inserted) *before* the order it will belong to exists —
+  // see claimIdempotencyKey in lib/idempotency.ts — then filled in once that order is actually
+  // created. A row with a null orderId means someone is still in the middle of processing this key.
+  orderId: uuid("order_id").references(() => orders.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

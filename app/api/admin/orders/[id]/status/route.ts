@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { orderStatusHistory, orders } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
-import { releaseOrderReservation } from "@/lib/orders";
+import { fulfillOrderReservation, releaseOrderReservation, restockReturnedOrder } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
 
@@ -67,11 +67,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     actorEmail: admin.email,
   });
 
-  // Cancelling or returning an order ends its claim on stock — without this, reservedQuantity
-  // (set once at order creation, see app/api/orders/route.ts) never comes back down for anything
-  // but the auto-expiry cron, and cancelled/returned units stay permanently unsellable.
-  if (toStatus === "cancelled" || toStatus === "returned") {
-    await releaseOrderReservation(id, `Order ${toStatus} by admin`, admin.email);
+  // "delivered" is the one point where a reservation becomes a real, permanent stock reduction —
+  // see fulfillOrderReservation's comment for why nothing else in the order flow ever did this.
+  // Cancelling always happens pre-delivery, so it only ever needs to release a reservation.
+  // Returning is the one case that depends on where the order was coming from: a return after
+  // "delivered" means physical stock is back (restockReturnedOrder adds it back to the shelf), but
+  // a return straight from "shipped" (e.g. refused at the door, never delivered) never had its
+  // stock permanently decremented in the first place, so it's just a reservation release.
+  if (toStatus === "delivered") {
+    await fulfillOrderReservation(id, admin.email);
+  } else if (toStatus === "cancelled") {
+    await releaseOrderReservation(id, "Order cancelled by admin", admin.email);
+  } else if (toStatus === "returned") {
+    if (order.orderStatus === "delivered") {
+      await restockReturnedOrder(id, admin.email);
+    } else {
+      await releaseOrderReservation(id, "Order returned by admin", admin.email);
+    }
   }
 
   await auditLogEntry({

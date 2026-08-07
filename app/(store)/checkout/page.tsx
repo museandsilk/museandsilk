@@ -309,6 +309,9 @@ export default function CheckoutPage() {
           <Link className="button button-dark" href={`/track-order?order=${encodeURIComponent(result.orderNumber)}`}>
             Track this order
           </Link>
+          <p className="order-success-returns">
+            Changed your mind once it arrives? <Link href="/policies/returns">Read our return policy</Link>.
+          </p>
         </section>
       </main>
     );
@@ -573,7 +576,10 @@ export default function CheckoutPage() {
                 <span>→︎</span>
               </button>
               {!otpToken && <small className="checkout-otp-hint">Verify your email above to place the order.</small>}
-              <small>By placing the order, you agree to the store terms and reservation policy.</small>
+              <small>
+                By placing the order, you agree to the store terms and reservation policy. Not the right fit?{" "}
+                <Link href="/policies/returns">See our return policy</Link>.
+              </small>
             </aside>
           </form>
         )}

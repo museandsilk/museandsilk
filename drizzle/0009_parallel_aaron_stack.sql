@@ -1,0 +1,1 @@
+ALTER TABLE "order_idempotency_keys" ALTER COLUMN "order_id" DROP NOT NULL;

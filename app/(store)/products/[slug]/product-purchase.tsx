@@ -111,6 +111,7 @@ export function ProductPurchase({
         <span>COD available</span>
         <span>Secure checkout</span>
         <span>Nationwide delivery</span>
+        <Link href="/policies/returns">Easy returns</Link>
       </div>
       {toast && (
         <div className="cart-toast" role="status" aria-live="polite">

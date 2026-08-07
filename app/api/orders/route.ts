@@ -14,7 +14,13 @@ import {
   siteSettings,
 } from "@/db/schema";
 import { sendOrderEmails } from "@/lib/email/resend";
-import { findOrderByIdempotencyKey, recordIdempotencyKey } from "@/lib/idempotency";
+import {
+  attachOrderToIdempotencyKey,
+  claimIdempotencyKey,
+  findOrderByIdempotencyKey,
+  reclaimStaleIdempotencyKey,
+  releaseIdempotencyKey,
+} from "@/lib/idempotency";
 import { isCheckoutRateLimited } from "@/lib/auth/rate-limit";
 import { expireReservations } from "@/lib/orders";
 import { cleanPhone } from "@/lib/slug";
@@ -254,6 +260,34 @@ export async function POST(request: Request) {
     }
   }
 
+  // Claim the idempotency key right before the side-effecting work starts (stock reservation,
+  // coupon redemption, the order write itself) — everything above this point is read-only
+  // validation that's safe to redo on a genuine retry. See lib/idempotency.ts for why this closes
+  // a real race: two requests carrying the same key could previously both pass a read-only
+  // "does an order exist yet" check before either had written anything.
+  let claimed = await claimIdempotencyKey(idempotencyKey);
+  if (!claimed) {
+    for (let attempt = 0; attempt < 5 && !claimed; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const inFlightOrder = await findOrderByIdempotencyKey(idempotencyKey);
+      if (inFlightOrder) {
+        const settings = await loadSettings();
+        return Response.json(orderSummary(inFlightOrder, settings), { status: 200 });
+      }
+      // Nothing attached yet after several checks — either still genuinely in flight (keep
+      // waiting) or the original claimant crashed before it could attach an order or release the
+      // key on failure. reclaimStaleIdempotencyKey only succeeds once the claim is old enough to
+      // be considered abandoned, so this can't steal a key from a request that's still running.
+      claimed = await reclaimStaleIdempotencyKey(idempotencyKey);
+    }
+    if (!claimed) {
+      return Response.json(
+        { error: "Your order is still being processed — please wait a moment and try again." },
+        { status: 409 },
+      );
+    }
+  }
+
   try {
     for (const line of lines) {
       const updated = await db
@@ -272,6 +306,7 @@ export async function POST(request: Request) {
 
       if (updated.length === 0) {
         await releaseReservedStock();
+        await releaseIdempotencyKey(idempotencyKey);
         return Response.json({ error: `${line.productName} does not have enough available stock.` }, { status: 409 });
       }
       reserved.push({ variantId: line.variantId, quantity: line.quantity });
@@ -294,6 +329,7 @@ export async function POST(request: Request) {
         .returning({ id: discountCodes.id });
       if (consumed.length === 0) {
         await releaseReservedStock();
+        await releaseIdempotencyKey(idempotencyKey);
         return Response.json({ error: "This coupon is no longer available. Please remove it and try again." }, { status: 409 });
       }
       await db.insert(discountRedemptions).values({ discountCodeId: appliedCouponId, orderId, amountDiscounted: discount });
@@ -351,11 +387,12 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     await releaseReservedStock();
+    await releaseIdempotencyKey(idempotencyKey);
     console.error("Order write failed", error);
     return Response.json({ error: "The order could not be placed. Please try again." }, { status: 500 });
   }
 
-  await recordIdempotencyKey(idempotencyKey, orderId);
+  await attachOrderToIdempotencyKey(idempotencyKey, orderId);
 
   try {
     await sendOrderEmails({

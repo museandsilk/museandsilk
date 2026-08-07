@@ -88,6 +88,78 @@ export async function releaseOrderReservation(
 }
 
 /**
+ * Converts a reservation into a permanent sale when an order is marked delivered — the only point
+ * in the order lifecycle where a unit actually leaves stock. Before this, reservedQuantity was the
+ * *only* thing that ever moved; stockQuantity itself was never touched by the order flow, so a unit
+ * delivered weeks ago looked identical, in the data, to one still held by an order in transit.
+ * Decrements both counters together so the reservation clears and the shelf count drops as one step
+ * (both floored at 0 so this can never run negative if it somehow fires twice for the same order).
+ */
+export async function fulfillOrderReservation(orderId: string, actorEmail: string, now: Date = new Date()): Promise<void> {
+  const items = await db
+    .select({ variantId: orderItems.variantId, quantity: orderItems.quantity })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId));
+
+  for (const item of items) {
+    if (!item.variantId) continue;
+    await db
+      .update(productVariants)
+      .set({
+        stockQuantity: sql`greatest(0, ${productVariants.stockQuantity} - ${item.quantity})`,
+        reservedQuantity: sql`greatest(0, ${productVariants.reservedQuantity} - ${item.quantity})`,
+        updatedAt: now,
+      })
+      .where(eq(productVariants.id, item.variantId));
+
+    await db.insert(inventoryMovements).values({
+      variantId: item.variantId,
+      type: "sale",
+      quantity: -item.quantity,
+      reason: "Order delivered",
+      referenceType: "order",
+      referenceId: orderId,
+      actorEmail,
+    });
+  }
+}
+
+/**
+ * Adds stock back after an order that already reached "delivered" is later returned — by that
+ * point the units were already permanently removed by fulfillOrderReservation, so a return means
+ * physical stock is back on the shelf, not just that a reservation can be released. Returns for an
+ * order that never made it past "shipped" go through releaseOrderReservation instead (see the
+ * admin status route), since nothing was ever permanently decremented for those.
+ */
+export async function restockReturnedOrder(orderId: string, actorEmail: string, now: Date = new Date()): Promise<void> {
+  const items = await db
+    .select({ variantId: orderItems.variantId, quantity: orderItems.quantity })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId));
+
+  for (const item of items) {
+    if (!item.variantId) continue;
+    await db
+      .update(productVariants)
+      .set({
+        stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}`,
+        updatedAt: now,
+      })
+      .where(eq(productVariants.id, item.variantId));
+
+    await db.insert(inventoryMovements).values({
+      variantId: item.variantId,
+      type: "restock",
+      quantity: item.quantity,
+      reason: "Order returned after delivery",
+      referenceType: "order",
+      referenceId: orderId,
+      actorEmail,
+    });
+  }
+}
+
+/**
  * Emails a "your order is waiting" nudge for orders still pending_confirmation whose reservation
  * expires within REMINDER_WINDOW_HOURS — the closest fit to a classic "abandoned cart" reminder
  * that this store's data model actually supports: since the cart itself is only ever kept in the
