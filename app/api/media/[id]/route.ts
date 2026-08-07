@@ -9,7 +9,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const cached = await matchEdgeCache(request);
-  if (cached) return cached;
+  if (cached) {
+    const debugged = new Response(cached.body, cached);
+    debugged.headers.set("X-Debug-Edge-Cache", "HIT");
+    return debugged;
+  }
 
   const { id } = await context.params;
   const requestedWidth = Number(new URL(request.url).searchParams.get("w"));
@@ -46,6 +50,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     headers: {
       "Content-Type": image.contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Debug-Edge-Cache": "MISS",
     },
   });
   await putEdgeCache(request, response.clone());
