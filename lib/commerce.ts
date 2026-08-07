@@ -24,6 +24,9 @@ export type CatalogImage = {
   sortOrder: number;
   isPrimary: boolean;
   blurDataUrl?: string;
+  /** Which variant this photo belongs to — undefined for a shared, product-level photo (visible
+   * regardless of which color/variant the shopper has selected). */
+  variantId?: string;
 };
 
 export type CatalogProduct = {
@@ -223,6 +226,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     db
       .select({
         id: productImages.id,
+        variantId: productImages.variantId,
         altText: productImages.altText,
         sortOrder: productImages.sortOrder,
         isPrimary: productImages.isPrimary,
@@ -255,6 +259,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     sortOrder: img.sortOrder,
     isPrimary: img.isPrimary,
     blurDataUrl: img.blurDataUrl ?? undefined,
+    variantId: img.variantId ?? undefined,
   }));
   const defaultVariant = variants.find((v) => v.isDefault) ?? variants[0];
 

@@ -15,28 +15,37 @@ export const dynamic = "force-dynamic";
 const genderEnum = z.enum(["female", "male", "unisex"]);
 const statusEnum = z.enum(["draft", "published", "archived"]);
 
+// Every optional text field below is `.nullable()` as well as `.optional()` — the admin form's
+// draft state mirrors what GET returned verbatim (see products-manager.tsx), and any field the
+// admin never touches stays exactly `null` for a product that had no value for it, not "". A
+// schema that only accepted `string | undefined` rejected the whole payload the moment a save
+// included even one field that was already empty from a previous creation (e.g. dimensions on a
+// product added via JSON import) — surfacing as a generic "Invalid product payload." on saves
+// that hadn't touched that field at all.
+const nullableString = z.string().nullable().optional();
+
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   slug: z.string().optional(),
   categoryId: z.string().uuid().optional(),
   typeLabel: z.string().min(1).optional(),
-  shortDescription: z.string().optional(),
-  description: z.string().optional(),
-  material: z.string().optional(),
-  dimensions: z.string().optional(),
-  careInstructions: z.string().optional(),
+  shortDescription: nullableString,
+  description: nullableString,
+  material: nullableString,
+  dimensions: nullableString,
+  careInstructions: nullableString,
   status: statusEnum.optional(),
   featured: z.boolean().optional(),
-  badge: z.string().optional(),
-  seoTitle: z.string().optional(),
-  seoDescription: z.string().optional(),
-  pattern: z.string().optional(),
-  primaryColour: z.string().optional(),
-  occasion: z.string().optional(),
-  style: z.string().optional(),
-  countryOfOrigin: z.string().optional(),
+  badge: nullableString,
+  seoTitle: nullableString,
+  seoDescription: nullableString,
+  pattern: nullableString,
+  primaryColour: nullableString,
+  occasion: nullableString,
+  style: nullableString,
+  countryOfOrigin: nullableString,
   gender: genderEnum.optional(),
-  googleProductCategory: z.string().optional(),
+  googleProductCategory: nullableString,
 });
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {

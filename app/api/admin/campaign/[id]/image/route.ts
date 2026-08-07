@@ -1,35 +1,32 @@
-import { asc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { campaignSlides } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { validateImageUpload } from "@/lib/validation";
-import { newObjectKey, putObject } from "@/lib/r2";
+import { newObjectKey, putObject, deleteObject } from "@/lib/r2";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { variantKeyFor } from "@/lib/image-variants";
 import { storeVariantsFromForm } from "@/lib/admin/campaign-images";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+/** Replaces an existing campaign slide's photo — the "New slide" form only ever creates a new
+ * slide, so this is the only way to change a slide's picture without deleting and recreating it.
+ * `file` (desktop) is always required; `mobileFile` is optional and only touches the separate
+ * mobile crop when provided, leaving it as-is otherwise. Text fields are untouched — those still
+ * go through the plain PATCH on /api/admin/campaign/[id]. */
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const admin = await getAdminUser();
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await context.params;
 
-  const rows = await db.select().from(campaignSlides).orderBy(asc(campaignSlides.sortOrder), asc(campaignSlides.createdAt));
-  return Response.json({
-    slides: rows.map((row) => ({ ...row, imageUrl: `/api/campaign-media/${row.id}` })),
-  });
-}
-
-export async function POST(request: Request) {
-  const admin = await getAdminUser();
-  if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const [existing] = await db.select().from(campaignSlides).where(eq(campaignSlides.id, id)).limit(1);
+  if (!existing) return Response.json({ error: "Campaign slide not found." }, { status: 404 });
 
   const form = await request.formData();
   const file = form.get("file");
   const altText = form.get("altText");
-  if (!(file instanceof File)) return Response.json({ error: "An image file is required." }, { status: 400 });
-  if (typeof altText !== "string" || !altText.trim()) {
-    return Response.json({ error: "Accessible image description is required." }, { status: 400 });
-  }
+  if (!(file instanceof File)) return Response.json({ error: "A desktop image file is required." }, { status: 400 });
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const contentType = file.type || "application/octet-stream";
@@ -38,12 +35,8 @@ export async function POST(request: Request) {
 
   const key = newObjectKey("campaign", contentType);
   await putObject(key, bytes, contentType);
-
-  // See app/api/admin/images/route.ts for why variants arrive pre-made from the browser rather
-  // than being generated here.
   const desktop = await storeVariantsFromForm(form, "", key);
 
-  // Optional separately cropped image for narrow viewports (see db/schema.ts's mobile* columns).
   const mobileFile = form.get("mobileFile");
   let mobileKey: string | undefined;
   let mobileContentType: string | undefined;
@@ -61,23 +54,15 @@ export async function POST(request: Request) {
     }
   }
 
-  const eyebrow = form.get("eyebrow");
-  const headline = form.get("headline");
-  const body = form.get("body");
-  const ctaLabel = form.get("ctaLabel");
-  const ctaHref = form.get("ctaHref");
-  const sortOrder = form.get("sortOrder");
-  const active = form.get("active");
-
   const [row] = await db
-    .insert(campaignSlides)
-    .values({
+    .update(campaignSlides)
+    .set({
       r2Key: key,
-      altText: altText.trim(),
       contentType,
       byteSize: bytes.byteLength,
       blurDataUrl: desktop.blurDataUrl,
       variantWidths: desktop.widths.length ? desktop.widths : undefined,
+      ...(typeof altText === "string" && altText.trim() ? { altText: altText.trim() } : {}),
       ...(mobileKey
         ? {
             mobileR2Key: mobileKey,
@@ -87,17 +72,27 @@ export async function POST(request: Request) {
             mobileVariantWidths: mobile.widths.length ? mobile.widths : undefined,
           }
         : {}),
-      ...(typeof eyebrow === "string" && eyebrow ? { eyebrow } : {}),
-      ...(typeof headline === "string" && headline ? { headline } : {}),
-      ...(typeof body === "string" && body ? { body } : {}),
-      ...(typeof ctaLabel === "string" && ctaLabel ? { ctaLabel } : {}),
-      ...(typeof ctaHref === "string" && ctaHref ? { ctaHref } : {}),
-      sortOrder: typeof sortOrder === "string" && sortOrder ? Number(sortOrder) : 0,
-      active: active === null ? true : active === "true" || active === "on",
+      updatedAt: new Date(),
     })
+    .where(eq(campaignSlides.id, id))
     .returning();
 
-  await auditLogEntry({ actorEmail: admin.email, action: "campaign.create", entityType: "campaign-slide", entityId: row.id });
+  // Old objects are only removed after the new ones are safely written and the row updated, so a
+  // failure partway through never leaves the slide without any image.
+  await deleteObject(existing.r2Key).catch(() => {});
+  if (existing.variantWidths?.length) {
+    await Promise.all(existing.variantWidths.map((w) => deleteObject(variantKeyFor(existing.r2Key, w)).catch(() => {})));
+  }
+  if (mobileKey && existing.mobileR2Key) {
+    await deleteObject(existing.mobileR2Key).catch(() => {});
+    if (existing.mobileVariantWidths?.length) {
+      await Promise.all(
+        existing.mobileVariantWidths.map((w) => deleteObject(variantKeyFor(existing.mobileR2Key as string, w)).catch(() => {})),
+      );
+    }
+  }
 
-  return Response.json({ slide: { ...row, imageUrl: `/api/campaign-media/${row.id}` } }, { status: 201 });
+  await auditLogEntry({ actorEmail: admin.email, action: "campaign.image.update", entityType: "campaign-slide", entityId: id });
+
+  return Response.json({ slide: { ...row, imageUrl: `/api/campaign-media/${row.id}` } });
 }

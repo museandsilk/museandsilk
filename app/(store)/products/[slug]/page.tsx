@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreHeader } from "../../_components/store-components";
-import { ProductPurchase } from "./product-purchase";
 import { getProductBySlug, getPublicSettings } from "@/lib/commerce";
 import { cropForCategory } from "@/lib/slug";
-import { ProductGallery } from "./product-gallery";
-import { BackButton } from "./back-button";
+import { ProductView } from "./product-view";
 
 export const revalidate = 300;
 
@@ -93,56 +90,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <section className="product-page">
-        <ProductGallery name={product.name} crop={crop} images={product.images} fallback={fallbackImage} />
-        <div className="product-buy">
-          <nav aria-label="Breadcrumb">
-            <BackButton />
-            <Link href="/">Home</Link>
-            <span>/</span>
-            <Link href={`/collections/${product.category}`}>{product.type}</Link>
-          </nav>
-          <p className="eyebrow">{product.type}</p>
-          <h1>{product.name}</h1>
-          <p className="product-price">
-            {product.compareAtPrice && product.compareAtPrice > product.price && (
-              <span className="product-price-compare">PKR {product.compareAtPrice.toLocaleString("en-PK")}</span>
-            )}
-            PKR {product.price.toLocaleString("en-PK")}
-          </p>
-          <p className="product-intro">
-            {product.shortDescription || "A composed study in line, texture and warm neutral color—designed to make even the simplest look feel intentional."}
-          </p>
-          <ProductPurchase product={product} />
-          <div className="product-accordions">
-            <details open>
-              <summary>
-                Details &amp; material <span>+</span>
-              </summary>
-              <p>{product.description || "Fine silk-touch construction with a softly luminous finish."}</p>
-            </details>
-            <details>
-              <summary>
-                Dimensions &amp; care <span>+</span>
-              </summary>
-              <p>
-                {product.dimensions ? `${product.dimensions}. ` : ""}
-                {product.careInstructions || "Store folded in the included pouch. Gentle specialist cleaning recommended."}
-              </p>
-            </details>
-            <details>
-              <summary>
-                Delivery &amp; returns <span>+</span>
-              </summary>
-              <p>
-                Nationwide delivery. Cash-on-delivery orders are reserved for {settings.codReservationHours} hours; bank-deposit orders for{" "}
-                {settings.bankReservationHours} hours. Final return eligibility appears before checkout.
-              </p>
-            </details>
-          </div>
-          <Link className="whatsapp-help" href="/contact">
-            Need help? Talk to us on WhatsApp <span>↗︎</span>
-          </Link>
-        </div>
+        <ProductView
+          product={product}
+          crop={crop}
+          fallback={fallbackImage}
+          codReservationHours={settings.codReservationHours}
+          bankReservationHours={settings.bankReservationHours}
+        />
       </section>
     </main>
   );

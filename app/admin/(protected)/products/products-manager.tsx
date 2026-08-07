@@ -73,6 +73,7 @@ type Variant = {
 type ProductImage = {
   id: string;
   productId: string;
+  variantId: string | null;
   altText: string;
   sortOrder: number;
   isPrimary: boolean;
@@ -1220,16 +1221,20 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                 <div>
                   <p className="eyebrow">Current gallery</p>
                   <div className="asset-grid">
-                    {images.map((image) => (
-                      <article key={image.id}>
-                        <div>
-                          <Image src={`/api/media/${image.id}`} alt={image.altText} fill sizes="100px" />
-                        </div>
-                        <small>{image.altText}</small>
-                        {image.isPrimary ? <strong>Main image</strong> : <button onClick={() => imageAction(image.id, "primary")}>Make main</button>}
-                        <button onClick={() => imageAction(image.id, "delete")}>Remove</button>
-                      </article>
-                    ))}
+                    {images.map((image) => {
+                      const owner = variants.find((v) => v.id === image.variantId);
+                      return (
+                        <article key={image.id}>
+                          <div>
+                            <Image src={`/api/media/${image.id}`} alt={image.altText} fill sizes="100px" />
+                          </div>
+                          <small>{image.altText}</small>
+                          <small className="asset-variant-tag">{owner ? owner.color : "Shared (all variants)"}</small>
+                          {image.isPrimary ? <strong>Main image</strong> : <button onClick={() => imageAction(image.id, "primary")}>Make main</button>}
+                          <button onClick={() => imageAction(image.id, "delete")}>Remove</button>
+                        </article>
+                      );
+                    })}
                   </div>
                 </div>
                 <form className="admin-media-form" onSubmit={uploadImage}>
@@ -1240,6 +1245,18 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                   <label>
                     <span>Image file</span>
                     <input required type="file" name="file" accept="image/jpeg,image/png,image/webp" />
+                  </label>
+                  <label>
+                    <span>Variant</span>
+                    <select name="variantId" defaultValue="">
+                      <option value="">Shared (all variants)</option>
+                      {variants.map((variant) => (
+                        <option key={variant.id} value={variant.id}>
+                          {variant.color}
+                          {variant.name && variant.name !== variant.color ? ` — ${variant.name}` : ""}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     <span>Image description (SEO &amp; accessibility)</span>

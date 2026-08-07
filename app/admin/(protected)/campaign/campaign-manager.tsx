@@ -53,6 +53,16 @@ export function CampaignManager() {
   const [mobileSlot, setMobileSlot] = useState<ImageSlot>(EMPTY_SLOT);
   const [cropTarget, setCropTarget] = useState<"desktop" | "mobile" | null>(null);
 
+  // Replacing an existing slide's photo — separate slot/crop state from the "new slide" form
+  // above so the two flows never clash, and so only one slide's inline uploader is open at once.
+  const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
+  const [editDesktopSlot, setEditDesktopSlot] = useState<ImageSlot>(EMPTY_SLOT);
+  const [editMobileSlot, setEditMobileSlot] = useState<ImageSlot>(EMPTY_SLOT);
+  const [editCropTarget, setEditCropTarget] = useState<"desktop" | "mobile" | null>(null);
+  const [imageBusyId, setImageBusyId] = useState<string | null>(null);
+  const [editAltText, setEditAltText] = useState("");
+  const [textBusyId, setTextBusyId] = useState<string | null>(null);
+
   async function refresh() {
     const response = await fetch("/api/admin/campaign", { cache: "no-store" });
     if (response.ok) setSlides((await response.json()).slides);
@@ -136,23 +146,96 @@ export function CampaignManager() {
 
   async function saveSlide(event: FormEvent<HTMLFormElement>, id: string) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const body = {
-      eyebrow: form.get("eyebrow"),
-      headline: form.get("headline"),
-      body: form.get("body"),
-      ctaLabel: form.get("ctaLabel"),
-      ctaHref: form.get("ctaHref"),
-      sortOrder: form.get("sortOrder"),
-      active: form.get("active") === "on",
-    };
-    const response = await fetch(`/api/admin/campaign/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    setMessage(response.ok ? "Slide updated." : "Slide could not be updated.");
-    if (response.ok) await refresh();
+    setTextBusyId(id);
+    try {
+      const form = new FormData(event.currentTarget);
+      const body = {
+        eyebrow: form.get("eyebrow"),
+        headline: form.get("headline"),
+        body: form.get("body"),
+        ctaLabel: form.get("ctaLabel"),
+        ctaHref: form.get("ctaHref"),
+        sortOrder: form.get("sortOrder"),
+        active: form.get("active") === "on",
+      };
+      const response = await fetch(`/api/admin/campaign/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json().catch(() => ({}));
+      setMessage(response.ok ? "Slide updated." : (result.error ?? "Slide could not be updated."));
+      if (response.ok) await refresh();
+    } catch (error) {
+      console.error("saveSlide failed", error);
+      setMessage("Something went wrong saving the slide — check your connection and try again.");
+    } finally {
+      setTextBusyId(null);
+    }
+  }
+
+  function startImageEdit(slide: Slide) {
+    setEditingSlideId(slide.id);
+    setEditDesktopSlot(EMPTY_SLOT);
+    setEditMobileSlot(EMPTY_SLOT);
+    setEditAltText(slide.altText);
+  }
+
+  function cancelImageEdit() {
+    setEditingSlideId(null);
+    setEditDesktopSlot(EMPTY_SLOT);
+    setEditMobileSlot(EMPTY_SLOT);
+  }
+
+  function pickEditFile(target: "desktop" | "mobile", file: File | null) {
+    if (!file) return;
+    (target === "desktop" ? setEditDesktopSlot : setEditMobileSlot)({ file, crop: null, previewUrl: null });
+    setEditCropTarget(target);
+  }
+
+  async function confirmEditCrop(crop: PixelCrop) {
+    const target = editCropTarget;
+    setEditCropTarget(null);
+    if (!target) return;
+    const setSlot = target === "desktop" ? setEditDesktopSlot : setEditMobileSlot;
+    setSlot((slot) => (slot.file ? { ...slot, crop } : slot));
+    const file = target === "desktop" ? editDesktopSlot.file : editMobileSlot.file;
+    if (!file) return;
+    try {
+      const previewUrl = await makePreview(file, crop);
+      setSlot((slot) => ({ ...slot, previewUrl }));
+    } catch {
+      // Preview is a nicety only — the stored crop rect is what actually matters at upload time.
+    }
+  }
+
+  async function saveSlideImage(slideId: string) {
+    if (!editDesktopSlot.file || !editDesktopSlot.crop) {
+      setMessage("Choose and crop a new desktop image first.");
+      return;
+    }
+    setImageBusyId(slideId);
+    setMessage("Processing image…");
+    try {
+      const form = new FormData();
+      if (editAltText.trim()) form.set("altText", editAltText.trim());
+      await processSlot(editDesktopSlot, "", form);
+      if (editMobileSlot.file && editMobileSlot.crop) await processSlot(editMobileSlot, "mobile", form);
+
+      setMessage("Uploading…");
+      const response = await fetch(`/api/admin/campaign/${slideId}/image`, { method: "POST", body: form });
+      const result = await response.json().catch(() => ({}));
+      setMessage(response.ok ? "Slide photo updated." : (result.error ?? "Photo could not be updated."));
+      if (response.ok) {
+        cancelImageEdit();
+        await refresh();
+      }
+    } catch (error) {
+      console.error("saveSlideImage failed", error);
+      setMessage("Something went wrong updating the photo — check your connection and try again.");
+    } finally {
+      setImageBusyId(null);
+    }
   }
 
   async function remove(id: string) {
@@ -216,9 +299,78 @@ export function CampaignManager() {
                       <input type="checkbox" name="active" defaultChecked={slide.active} />
                       <span>Active</span>
                     </label>
-                    <button className="admin-primary">Save slide</button>
+                    <button className="admin-primary" disabled={textBusyId === slide.id}>
+                      {textBusyId === slide.id ? "Saving…" : "Save slide"}
+                    </button>
                   </form>
-                  <button onClick={() => remove(slide.id)}>Remove slide</button>
+                  <div className="campaign-slide-actions">
+                    {editingSlideId === slide.id ? (
+                      <button type="button" onClick={cancelImageEdit}>
+                        Cancel photo change
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => startImageEdit(slide)}>
+                        Replace photo
+                      </button>
+                    )}
+                    <button onClick={() => remove(slide.id)}>Remove slide</button>
+                  </div>
+
+                  {editingSlideId === slide.id && (
+                    <div className="campaign-image-slots campaign-image-slots-inline">
+                      <div className="campaign-image-slot">
+                        <span>New desktop image (16:9, required)</span>
+                        {editDesktopSlot.previewUrl ? (
+                          <div className="campaign-slot-preview">
+                            <Image src={editDesktopSlot.previewUrl} alt="" fill unoptimized sizes="220px" />
+                          </div>
+                        ) : (
+                          <div className="campaign-slot-empty">No crop set yet</div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(event) => pickEditFile("desktop", event.target.files?.[0] ?? null)}
+                        />
+                        {editDesktopSlot.file && !editDesktopSlot.crop && (
+                          <small>Choose &ldquo;Use this crop&rdquo; in the popup to confirm framing.</small>
+                        )}
+                      </div>
+                      <div className="campaign-image-slot">
+                        <span>New mobile image (9:16, optional)</span>
+                        {editMobileSlot.previewUrl ? (
+                          <div className="campaign-slot-preview campaign-slot-preview-tall">
+                            <Image src={editMobileSlot.previewUrl} alt="" fill unoptimized sizes="140px" />
+                          </div>
+                        ) : (
+                          <div className="campaign-slot-empty campaign-slot-empty-tall">No crop set yet</div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(event) => pickEditFile("mobile", event.target.files?.[0] ?? null)}
+                        />
+                      </div>
+                      <label className="field-wide">
+                        <span>Accessible image description</span>
+                        <input value={editAltText} onChange={(event) => setEditAltText(event.target.value)} />
+                      </label>
+                      <button
+                        type="button"
+                        className="admin-primary"
+                        disabled={imageBusyId === slide.id}
+                        onClick={() => saveSlideImage(slide.id)}
+                      >
+                        {imageBusyId === slide.id ? (
+                          <span className="busy-label">
+                            <span className="spinner spinner-light" aria-hidden="true" /> {message || "Uploading…"}
+                          </span>
+                        ) : (
+                          "Save new photo"
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </section>
               </article>
             ))
@@ -315,6 +467,15 @@ export function CampaignManager() {
           label={cropTarget === "desktop" ? "Crop desktop image (16:9)" : "Crop mobile image (9:16)"}
           onConfirm={confirmCrop}
           onCancel={() => setCropTarget(null)}
+        />
+      )}
+      {editCropTarget && (editCropTarget === "desktop" ? editDesktopSlot.file : editMobileSlot.file) && (
+        <ImageCropper
+          file={(editCropTarget === "desktop" ? editDesktopSlot.file : editMobileSlot.file) as File}
+          aspect={editCropTarget === "desktop" ? DESKTOP_ASPECT : MOBILE_ASPECT}
+          label={editCropTarget === "desktop" ? "Crop desktop image (16:9)" : "Crop mobile image (9:16)"}
+          onConfirm={confirmEditCrop}
+          onCancel={() => setEditCropTarget(null)}
         />
       )}
     </section>
