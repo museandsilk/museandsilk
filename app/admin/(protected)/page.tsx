@@ -52,7 +52,7 @@ export default async function AdminDashboardPage() {
           <h1>Dashboard</h1>
         </div>
         <div className="admin-top-actions">
-          <Link href="/" target="_blank">
+          <Link href="/" target="_blank" rel="noopener noreferrer">
             View store ↗︎
           </Link>
           <Link href="/admin/products">Manage products</Link>

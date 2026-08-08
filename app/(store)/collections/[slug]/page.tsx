@@ -5,6 +5,7 @@ import { StoreFooter } from "../../_components/store-footer";
 import { ShopGrid } from "../../shop/shop-grid";
 import { getActiveCategories, getCatalogProducts, getCollectionBySlug } from "@/lib/commerce";
 import { buildSrcSet } from "@/lib/images";
+import { getNonce } from "@/lib/nonce";
 
 const names: Record<string, string> = { scarves: "Scarves", bandanas: "Bandanas", glasses: "Eyewear", eyewear: "Eyewear" };
 
@@ -27,6 +28,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const normalized = slug === "eyewear" ? "glasses" : slug;
   const [catalog, allCategories] = await Promise.all([getCatalogProducts(), getActiveCategories()]);
+  const nonce = getNonce();
   const custom = names[slug] ? null : await getCollectionBySlug(slug);
 
   if (!names[slug] && !custom) notFound();
@@ -47,7 +49,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   return (
     <main className="page-fade-in">
       <StoreHeader theme="dark" />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <section className={`collection-hero collection-${normalized}`}>
         {(() => {
           // Mobile gets the same tall 3:4 crop as the homepage card — the wide hero crop is

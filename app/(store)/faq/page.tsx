@@ -3,6 +3,7 @@ import Link from "next/link";
 import { StoreHeader } from "../_components/store-components";
 import { StoreFooter } from "../_components/store-footer";
 import { getPublicSettings } from "@/lib/commerce";
+import { getNonce } from "@/lib/nonce";
 
 export const revalidate = 300;
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 
 export default async function FaqPage() {
   const settings = await getPublicSettings();
+  const nonce = getNonce();
   const threshold = settings.freeDeliveryThreshold.toLocaleString("en-PK");
 
   const faqs: [string, string][] = [
@@ -64,7 +66,7 @@ export default async function FaqPage() {
   return (
     <main>
       <StoreHeader />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="content-page">
         <header>
           <p className="eyebrow">Customer care</p>

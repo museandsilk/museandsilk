@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { StoreHeader } from "../../_components/store-components";
 import { getProductBySlug, getPublicSettings } from "@/lib/commerce";
+import { getNonce } from "@/lib/nonce";
 import { cropForCategory } from "@/lib/slug";
 import { ProductView } from "./product-view";
 
@@ -25,6 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const [product, settings] = await Promise.all([getProductBySlug(slug), getPublicSettings()]);
+  const nonce = getNonce();
   if (!product) notFound();
 
   const crop = cropForCategory(product.category);
@@ -87,8 +89,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   return (
     <main className="page-fade-in">
       <StoreHeader />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <section className="product-page">
         <ProductView
           product={product}

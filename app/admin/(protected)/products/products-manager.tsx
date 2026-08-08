@@ -766,7 +766,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
           <h1>Products</h1>
         </div>
         <div className="admin-top-actions">
-          <Link href="/" target="_blank">
+          <Link href="/" target="_blank" rel="noopener noreferrer">
             View store ↗︎
           </Link>
           {downloadChoiceOpen ? (

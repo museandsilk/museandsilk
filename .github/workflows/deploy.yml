@@ -44,6 +44,7 @@ jobs:
           echo "${{ secrets.CRON_SECRET }}" | npx wrangler secret put CRON_SECRET
           echo "${{ secrets.GROQ_API_KEY }}" | npx wrangler secret put GROQ_API_KEY
           echo "${{ secrets.TURNSTILE_SECRET_KEY }}" | npx wrangler secret put TURNSTILE_SECRET_KEY
+          echo "${{ secrets.CSP_NONCE }}" | npx wrangler secret put CSP_NONCE
 
       # NEXT_PUBLIC_* vars must be present at build time — they get inlined into client bundles.
       - name: Build

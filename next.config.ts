@@ -1,32 +1,14 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV !== "production";
-
+// Content-Security-Policy and Strict-Transport-Security are set in middleware.ts instead — CSP
+// needs a fresh per-request nonce (so inline scripts can be nonce'd instead of relying on
+// 'unsafe-inline' alone) and HSTS only makes sense alongside the HTTP->HTTPS redirect middleware
+// also owns, so both live together there rather than split across two places.
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-  {
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      // blob: is required for the admin campaign-image cropper, which previews the picked file
-      // via URL.createObjectURL() entirely client-side before anything is uploaded.
-      "img-src 'self' data: blob: https:",
-      // 'unsafe-eval' is required by React Fast Refresh in dev only — never present in production.
-      // static.cloudflareinsights.com is Cloudflare's own Web Analytics beacon, auto-injected into
-      // every response by the zone itself (not something this app adds) — without it allowlisted
-      // here, the browser silently blocks it and logs a CSP violation on every page load.
-      `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com https://challenges.cloudflare.com`,
-      "style-src 'self' 'unsafe-inline'",
-      "font-src 'self' data:",
-      `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com`,
-      // Turnstile's checkout widget renders inside an iframe served from challenges.cloudflare.com.
-      "frame-src https://challenges.cloudflare.com",
-      "frame-ancestors 'none'",
-    ].join("; "),
-  },
 ];
 
 const nextConfig: NextConfig = {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Instrument_Serif, Manrope } from "next/font/google";
 import "./globals.css";
 import { getPublicSettings } from "@/lib/commerce";
+import { getNonce } from "@/lib/nonce";
 import { AnalyticsConsent } from "./analytics-consent";
 
 const instrumentSerif = Instrument_Serif({
@@ -51,6 +52,7 @@ export function generateMetadata(): Metadata {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const settings = await getPublicSettings();
+  const nonce = getNonce();
   const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
 
   const jsonLd = {
@@ -84,11 +86,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en" className={`${instrumentSerif.variable} ${manrope.variable}`}>
       <head>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+        <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </head>
       <body>
         {children}
-        <AnalyticsConsent metaPixelId={settings.metaPixelId} gaMeasurementId={settings.gaMeasurementId} />
+        <AnalyticsConsent metaPixelId={settings.metaPixelId} gaMeasurementId={settings.gaMeasurementId} nonce={nonce} />
       </body>
     </html>
   );
