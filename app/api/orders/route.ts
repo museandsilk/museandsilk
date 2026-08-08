@@ -14,6 +14,7 @@ import {
   siteSettings,
 } from "@/db/schema";
 import { sendOrderEmails } from "@/lib/email/resend";
+import { sendOrderConfirmationWhatsApp, toWhatsAppPhone } from "@/lib/whatsapp";
 import {
   attachOrderToIdempotencyKey,
   claimIdempotencyKey,
@@ -413,6 +414,20 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("sendOrderEmails failed", error);
+  }
+
+  try {
+    const whatsappMessageId = await sendOrderConfirmationWhatsApp({
+      toPhone: toWhatsAppPhone(customerPhone),
+      customerName,
+      orderNumber,
+      total,
+    });
+    if (whatsappMessageId) {
+      await db.update(orders).set({ whatsappMessageId }).where(eq(orders.id, orderId));
+    }
+  } catch (error) {
+    console.error("sendOrderConfirmationWhatsApp failed", error);
   }
 
   return Response.json(

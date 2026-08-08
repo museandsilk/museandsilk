@@ -45,6 +45,11 @@ jobs:
           echo "${{ secrets.GROQ_API_KEY }}" | npx wrangler secret put GROQ_API_KEY
           echo "${{ secrets.TURNSTILE_SECRET_KEY }}" | npx wrangler secret put TURNSTILE_SECRET_KEY
           echo "${{ secrets.CSP_NONCE }}" | npx wrangler secret put CSP_NONCE
+          echo "${{ secrets.WHATSAPP_ACCESS_TOKEN }}" | npx wrangler secret put WHATSAPP_ACCESS_TOKEN
+          echo "${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}" | npx wrangler secret put WHATSAPP_PHONE_NUMBER_ID
+          echo "${{ secrets.WHATSAPP_APP_SECRET }}" | npx wrangler secret put WHATSAPP_APP_SECRET
+          echo "${{ secrets.WHATSAPP_TEMPLATE_NAME }}" | npx wrangler secret put WHATSAPP_TEMPLATE_NAME
+          echo "${{ secrets.WHATSAPP_WEBHOOK_VERIFY_TOKEN }}" | npx wrangler secret put WHATSAPP_WEBHOOK_VERIFY_TOKEN
 
       # NEXT_PUBLIC_* vars must be present at build time — they get inlined into client bundles.
       - name: Build

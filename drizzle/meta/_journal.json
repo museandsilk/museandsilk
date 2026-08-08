@@ -78,6 +78,13 @@
       "when": 1786115385684,
       "tag": "0010_clammy_wallow",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786191702697,
+      "tag": "0011_round_nomad",
+      "breakpoints": true
     }
   ]
 }

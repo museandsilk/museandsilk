@@ -245,6 +245,12 @@ export const orders = pgTable("orders", {
   // twice for the same order (see lib/orders.ts's sendReservationReminders).
   reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
   notes: text("notes"),
+  // The WhatsApp message ID returned when the order-confirmation template (with Confirm/Cancel
+  // buttons) was sent — see lib/whatsapp.ts and app/api/whatsapp/webhook/route.ts. When the
+  // customer taps a button, Meta's webhook payload includes `context.id`, the ID of the message
+  // being replied to; matching it against this column is how a button tap gets connected back to
+  // the specific order, since WhatsApp doesn't otherwise carry our own order ID in the reply.
+  whatsappMessageId: text("whatsapp_message_id"),
   ...timestamps,
 }, (table) => [
   index("orders_phone_idx").on(table.customerPhone),
