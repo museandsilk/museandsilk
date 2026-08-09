@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orderItems, orderStatusHistory, orders } from "@/db/schema";
 import { cleanPhone } from "@/lib/slug";
+import { toWhatsAppPhone } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,12 @@ export async function POST(request: Request) {
 
   // Don't leak whether the order number exists to a phone number that doesn't match it: always
   // return the same 404 whether the order is missing or the phone simply doesn't match.
-  if (!order || order.customerPhone !== phone) {
+  //
+  // Compared via toWhatsAppPhone's canonical digits-only form rather than raw string equality —
+  // checkout accepts free-text phone entry ("0300...", "+92300...", "92300..."), and a customer
+  // isn't guaranteed to type it the same way twice. A raw-string match would silently fail to find
+  // a real order any time the two entries used different (but equivalent) formats.
+  if (!order || toWhatsAppPhone(order.customerPhone) !== toWhatsAppPhone(phone)) {
     return Response.json({ error: "No matching order was found." }, { status: 404 });
   }
 
