@@ -133,21 +133,22 @@ export async function POST(request: Request) {
   const couponCode = String(body.couponCode ?? "").trim().toUpperCase() || null;
   const items: CheckoutItem[] = Array.isArray(body.items) ? (body.items as CheckoutItem[]) : [];
 
-  if (
-    !customerName ||
-    customerPhone.replace(/\D/g, "").length < 10 ||
-    !customerEmail ||
-    !city ||
-    !province ||
-    !address ||
-    !zoneId ||
-    !paymentMethod
-  ) {
+  const hasValidPhone = customerPhone.replace(/\D/g, "").length >= 10;
+
+  if (!customerName || !city || !province || !address || !zoneId || !paymentMethod) {
     return Response.json({ error: "Complete all required details before placing the order." }, { status: 400 });
   }
+  if (!hasValidPhone && !customerEmail) {
+    return Response.json({ error: "Enter your phone number or email so we can reach you." }, { status: 400 });
+  }
 
-  if (!otpToken || !(await isOtpTokenValid(customerEmail, otpToken))) {
-    return Response.json({ error: "Please verify your email before placing the order." }, { status: 400 });
+  // A valid phone number is enough on its own to place an order — email OTP verification is only
+  // required when email is the *sole* contact method given (see checkout/page.tsx's matching
+  // emailOtpRequired logic and its "enter your WhatsApp number instead" popup).
+  if (!hasValidPhone) {
+    if (!otpToken || !customerEmail || !(await isOtpTokenValid(customerEmail, otpToken))) {
+      return Response.json({ error: "Please verify your email before placing the order." }, { status: 400 });
+    }
   }
   if (!items.length || items.length > 20) {
     return Response.json({ error: "Your bag must contain between 1 and 20 items." }, { status: 400 });
@@ -416,18 +417,20 @@ export async function POST(request: Request) {
     console.error("sendOrderEmails failed", error);
   }
 
-  try {
-    const whatsappMessageId = await sendOrderConfirmationWhatsApp({
-      toPhone: toWhatsAppPhone(customerPhone),
-      customerName,
-      orderNumber,
-      total,
-    });
-    if (whatsappMessageId) {
-      await db.update(orders).set({ whatsappMessageId }).where(eq(orders.id, orderId));
+  if (hasValidPhone) {
+    try {
+      const whatsappMessageId = await sendOrderConfirmationWhatsApp({
+        toPhone: toWhatsAppPhone(customerPhone),
+        customerName,
+        orderNumber,
+        total,
+      });
+      if (whatsappMessageId) {
+        await db.update(orders).set({ whatsappMessageId }).where(eq(orders.id, orderId));
+      }
+    } catch (error) {
+      console.error("sendOrderConfirmationWhatsApp failed", error);
     }
-  } catch (error) {
-    console.error("sendOrderConfirmationWhatsApp failed", error);
   }
 
   return Response.json(

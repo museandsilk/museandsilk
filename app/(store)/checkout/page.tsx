@@ -60,10 +60,13 @@ export default function CheckoutPage() {
   const [couponError, setCouponError] = useState("");
   const [couponBusy, setCouponBusy] = useState(false);
 
-  // Email verification gate — see /api/checkout/request-otp and /api/checkout/verify-otp. The
-  // order can't be placed until otpToken is set; editing the email after verifying clears it so a
-  // switched-in address can't ride on a code that was sent to a different one.
+  // Email verification gate — see /api/checkout/request-otp and /api/checkout/verify-otp. A
+  // verified phone number skips this entirely (see phoneValid below); OTP is only required when
+  // email is the *only* contact method given. The order can't be placed until otpToken is set in
+  // that case; editing the email after verifying clears it so a switched-in address can't ride on
+  // a code that was sent to a different one.
   const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
@@ -71,6 +74,8 @@ export default function CheckoutPage() {
   const [otpBusy, setOtpBusy] = useState(false);
   const [otpMessage, setOtpMessage] = useState("");
   const [otpCooldown, setOtpCooldown] = useState(0);
+  const [showPhonePopup, setShowPhonePopup] = useState(false);
+  const [phonePopupDismissed, setPhonePopupDismissed] = useState(false);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -85,6 +90,25 @@ export default function CheckoutPage() {
   }, []);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail);
+  const phoneValid = customerPhone.replace(/\D/g, "").length >= 10;
+  // Email OTP is only required when email is the sole contact method — a valid phone number skips
+  // it entirely, whether or not an email was also given.
+  const emailOtpRequired = emailValid && !phoneValid;
+  const canPlaceOrder = phoneValid || (emailValid && Boolean(otpToken));
+
+  // Nudge once toward the faster path (phone, no OTP) right as it becomes clear OTP would
+  // otherwise be needed. Only fires the first time; dismissing it (or later adding a phone number)
+  // never re-opens it for this checkout attempt.
+  useEffect(() => {
+    if (emailOtpRequired && !phonePopupDismissed && !otpToken) {
+      setShowPhonePopup(true);
+    }
+  }, [emailOtpRequired, phonePopupDismissed, otpToken]);
+
+  function dismissPhonePopup() {
+    setShowPhonePopup(false);
+    setPhonePopupDismissed(true);
+  }
 
   async function requestOtp() {
     if (!emailValid || otpBusy || (TURNSTILE_SITE_KEY && !turnstileToken)) return;
@@ -210,7 +234,11 @@ export default function CheckoutPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!otpToken) {
+    if (!phoneValid && !emailValid) {
+      setError("Enter your phone number or email so we can reach you.");
+      return;
+    }
+    if (!canPlaceOrder) {
       setError("Verify your email before placing the order.");
       return;
     }
@@ -345,13 +373,18 @@ export default function CheckoutPage() {
                     <input required name="customerName" autoComplete="name" />
                   </label>
                   <label>
-                    <span>Phone / WhatsApp *</span>
-                    <input required name="customerPhone" autoComplete="tel" placeholder="+923001234567" />
+                    <span>Phone / WhatsApp {!emailValid && "*"}</span>
+                    <input
+                      name="customerPhone"
+                      autoComplete="tel"
+                      placeholder="+923001234567"
+                      value={customerPhone}
+                      onChange={(event) => setCustomerPhone(event.target.value)}
+                    />
                   </label>
                   <label className="field-wide">
-                    <span>Email *</span>
+                    <span>Email {!phoneValid && "*"}</span>
                     <input
-                      required
                       type="email"
                       name="customerEmail"
                       autoComplete="email"
@@ -360,6 +393,8 @@ export default function CheckoutPage() {
                       readOnly={Boolean(otpToken)}
                     />
                   </label>
+                  <small className="field-wide checkout-contact-hint">Enter your phone number or email — at least one is required.</small>
+                  {emailOtpRequired && (
                   <div className="field-wide checkout-otp">
                     {TURNSTILE_SITE_KEY && !otpToken && (
                       <>
@@ -412,6 +447,7 @@ export default function CheckoutPage() {
                     )}
                     {otpMessage && <p className="checkout-otp-message">{otpMessage}</p>}
                   </div>
+                  )}
                 </div>
               </fieldset>
               <fieldset>
@@ -565,7 +601,7 @@ export default function CheckoutPage() {
                 </p>
               </div>
               {error && <p className="checkout-error">{error}</p>}
-              <button className="add-button" disabled={busy || !zoneId || !otpToken}>
+              <button className="add-button" disabled={busy || !zoneId || !canPlaceOrder}>
                 {busy ? (
                   <span className="busy-label">
                     <span className="spinner spinner-light" aria-hidden="true" /> Placing order…
@@ -575,13 +611,40 @@ export default function CheckoutPage() {
                 )}
                 <span>→︎</span>
               </button>
-              {!otpToken && <small className="checkout-otp-hint">Verify your email above to place the order.</small>}
+              {!canPlaceOrder && (
+                <small className="checkout-otp-hint">
+                  {emailValid ? "Verify your email above to place the order." : "Enter your phone number or email to place the order."}
+                </small>
+              )}
               <small>
                 By placing the order, you agree to the store terms and reservation policy. Not the right fit?{" "}
                 <Link href="/policies/returns">See our return policy</Link>.
               </small>
             </aside>
           </form>
+        )}
+        {showPhonePopup && (
+          <div className="phone-otp-popup" role="dialog" aria-modal="true" aria-label="Skip email verification">
+            <div className="phone-otp-popup-card">
+              <button type="button" className="phone-otp-popup-close" aria-label="Close" onClick={dismissPhonePopup}>
+                ×
+              </button>
+              <p className="phone-otp-popup-title">Skip email verification</p>
+              <p>Enter your WhatsApp number to avoid email OTP verification.</p>
+              <input
+                value={customerPhone}
+                onChange={(event) => setCustomerPhone(event.target.value)}
+                placeholder="+923001234567"
+                autoFocus
+              />
+              <button type="button" className="button button-dark" disabled={!phoneValid} onClick={dismissPhonePopup}>
+                Use this number
+              </button>
+              <button type="button" className="text-link" onClick={dismissPhonePopup}>
+                Continue with email verification instead
+              </button>
+            </div>
+          </div>
         )}
       </section>
     </main>
