@@ -159,6 +159,18 @@ export default function CheckoutPage() {
     }
   }
 
+  // Browser autofill sets an input's DOM value directly without reliably firing React's onChange
+  // (a known Chrome/webkit gap), so a customer whose browser autofills phone/address never updates
+  // this component's state — phoneValid silently stays false even though the field visibly shows a
+  // number, breaking both the OTP-skip popup and the submit gate. Autofilled fields get a
+  // detectable CSS animation (see .checkout-fields input:-webkit-autofill in globals.css); this
+  // catches that and syncs state from the real DOM value the moment it fires.
+  function onAutofill(setter: (value: string) => void) {
+    return (event: React.AnimationEvent<HTMLInputElement>) => {
+      if (event.animationName === "onAutoFillStart") setter(event.currentTarget.value);
+    };
+  }
+
   function onEmailChange(value: string) {
     setCustomerEmail(value);
     if (otpToken || otpSent) {
@@ -234,17 +246,23 @@ export default function CheckoutPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!phoneValid && !emailValid) {
+    const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
+    // Re-derive from the form's actual current values rather than trusting React state alone here
+    // — the autofill-detection fix above (onAutofill/:-webkit-autofill) covers the normal case, but
+    // FormData always reflects what's really in the DOM regardless of whether that fired, so this
+    // is the backstop that keeps a real, filled-in phone number from ever being wrongly blocked.
+    const formPhoneValid = (values.customerPhone ?? "").replace(/\D/g, "").length >= 10;
+    const formEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.customerEmail ?? "");
+    if (!formPhoneValid && !formEmailValid) {
       setError("Enter your phone number or email so we can reach you.");
       return;
     }
-    if (!canPlaceOrder) {
+    if (!formPhoneValid && !(formEmailValid && otpToken)) {
       setError("Verify your email before placing the order.");
       return;
     }
     setBusy(true);
     setError("");
-    const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
     try {
       const response = await fetch("/api/orders", {
         method: "POST",
@@ -380,6 +398,7 @@ export default function CheckoutPage() {
                       placeholder="+923001234567"
                       value={customerPhone}
                       onChange={(event) => setCustomerPhone(event.target.value)}
+                      onAnimationStart={onAutofill(setCustomerPhone)}
                     />
                   </label>
                   <label className="field-wide">
@@ -390,6 +409,7 @@ export default function CheckoutPage() {
                       autoComplete="email"
                       value={customerEmail}
                       onChange={(event) => onEmailChange(event.target.value)}
+                      onAnimationStart={onAutofill(onEmailChange)}
                       readOnly={Boolean(otpToken)}
                     />
                   </label>
