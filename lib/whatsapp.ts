@@ -49,10 +49,13 @@ export async function sendOrderConfirmationWhatsApp(params: {
           components: [
             {
               type: "body",
+              // The approved template uses named variables ({{customer_name}}, {{order_id}},
+              // {{order_amount}}), not positional ({{1}}, {{2}}, {{3}}) — named-variable templates
+              // require each parameter to carry a matching parameter_name, or Meta rejects the send.
               parameters: [
-                { type: "text", text: params.customerName },
-                { type: "text", text: params.orderNumber },
-                { type: "text", text: `PKR ${params.total.toLocaleString("en-PK")}` },
+                { type: "text", parameter_name: "customer_name", text: params.customerName },
+                { type: "text", parameter_name: "order_id", text: params.orderNumber },
+                { type: "text", parameter_name: "order_amount", text: `PKR ${params.total.toLocaleString("en-PK")}` },
               ],
             },
           ],

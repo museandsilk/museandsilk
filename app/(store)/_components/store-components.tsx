@@ -66,13 +66,13 @@ export function StoreHeader({ theme = "light" }: { theme?: "dark" | "light" }) {
       </div>
       <header className={`header ${theme === "light" ? "header-light" : ""}`}>
         <button className="mobile-menu-button" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><i /><i /></button>
-        <nav className="main-nav" aria-label="Primary navigation"><Link href="/shop">New</Link><Link href="/collections/scarves">Scarves</Link><Link href="/collections/bandanas">Bandanas</Link><Link href="/collections/glasses">Eyewear</Link><Link href="/journal">The edit</Link></nav>
+        <nav className="main-nav" aria-label="Primary navigation"><Link href="/">Home</Link><Link href="/shop">New</Link><Link href="/collections/scarves">Scarves</Link><Link href="/collections/bandanas">Bandanas</Link><Link href="/collections/glasses">Eyewear</Link></nav>
         <Link href="/" className="wordmark" aria-label="Muse and Silk, home">MUSE <i>&amp;</i> SILK</Link>
         <nav className="utility-nav" aria-label="Store tools"><button onClick={() => setSearchOpen(true)}>Search</button><Link href="/track-order">Track</Link><Link href="/cart" className="bag-link">Bag <span>{bagCount}</span></Link></nav>
       </header>
       <div className={`menu-panel ${menuOpen ? "is-open" : ""}`} aria-hidden={!menuOpen}>
         <div className="panel-top"><span className="wordmark">MUSE <i>&amp;</i> SILK</span><button onClick={() => setMenuOpen(false)} aria-label="Close menu">×</button></div>
-        <nav>{[["New arrivals","/shop"],["Scarves","/collections/scarves"],["Bandanas","/collections/bandanas"],["Eyewear","/collections/glasses"],["The edit","/journal"],["Our story","/about"]].map(([label, href], index) => <Link href={href} key={href} onClick={() => setMenuOpen(false)}><span>0{index+1}</span>{label}<b aria-hidden="true">↗︎</b></Link>)}</nav>
+        <nav>{[["Home","/"],["New arrivals","/shop"],["Scarves","/collections/scarves"],["Bandanas","/collections/bandanas"],["Eyewear","/collections/glasses"],["Our story","/about"]].map(([label, href], index) => <Link href={href} key={href} onClick={() => setMenuOpen(false)}><span>0{index+1}</span>{label}<b aria-hidden="true">↗︎</b></Link>)}</nav>
         <div className="menu-panel-footer"><Link href="/track-order">Track an order</Link><Link href="/contact">WhatsApp</Link><span>PKR · Pakistan</span></div>
       </div>
       <div className={`search-panel ${searchOpen ? "is-open" : ""}`} aria-hidden={!searchOpen}>

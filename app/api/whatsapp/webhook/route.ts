@@ -74,8 +74,19 @@ export async function POST(request: Request) {
   return new Response("OK", { status: 200 });
 }
 
+// The order_confirmation template's Quick Reply buttons were created without a custom payload
+// field (Meta's basic template editor doesn't expose one), so WhatsApp echoes back the button's
+// visible label text as the payload instead of a distinct code. Matched case-insensitively since
+// that label is free text, not a stable identifier.
+function statusForButtonPayload(buttonPayload: string): "confirmed" | "cancelled" | null {
+  const normalized = buttonPayload.trim().toLowerCase();
+  if (normalized === "confirm") return "confirmed";
+  if (normalized === "cancel") return "cancelled";
+  return null;
+}
+
 async function handleButtonReply(repliedToMessageId: string, buttonPayload: string): Promise<void> {
-  const toStatus = buttonPayload === "CONFIRM_ORDER" ? "confirmed" : buttonPayload === "CANCEL_ORDER" ? "cancelled" : null;
+  const toStatus = statusForButtonPayload(buttonPayload);
   if (!toStatus) return;
 
   // Guarded the same way as every other contested order-status write in this codebase: the WHERE
@@ -94,7 +105,7 @@ async function handleButtonReply(repliedToMessageId: string, buttonPayload: stri
     orderId: order.id,
     fromStatus: "pending_confirmation",
     toStatus,
-    note: `Customer tapped "${buttonPayload === "CONFIRM_ORDER" ? "Confirm" : "Cancel"}" on WhatsApp`,
+    note: `Customer tapped "${toStatus === "confirmed" ? "Confirm" : "Cancel"}" on WhatsApp`,
     actorEmail: "customer",
   });
 
