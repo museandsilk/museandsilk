@@ -80,10 +80,10 @@ export async function sendOrderConfirmationWhatsApp(params: {
  * an approved template: the customer's own button tap just opened WhatsApp's 24-hour customer-
  * service session, and free-form text is allowed within that window.
  */
-export async function sendWhatsAppText(toPhone: string, text: string): Promise<void> {
+export async function sendWhatsAppText(toPhone: string, text: string): Promise<{ ok: boolean; error?: string }> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!accessToken || !phoneNumberId) return;
+  if (!accessToken || !phoneNumberId) return { ok: false, error: "WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set" };
 
   try {
     const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
@@ -97,9 +97,13 @@ export async function sendWhatsAppText(toPhone: string, text: string): Promise<v
       }),
     });
     if (!response.ok) {
-      console.error("WhatsApp text send failed", await response.text().catch(() => response.statusText));
+      const errorBody = await response.text().catch(() => response.statusText);
+      console.error("WhatsApp text send failed", errorBody);
+      return { ok: false, error: `HTTP ${response.status}: ${errorBody}` };
     }
+    return { ok: true };
   } catch (error) {
     console.error("WhatsApp text send failed", error);
+    return { ok: false, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
   }
 }

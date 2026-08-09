@@ -127,5 +127,16 @@ async function handleButtonReply(repliedToMessageId: string, buttonPayload: stri
     toStatus === "confirmed"
       ? `Your order #${order.orderNumber} has been confirmed. You can track it on our website: ${siteUrl}/track-order`
       : `Your order #${order.orderNumber} has been cancelled. Feel free to visit again anytime!`;
-  await sendWhatsAppText(toWhatsAppPhone(order.customerPhone), replyText);
+  const replyResult = await sendWhatsAppText(toWhatsAppPhone(order.customerPhone), replyText);
+
+  // TEMPORARY diagnostic: records exactly what happened when this ran in production, since the
+  // reply wasn't arriving and console.error output isn't visible without a live wrangler tail
+  // session. Remove once the underlying cause is confirmed and fixed.
+  await auditLogEntry({
+    actorEmail: "system",
+    action: "order.whatsapp_reply_send_result",
+    entityType: "order",
+    entityId: order.id,
+    detail: { ok: replyResult.ok, error: replyResult.error ?? null, toPhone: toWhatsAppPhone(order.customerPhone) },
+  });
 }
