@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { orders, orderStatusHistory } from "@/db/schema";
 import { releaseOrderReservation } from "@/lib/orders";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { sendWhatsAppText, toWhatsAppPhone } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -120,4 +121,11 @@ async function handleButtonReply(repliedToMessageId: string, buttonPayload: stri
     entityId: order.id,
     detail: { buttonPayload, toStatus },
   });
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
+  const replyText =
+    toStatus === "confirmed"
+      ? `Your order #${order.orderNumber} has been confirmed. You can track it on our website: ${siteUrl}/track-order`
+      : `Your order #${order.orderNumber} has been cancelled. Feel free to visit again anytime!`;
+  await sendWhatsAppText(toWhatsAppPhone(order.customerPhone), replyText);
 }
