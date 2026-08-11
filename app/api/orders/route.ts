@@ -76,7 +76,15 @@ async function loadSettings(): Promise<SiteSettingsRow | undefined> {
 function orderSummary(
   order: Pick<
     OrderRow,
-    "orderNumber" | "total" | "deliveryCharge" | "discount" | "reservationExpiresAt" | "paymentMethod" | "id"
+    | "orderNumber"
+    | "total"
+    | "deliveryCharge"
+    | "discount"
+    | "reservationExpiresAt"
+    | "paymentMethod"
+    | "id"
+    | "customerEmail"
+    | "estimatedDeliveryDate"
   >,
   settings: SiteSettingsRow | undefined,
 ) {
@@ -91,6 +99,11 @@ function orderSummary(
     paymentMethod: order.paymentMethod,
     whatsappNumber: settings?.whatsappNumber ?? "",
     bank: order.paymentMethod === "bank_deposit" ? bankDetailsFrom(settings) : undefined,
+    // Both feed the Google Customer Reviews opt-in on the confirmation page (checkout/page.tsx) —
+    // customerEmail is one of Google's required fields for it, so that widget simply doesn't render
+    // when it's null (a phone-only order).
+    customerEmail: order.customerEmail,
+    estimatedDeliveryDate: order.estimatedDeliveryDate,
   };
 }
 
@@ -210,13 +223,17 @@ export async function POST(request: Request) {
   }
 
   const [zone] = await db
-    .select({ id: deliveryZones.id, deliveryCharge: deliveryZones.deliveryCharge })
+    .select({ id: deliveryZones.id, deliveryCharge: deliveryZones.deliveryCharge, estimatedDaysMax: deliveryZones.estimatedDaysMax })
     .from(deliveryZones)
     .where(and(eq(deliveryZones.id, zoneId), eq(deliveryZones.active, true)))
     .limit(1);
   if (!zone) {
     return Response.json({ error: "Choose a valid delivery zone." }, { status: 400 });
   }
+  // YYYY-MM-DD, matching the `date` column and what Google's Customer Reviews opt-in expects.
+  const estimatedDeliveryDate = new Date(Date.now() + zone.estimatedDaysMax * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
 
   const settings = await loadSettings();
   const freeThreshold = settings?.freeDeliveryThreshold ?? 4000;
@@ -357,6 +374,7 @@ export async function POST(request: Request) {
       orderStatus: "pending_confirmation",
       reservationExpiresAt,
       notes,
+      estimatedDeliveryDate,
     });
     await db.insert(orderStatusHistory).values({
       orderId,
@@ -443,6 +461,8 @@ export async function POST(request: Request) {
         discount,
         reservationExpiresAt,
         paymentMethod,
+        customerEmail,
+        estimatedDeliveryDate,
       },
       settings,
     ),

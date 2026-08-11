@@ -7,6 +7,7 @@ import { StoreHeader } from "@/app/(store)/_components/store-components";
 import { clearCart, readCart, type CartItem } from "@/lib/cart";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+const GOOGLE_MERCHANT_ID = process.env.NEXT_PUBLIC_GOOGLE_MERCHANT_ID;
 
 type Zone = { id: string; name: string; deliveryCharge: number; estimatedDaysMin: number; estimatedDaysMax: number };
 type Settings = {
@@ -30,6 +31,8 @@ type OrderResult = {
   paymentMethod: "cod" | "bank_deposit";
   whatsappNumber: string;
   bank?: Bank;
+  customerEmail: string | null;
+  estimatedDeliveryDate: string | null;
 };
 type CouponState = { code: string; discount: number; description: string } | null;
 
@@ -303,6 +306,28 @@ export default function CheckoutPage() {
     }
   }
 
+  // Google Customer Reviews opt-in — only after a successful order that actually has an email
+  // (Google requires it as a field, and email is now optional at checkout — see the phone/email
+  // OTP logic above). Sets up the callback the platform.js script invokes once loaded via its
+  // ?onload=renderOptIn query param, same pattern as Turnstile's onTurnstileSuccess above.
+  useEffect(() => {
+    if (!result?.customerEmail || !GOOGLE_MERCHANT_ID) return;
+    (window as Window & { renderOptIn?: () => void }).renderOptIn = () => {
+      const gapiWindow = window as unknown as {
+        gapi?: { load: (module: string, callback: () => void) => void; surveyoptin?: { render: (options: Record<string, unknown>) => void } };
+      };
+      gapiWindow.gapi?.load("surveyoptin", () => {
+        gapiWindow.gapi?.surveyoptin?.render({
+          merchant_id: Number(GOOGLE_MERCHANT_ID),
+          order_id: result.orderNumber,
+          email: result.customerEmail,
+          delivery_country: "PK",
+          estimated_delivery_date: result.estimatedDeliveryDate,
+        });
+      });
+    };
+  }, [result]);
+
   async function uploadReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!result) return;
@@ -332,9 +357,14 @@ export default function CheckoutPage() {
             <button onClick={() => navigator.clipboard.writeText(result.orderNumber)}>Copy</button>
           </div>
           <p>
-            We&apos;ve sent a confirmation to your email.
+            {result.customerEmail
+              ? "We've sent a confirmation to your email."
+              : "We've sent a confirmation to your WhatsApp."}
             {result.discount > 0 && <> Your coupon saved you {money.format(result.discount)}.</>}
           </p>
+          {result.customerEmail && GOOGLE_MERCHANT_ID && (
+            <Script src="https://apis.google.com/js/platform.js?onload=renderOptIn" strategy="afterInteractive" />
+          )}
           {result.paymentMethod === "bank_deposit" && result.bank && (
             <aside>
               <h2>Bank deposit details</h2>

@@ -21,15 +21,19 @@ function buildCsp(nonce: string): string {
     // static.cloudflareinsights.com is Cloudflare's own Web Analytics beacon, auto-injected into
     // every response by the zone itself (not something this app adds) — without it allowlisted
     // here, the browser silently blocks it and logs a CSP violation on every page load.
-    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com https://challenges.cloudflare.com`,
+    // apis.google.com/gstatic.com are Google's Customer Reviews opt-in widget on the order
+    // confirmation page (checkout/page.tsx) — it loads platform.js from apis.google.com, which in
+    // turn pulls supporting resources from gstatic.com.
+    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com https://www.gstatic.com`,
     // Inline `style={{...}}` (blur-placeholder backgrounds, etc.) is used extensively throughout
     // the storefront — nonce-ing every one of those individually isn't practical the way it is for
     // the small, fixed set of inline <script> tags, so style-src keeps 'unsafe-inline'.
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com`,
-    // Turnstile's checkout widget renders inside an iframe served from challenges.cloudflare.com.
-    "frame-src https://challenges.cloudflare.com",
+    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com`,
+    // Turnstile's checkout widget renders inside an iframe from challenges.cloudflare.com; the
+    // Google Customer Reviews opt-in survey itself renders inside an iframe from google.com.
+    "frame-src https://challenges.cloudflare.com https://www.google.com",
     "frame-ancestors 'none'",
   ].join("; ");
 }

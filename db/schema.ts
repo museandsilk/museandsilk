@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -251,6 +251,11 @@ export const orders = pgTable("orders", {
   // being replied to; matching it against this column is how a button tap gets connected back to
   // the specific order, since WhatsApp doesn't otherwise carry our own order ID in the reply.
   whatsappMessageId: text("whatsapp_message_id"),
+  // Computed once at order creation from the chosen delivery zone's estimatedDaysMax, and reused
+  // as-is afterward (e.g. by the Google Customer Reviews opt-in on the confirmation page) rather
+  // than recomputed — the zone's estimate can change later, but the promise already made to this
+  // specific customer at checkout shouldn't.
+  estimatedDeliveryDate: date("estimated_delivery_date"),
   ...timestamps,
 }, (table) => [
   index("orders_phone_idx").on(table.customerPhone),
