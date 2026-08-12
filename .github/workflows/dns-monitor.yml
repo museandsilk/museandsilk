@@ -1,0 +1,75 @@
+name: DNS resolution monitor
+
+# Diagnoses the recurring DNS_PROBE_FINISHED_NXDOMAIN report: customers across many different
+# devices/networks intermittently can't resolve museandsilk.com, but it always recovers once
+# someone succeeds. A keep-alive ping (see cron.yml) cannot fix this — NXDOMAIN happens at DNS
+# lookup, before any request ever reaches our server, so server "warmness" is irrelevant. This
+# workflow instead checks DNS resolution itself, every 5 minutes, from GitHub's network (fully
+# independent of any customer's ISP/router), against both public resolvers and Cloudflare's own
+# authoritative nameservers directly (bypassing any caching resolver entirely). If every one of
+# those genuinely fails at the same time, that's real evidence of a Cloudflare-side DNS problem; if
+# they never fail here even during a reported outage, that proves the cause is downstream of
+# Cloudflare (a customer's ISP/router DNS cache) and not fixable from our side at all.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve museandsilk.com against public and authoritative nameservers
+        id: dns
+        run: |
+          set +e
+          FAIL_COUNT=0
+          RESULTS=""
+
+          check() {
+            local label="$1" server="$2"
+            local out
+            out=$(dig +time=5 +tries=1 +short museandsilk.com @"$server" A 2>&1)
+            if [ -z "$out" ]; then
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+              RESULTS="${RESULTS}FAIL  ${label} (@${server}): no answer\n"
+            else
+              RESULTS="${RESULTS}OK    ${label} (@${server}): ${out}\n"
+            fi
+          }
+
+          check "Google Public DNS" "8.8.8.8"
+          check "Cloudflare Public DNS" "1.1.1.1"
+          check "Authoritative (amalia.ns.cloudflare.com)" "amalia.ns.cloudflare.com"
+          check "Authoritative (vicente.ns.cloudflare.com)" "vicente.ns.cloudflare.com"
+
+          echo -e "$RESULTS"
+          echo "fail_count=$FAIL_COUNT" >> "$GITHUB_OUTPUT"
+          echo -e "results<<EOF\n$RESULTS\nEOF" >> "$GITHUB_OUTPUT"
+
+          if [ "$FAIL_COUNT" -gt 0 ]; then
+            exit 1
+          fi
+
+      # Only fires when at least one resolver failed — keeps this silent (no inbox noise) on every
+      # normal 5-minute run, and only alerts the moment there's real evidence to look at.
+      - name: Email alert on any resolution failure
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+        run: |
+          curl -sf -X POST "https://api.resend.com/emails" \
+            -H "Authorization: Bearer ${RESEND_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$(node -e '
+              const results = process.argv[1];
+              console.log(JSON.stringify({
+                from: process.env.RESEND_FROM_EMAIL,
+                to: process.env.ADMIN_EMAIL,
+                subject: "DNS resolution failure detected for museandsilk.com",
+                html: "<p>At least one DNS resolver failed to resolve museandsilk.com just now, checked directly from GitHub Actions (independent of any customer network).</p><pre>" + results.replace(/</g, "&lt;") + "</pre><p>Run: " + process.env.GITHUB_SERVER_URL + "/" + process.env.GITHUB_REPOSITORY + "/actions/runs/" + process.env.GITHUB_RUN_ID + "</p>"
+              }));
+            ' "${{ steps.dns.outputs.results }}")"
