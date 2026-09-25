@@ -256,6 +256,12 @@ export const orders = pgTable("orders", {
   // than recomputed — the zone's estimate can change later, but the promise already made to this
   // specific customer at checkout shouldn't.
   estimatedDeliveryDate: date("estimated_delivery_date"),
+  // PostEx courier booking (see lib/postex.ts and app/api/admin/orders/[id]/postex). Null until an
+  // admin books the parcel. While a booking request is in flight this holds the sentinel "PENDING"
+  // (with postexBookedAt as the claim time) so a double-click can't book the same order twice; it's
+  // replaced by the real tracking number on success, or reset to null on failure.
+  postexTrackingNumber: text("postex_tracking_number"),
+  postexBookedAt: timestamp("postex_booked_at", { withTimezone: true }),
   ...timestamps,
 }, (table) => [
   index("orders_phone_idx").on(table.customerPhone),

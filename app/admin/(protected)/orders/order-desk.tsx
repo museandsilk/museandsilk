@@ -54,6 +54,23 @@ type OrderDetail = {
 
 type PaymentProof = { id: string; status: string; reviewNote: string | null };
 
+type PostexForm = {
+  cities: string[];
+  suggestedCity: string | null;
+  phone: string | null;
+  invoicePayment: number;
+  items: number;
+  pickupAddresses: Array<{ addressCode: string; label: string }>;
+  defaultPickupCode: string | null;
+};
+// Mirrors GET /api/admin/orders/[id]/postex — `configured: false` means POSTEX_API_TOKEN isn't set,
+// in which case the whole courier section stays hidden.
+type PostexState =
+  | { configured: false }
+  | { configured: true; booking: { trackingNumber: string; bookedAt: string | null } }
+  | { configured: true; booking: null; canBook: boolean; form: PostexForm };
+type PostexTracking = { transactionStatus: string | null; transactionStatusHistory: Array<{ transactionStatusMessage: string; transactionStatusMessageCode: string }> };
+
 const statuses = ["pending_confirmation", "confirmed", "processing", "packed", "shipped", "delivered", "cancelled", "returned"];
 
 const NEXT_STATUSES: Record<string, string[]> = {
@@ -77,6 +94,17 @@ export function OrderDesk() {
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [proofs, setProofs] = useState<PaymentProof[]>([]);
   const [note, setNote] = useState("");
+
+  // PostEx courier booking (see the "Courier" section of the drawer below).
+  const [postex, setPostex] = useState<PostexState | null>(null);
+  const [postexError, setPostexError] = useState("");
+  const [postexBusy, setPostexBusy] = useState(false);
+  const [tracking, setTracking] = useState<PostexTracking | null>(null);
+  const [bookCity, setBookCity] = useState("");
+  const [bookPhone, setBookPhone] = useState("");
+  const [bookCod, setBookCod] = useState("0");
+  const [bookItems, setBookItems] = useState("1");
+  const [bookPickup, setBookPickup] = useState("");
 
   async function refresh() {
     const params = new URLSearchParams();
@@ -104,6 +132,7 @@ export function OrderDesk() {
     setItems(data.items);
     setHistory(data.history);
     setProofs(data.proofs);
+    void loadPostex(id);
   }
 
   function closeDrawer() {
@@ -113,6 +142,94 @@ export function OrderDesk() {
     setHistory([]);
     setProofs([]);
     setNote("");
+    setPostex(null);
+    setPostexError("");
+    setTracking(null);
+  }
+
+  async function loadPostex(id: string) {
+    setPostexError("");
+    setTracking(null);
+    const response = await fetch(`/api/admin/orders/${id}/postex`, { cache: "no-store" });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) {
+      setPostex(null);
+      setPostexError(data?.error ?? "Could not load courier details.");
+      return;
+    }
+    setPostex(data as PostexState);
+    if (data.configured && !data.booking) {
+      const form = data.form as PostexForm;
+      setBookCity(form.suggestedCity ?? "");
+      setBookPhone(form.phone ?? "");
+      setBookCod(String(form.invoicePayment));
+      setBookItems(String(form.items));
+      setBookPickup(form.defaultPickupCode ?? "");
+    }
+  }
+
+  async function bookPostex() {
+    if (!selectedId) return;
+    setPostexBusy(true);
+    setPostexError("");
+    try {
+      const response = await fetch(`/api/admin/orders/${selectedId}/postex`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cityName: bookCity,
+          customerPhone: bookPhone || undefined,
+          invoicePayment: Number(bookCod),
+          items: Number(bookItems),
+          pickupAddressCode: bookPickup || undefined,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setPostexError(data?.error ?? "PostEx booking failed.");
+        return;
+      }
+      setMessage(`Booked with PostEx — tracking ${data.trackingNumber}.`);
+      await openOrder(selectedId);
+    } finally {
+      setPostexBusy(false);
+    }
+  }
+
+  async function refreshTracking() {
+    if (!selectedId) return;
+    setPostexBusy(true);
+    setPostexError("");
+    try {
+      const response = await fetch(`/api/admin/orders/${selectedId}/postex/tracking`, { cache: "no-store" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setPostexError(data?.error ?? "Could not fetch tracking.");
+        return;
+      }
+      setTracking(data as PostexTracking);
+    } finally {
+      setPostexBusy(false);
+    }
+  }
+
+  async function cancelPostex() {
+    if (!selectedId) return;
+    if (!window.confirm("Cancel this parcel's booking with PostEx? This does not change the order's own status.")) return;
+    setPostexBusy(true);
+    setPostexError("");
+    try {
+      const response = await fetch(`/api/admin/orders/${selectedId}/postex`, { method: "DELETE" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setPostexError(data?.error ?? "PostEx could not cancel the booking.");
+        return;
+      }
+      setMessage("PostEx booking cancelled.");
+      await openOrder(selectedId);
+    } finally {
+      setPostexBusy(false);
+    }
   }
 
   async function transition(toStatus: string) {
@@ -333,6 +450,100 @@ export function OrderDesk() {
                   {!(NEXT_STATUSES[detail.orderStatus] ?? []).length && <small>This order has reached a final status.</small>}
                 </div>
               </div>
+
+              {(postex?.configured || postexError) && (
+                <div>
+                  <p className="eyebrow">Courier · PostEx</p>
+                  {postexError && <p><small>{postexError}</small></p>}
+
+                  {postex?.configured && postex.booking && (
+                    <>
+                      <p>
+                        Booked · tracking <strong>{postex.booking.trackingNumber}</strong>
+                        {postex.booking.bookedAt ? <small> · {new Date(postex.booking.bookedAt).toLocaleString("en-PK")}</small> : null}
+                      </p>
+                      <div className="admin-top-actions">
+                        <button disabled={postexBusy} onClick={refreshTracking}>Refresh tracking</button>
+                        <button
+                          disabled={postexBusy}
+                          onClick={() => window.open(`/api/admin/orders/${selectedId}/postex/airway-bill`, "_blank", "noopener,noreferrer")}
+                        >
+                          Airway bill (PDF) ↗︎
+                        </button>
+                        <button disabled={postexBusy} onClick={cancelPostex}>Cancel PostEx booking</button>
+                      </div>
+                      {tracking && (
+                        <div>
+                          <p><small>PostEx status: <strong>{tracking.transactionStatus ?? "—"}</strong></small></p>
+                          {tracking.transactionStatusHistory.map((step, index) => (
+                            <p key={`${step.transactionStatusMessageCode}-${index}`}>
+                              <small>{step.transactionStatusMessage}</small>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {postex?.configured && !postex.booking && !postex.canBook && (
+                    <p><small>Confirm this order first — only confirmed, processing or packed orders can be booked with PostEx.</small></p>
+                  )}
+
+                  {postex?.configured && !postex.booking && postex.canBook && (
+                    <>
+                      <label>
+                        <span>Delivery city (PostEx)</span>
+                        <select value={bookCity} onChange={(event) => setBookCity(event.target.value)}>
+                          <option value="" disabled>
+                            Choose a city
+                          </option>
+                          {postex.form.cities.map((city) => (
+                            <option key={city}>{city}</option>
+                          ))}
+                        </select>
+                        {!postex.form.suggestedCity && detail && <small>Customer typed “{detail.city}” — pick the matching PostEx city.</small>}
+                      </label>
+                      <label>
+                        <span>Customer mobile (03xxxxxxxxx)</span>
+                        <input value={bookPhone} onChange={(event) => setBookPhone(event.target.value)} placeholder="03001234567" />
+                        {!postex.form.phone && <small>The number on this order isn’t a valid mobile — enter one.</small>}
+                      </label>
+                      <label>
+                        <span>Cash to collect on delivery (PKR)</span>
+                        <input inputMode="numeric" value={bookCod} onChange={(event) => setBookCod(event.target.value.replace(/\D/g, ""))} />
+                        <small>Full total for cash on delivery; 0 for an order already paid by bank deposit.</small>
+                      </label>
+                      <label>
+                        <span>Number of pieces</span>
+                        <input inputMode="numeric" value={bookItems} onChange={(event) => setBookItems(event.target.value.replace(/\D/g, ""))} />
+                      </label>
+                      {postex.form.pickupAddresses.length > 1 && (
+                        <label>
+                          <span>Pickup address</span>
+                          <select value={bookPickup} onChange={(event) => setBookPickup(event.target.value)}>
+                            <option value="" disabled>
+                              Choose a pickup address
+                            </option>
+                            {postex.form.pickupAddresses.map((address) => (
+                              <option key={address.addressCode} value={address.addressCode}>
+                                {address.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      <div className="admin-top-actions">
+                        <button
+                          disabled={postexBusy || !bookCity || !bookPhone || bookCod === "" || !Number(bookItems) || (postex.form.pickupAddresses.length > 1 && !bookPickup)}
+                          onClick={bookPostex}
+                        >
+                          {postexBusy ? "Booking…" : "Book with PostEx"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div>
                 <p className="eyebrow">History</p>
