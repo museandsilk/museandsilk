@@ -1,15 +1,13 @@
 import { z } from "zod";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orderItems, orderStatusHistory, orders } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { BOOKABLE_STATUSES, bookOrderWithPostex } from "@/lib/postex-booking";
 import {
   PostexError,
-  buildNotes,
-  buildOrderDetail,
   cancelPostexOrder,
-  createPostexOrder,
   getDeliveryCities,
   getPickupAddresses,
   isPostexConfigured,
@@ -19,11 +17,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Only orders the store has actually accepted can go to the courier — never one still awaiting the
-// customer's confirmation, and never one already delivered/cancelled/returned.
-const BOOKABLE_STATUSES = ["confirmed", "processing", "packed"];
 const PENDING = "PENDING";
-const STALE_CLAIM_MS = 2 * 60 * 1000;
 
 function fail(error: string, status: number) {
   return Response.json({ error }, { status });
@@ -51,7 +45,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (booked) {
     return Response.json({
       configured: true,
-      booking: { trackingNumber: order.postexTrackingNumber, bookedAt: order.postexBookedAt },
+      booking: {
+        trackingNumber: order.postexTrackingNumber,
+        bookedAt: order.postexBookedAt,
+        status: order.postexStatus,
+        syncedAt: order.postexSyncedAt,
+      },
     });
   }
 
@@ -64,14 +63,14 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       configured: true,
       booking: null,
       canBook: BOOKABLE_STATUSES.includes(order.orderStatus),
+      // Why the automatic booking gave up on this order, if it did — shown above the manual form.
+      autoError: order.postexAutoError,
       form: {
         cities,
         suggestedCity: suggestCity(order.city, cities),
         // null when the stored number isn't a valid 03… mobile (landline, or an email-only order
         // with no phone at all) — the form then asks the admin to type one.
         phone: toPostexPhone(order.customerPhone),
-        // Cash to collect at the door: the full total for COD / unverified payment, nothing for an
-        // order whose bank-deposit receipt was already approved (paymentStatus "paid").
         invoicePayment: order.paymentStatus === "paid" ? 0 : order.total,
         items: pieces,
         pickupAddresses: pickupAddresses.map((a) => ({
@@ -104,94 +103,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!parsed.success) return fail("City, cash-on-delivery amount and piece count are required.", 400);
   const input = parsed.data;
 
-  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-  if (!order) return fail("Order not found.", 404);
-  if (!BOOKABLE_STATUSES.includes(order.orderStatus)) {
-    return fail(`An order that is "${order.orderStatus.replaceAll("_", " ")}" can't be booked with a courier. Confirm it first.`, 400);
-  }
-
-  const phone = toPostexPhone(input.customerPhone || order.customerPhone);
-  if (!phone) return fail("PostEx needs a valid Pakistani mobile number (03xxxxxxxxx) for the customer.", 400);
-
-  // Everything that can be checked without side effects is checked *before* claiming the order, so
-  // a rejected request never leaves it half-booked.
-  let pickupAddressCode = input.pickupAddressCode || process.env.POSTEX_PICKUP_ADDRESS_CODE || "";
-  try {
-    const cities = await getDeliveryCities();
-    if (!cities.includes(input.cityName)) return fail(`"${input.cityName}" isn't a city PostEx delivers to.`, 400);
-    if (!pickupAddressCode) {
-      const addresses = await getPickupAddresses();
-      if (addresses.length === 1) pickupAddressCode = addresses[0].addressCode;
-      else return fail("Choose which pickup address PostEx should collect this parcel from.", 400);
-    }
-  } catch (error) {
-    return postexFailure(error);
-  }
-
-  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
-
-  // Claim the order before calling PostEx — same idea as the checkout idempotency key: two clicks
-  // (or two admins) can't both pass a read-only "not booked yet" check and each create a parcel.
-  // A stale claim (a request that died mid-flight) becomes reclaimable after STALE_CLAIM_MS.
-  const now = new Date();
-  const claimed = await db
-    .update(orders)
-    .set({ postexTrackingNumber: PENDING, postexBookedAt: now })
-    .where(
-      and(
-        eq(orders.id, id),
-        or(
-          isNull(orders.postexTrackingNumber),
-          and(eq(orders.postexTrackingNumber, PENDING), lt(orders.postexBookedAt, new Date(now.getTime() - STALE_CLAIM_MS))),
-        ),
-      ),
-    )
-    .returning({ id: orders.id });
-  if (claimed.length === 0) return fail("This order is already booked with PostEx (or a booking is in progress).", 409);
-
-  let trackingNumber: string;
-  try {
-    ({ trackingNumber } = await createPostexOrder({
-      cityName: input.cityName,
-      customerName: order.customerName,
-      customerPhone: phone,
-      deliveryAddress: order.address,
-      invoicePayment: input.invoicePayment,
-      items: input.items,
-      orderDetail: buildOrderDetail(items),
-      orderRefNumber: order.orderNumber,
-      transactionNotes: buildNotes(order.orderNumber, order.notes, order.deliveryNotes),
-      pickupAddressCode,
-    }));
-  } catch (error) {
-    await db
-      .update(orders)
-      .set({ postexTrackingNumber: null, postexBookedAt: null })
-      .where(and(eq(orders.id, id), eq(orders.postexTrackingNumber, PENDING)));
-    return postexFailure(error);
-  }
-
-  await db
-    .update(orders)
-    .set({ postexTrackingNumber: trackingNumber, postexBookedAt: new Date() })
-    .where(eq(orders.id, id));
-
-  await db.insert(orderStatusHistory).values({
-    orderId: id,
-    fromStatus: order.orderStatus,
-    toStatus: order.orderStatus,
-    note: `Booked with PostEx — tracking ${trackingNumber} (collect PKR ${input.invoicePayment.toLocaleString("en-PK")})`,
-    actorEmail: admin.email,
-  });
-  await auditLogEntry({
-    actorEmail: admin.email,
-    action: "order.postex_book",
-    entityType: "order",
-    entityId: id,
-    detail: { trackingNumber, cityName: input.cityName, invoicePayment: input.invoicePayment },
+  const result = await bookOrderWithPostex(id, admin.email, {
+    cityName: input.cityName,
+    // An empty string means "use the number on the order", not "override with nothing".
+    customerPhone: input.customerPhone || undefined,
+    invoicePayment: input.invoicePayment,
+    items: input.items,
+    pickupAddressCode: input.pickupAddressCode || undefined,
   });
 
-  return Response.json({ trackingNumber }, { status: 201 });
+  if (!result.ok) {
+    const status = { not_found: 404, not_bookable: 400, invalid: 400, conflict: 409, postex: 502 }[result.kind];
+    return fail(result.message, status);
+  }
+  return Response.json({ trackingNumber: result.trackingNumber, booked: result.booked }, { status: 201 });
 }
 
 /** Cancels the PostEx booking (e.g. the customer changed their mind before pickup). Leaves our own
@@ -214,8 +139,19 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   // Only cleared after PostEx confirms — if it refuses (already picked up, say) the booking stays
-  // recorded here and the admin sees PostEx's own message.
-  await db.update(orders).set({ postexTrackingNumber: null, postexBookedAt: null }).where(eq(orders.id, id));
+  // recorded here and the admin sees PostEx's own message. postexAutoAttempts is pinned at its cap so
+  // the automatic booker doesn't simply re-book an order an admin just deliberately cancelled.
+  await db
+    .update(orders)
+    .set({
+      postexTrackingNumber: null,
+      postexBookedAt: null,
+      postexStatus: null,
+      postexSyncedAt: null,
+      postexAutoAttempts: 3,
+      postexAutoError: "PostEx booking was cancelled by an admin — book it again manually if needed.",
+    })
+    .where(eq(orders.id, id));
   await db.insert(orderStatusHistory).values({
     orderId: id,
     fromStatus: order.orderStatus,

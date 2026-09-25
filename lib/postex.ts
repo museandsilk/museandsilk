@@ -20,6 +20,13 @@ export class PostexError extends Error {
   }
 }
 
+/** True for failures worth retrying later (PostEx unreachable, timing out, or a 5xx) as opposed to
+ * ones that will fail identically every time (bad city, invalid phone, rejected payload). */
+export function isRetryablePostexError(error: unknown): boolean {
+  if (!(error instanceof PostexError)) return true;
+  return error.status === undefined || error.status >= 500;
+}
+
 async function postexFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = process.env.POSTEX_API_TOKEN;
   if (!token) throw new PostexError("PostEx is not configured (POSTEX_API_TOKEN is not set).");
@@ -135,6 +142,7 @@ export type PostexPickupAddress = {
   cityName: string;
   contactPersonName: string;
   phone1: string;
+  addressType?: string;
 };
 
 export async function getPickupAddresses(): Promise<PostexPickupAddress[]> {
@@ -192,4 +200,74 @@ export async function getAirwayBillPdf(trackingNumber: string): Promise<ArrayBuf
   const response = await postexFetch(`/v1/get-invoice?trackingNumbers=${encodeURIComponent(trackingNumber)}`);
   if (!response.ok) throw new PostexError(`PostEx could not generate the airway bill (HTTP ${response.status}).`, response.status);
   return response.arrayBuffer();
+}
+
+/**
+ * Hands parcels to PostEx for pickup. Creating an order (createPostexOrder) only leaves it
+ * "Unbooked"; it moves to "Booked" — i.e. is actually queued for a rider — once a load sheet is
+ * generated for it (verified against the live API). The PDF it returns is the pickup handover sheet;
+ * we only need the side effect, so the body is discarded after checking it succeeded.
+ */
+export async function generateLoadSheet(trackingNumbers: string[], pickupAddress?: string): Promise<void> {
+  const response = await postexFetch("/v2/generate-load-sheet", {
+    method: "POST",
+    body: JSON.stringify({ trackingNumbers, ...(pickupAddress ? { pickupAddress } : {}) }),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("pdf")) {
+    const body = (await response.json().catch(() => null)) as { statusMessage?: string } | null;
+    throw new PostexError(body?.statusMessage || `PostEx could not generate the load sheet (HTTP ${response.status}).`, response.status);
+  }
+}
+
+export type CourierOrderStatus = "shipped" | "delivered" | "returned";
+
+/** What PostEx's own status means for our order lifecycle, or null when it shouldn't move the
+ * order at all. Deliberately conservative: only "the courier has it / it arrived / it came back"
+ * map to a status change; Unbooked, Booked and cancelled/expired bookings never do. */
+export function orderStatusForPostexStatus(postexStatus: string | null): CourierOrderStatus | null {
+  switch ((postexStatus ?? "").trim().toLowerCase()) {
+    case "picked by postex":
+    case "en-route to postex warehouse":
+    case "postex warehouse":
+    case "out for delivery":
+    case "attempted":
+    case "delivery under review":
+    case "out for return":
+      return "shipped";
+    case "delivered":
+      return "delivered";
+    case "returned":
+      return "returned";
+    default:
+      return null;
+  }
+}
+
+/** Customer-facing wording for PostEx's internal status names. */
+export function customerFacingPostexStatus(postexStatus: string | null): string {
+  switch ((postexStatus ?? "").trim().toLowerCase()) {
+    case "unbooked":
+      return "Preparing for dispatch";
+    case "booked":
+      return "Booked with courier — awaiting pickup";
+    case "picked by postex":
+      return "Picked up by courier";
+    case "en-route to postex warehouse":
+    case "postex warehouse":
+      return "In transit";
+    case "out for delivery":
+      return "Out for delivery";
+    case "attempted":
+      return "Delivery attempted";
+    case "delivery under review":
+      return "Delivery under review";
+    case "out for return":
+    case "returned":
+      return "Returning to us";
+    case "delivered":
+      return "Delivered";
+    default:
+      return postexStatus ?? "";
+  }
 }

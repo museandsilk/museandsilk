@@ -36,6 +36,8 @@ export async function GET(request: Request) {
       paymentStatus: orders.paymentStatus,
       orderStatus: orders.orderStatus,
       reservationExpiresAt: orders.reservationExpiresAt,
+      postexTrackingNumber: orders.postexTrackingNumber,
+      postexStatus: orders.postexStatus,
       createdAt: orders.createdAt,
       proofId: paymentProofs.id,
       proofStatus: paymentProofs.status,

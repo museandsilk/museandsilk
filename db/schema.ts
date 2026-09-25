@@ -262,6 +262,17 @@ export const orders = pgTable("orders", {
   // replaced by the real tracking number on success, or reset to null on failure.
   postexTrackingNumber: text("postex_tracking_number"),
   postexBookedAt: timestamp("postex_booked_at", { withTimezone: true }),
+  // PostEx's own last-known status name ("Unbooked" → "Booked" once a load sheet is generated, then
+  // "Picked By PostEx", "Out For Delivery", "Delivered", …). Refreshed by the scheduled sync
+  // (app/api/cron/postex-sync) and the admin "Sync" buttons, and read by the customer tracking page
+  // so it never has to call PostEx (or expose the token) on a customer's behalf.
+  postexStatus: text("postex_status"),
+  postexSyncedAt: timestamp("postex_synced_at", { withTimezone: true }),
+  // Automatic booking bookkeeping: attempts made so far (capped at 3, also set to 3 to opt an order
+  // out — e.g. when an admin cancels its booking, so the sweeper doesn't just re-book it) and the
+  // reason the last attempt failed, shown to the admin in the order drawer.
+  postexAutoAttempts: integer("postex_auto_attempts").notNull().default(0),
+  postexAutoError: text("postex_auto_error"),
   ...timestamps,
 }, (table) => [
   index("orders_phone_idx").on(table.customerPhone),

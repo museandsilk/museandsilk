@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { orderItems, orderStatusHistory, orders } from "@/db/schema";
 import { cleanPhone } from "@/lib/slug";
 import { toWhatsAppPhone } from "@/lib/whatsapp";
+import { customerFacingPostexStatus } from "@/lib/postex";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
       paymentStatus: orders.paymentStatus,
       orderStatus: orders.orderStatus,
       reservationExpiresAt: orders.reservationExpiresAt,
+      postexTrackingNumber: orders.postexTrackingNumber,
+      postexStatus: orders.postexStatus,
       createdAt: orders.createdAt,
     })
     .from(orders)
@@ -67,6 +70,7 @@ export async function POST(request: Request) {
     db
       .select({
         status: orderStatusHistory.toStatus,
+        fromStatus: orderStatusHistory.fromStatus,
         note: orderStatusHistory.note,
         createdAt: orderStatusHistory.createdAt,
       })
@@ -75,7 +79,19 @@ export async function POST(request: Request) {
       .orderBy(desc(orderStatusHistory.createdAt)),
   ]);
 
+  // Courier details come from what our own sync last stored — the customer's request never reaches
+  // PostEx, and the token never leaves the server. "PENDING" is the in-flight booking marker, not a
+  // real tracking number, so it's never shown.
+  const hasCourier = Boolean(order.postexTrackingNumber) && order.postexTrackingNumber !== "PENDING";
+
   return Response.json({
+    courier: hasCourier
+      ? {
+          name: "PostEx",
+          trackingNumber: order.postexTrackingNumber,
+          status: customerFacingPostexStatus(order.postexStatus),
+        }
+      : null,
     order: {
       orderNumber: order.orderNumber,
       customerName: order.customerName,
@@ -91,6 +107,11 @@ export async function POST(request: Request) {
       createdAt: order.createdAt.toISOString(),
     },
     items,
-    history: history.map((entry) => ({ ...entry, createdAt: entry.createdAt.toISOString() })),
+    // A row whose status didn't actually change (from === to) is an internal annotation — e.g. a
+    // courier booking, or "automatic booking failed, book manually" — not something to show a
+    // customer. Their courier details live in the `courier` block above instead.
+    history: history
+      .filter((entry) => entry.fromStatus !== entry.status)
+      .map(({ status, note, createdAt }) => ({ status, note, createdAt: createdAt.toISOString() })),
   });
 }

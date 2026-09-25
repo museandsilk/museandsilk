@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { StoreHeader } from "@/app/(store)/_components/store-components";
 
 type Tracked = {
+  courier: { name: string; trackingNumber: string; status: string } | null;
   order: {
     orderNumber: string;
     customerName: string;
@@ -68,6 +69,14 @@ function TrackOrderForm() {
             <p className="eyebrow">{result.order.orderNumber}</p>
             <h2>{result.order.orderStatus.replaceAll("_", " ")}</h2>
             <span>PKR {result.order.total.toLocaleString("en-PK")}</span>
+            {result.courier && (
+              <p>
+                <small>
+                  Shipped with {result.courier.name} · Tracking no. <strong>{result.courier.trackingNumber}</strong>
+                  {result.courier.status ? ` · ${result.courier.status}` : ""}
+                </small>
+              </p>
+            )}
           </header>
           <div className="tracking-timeline">
             {result.history.map((entry, index) => (

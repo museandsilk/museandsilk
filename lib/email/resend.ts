@@ -93,3 +93,11 @@ export async function sendCheckoutOtpEmail(toEmail: string, code: string): Promi
     html: checkoutOtpEmail({ toEmail, code }),
   });
 }
+
+/** Plain operational alert to the store owner (ADMIN_EMAIL) — e.g. "an order couldn't be booked with
+ * the courier automatically and needs a human". Best-effort like every other email here. */
+export async function sendAdminAlertEmail(subject: string, html: string): Promise<void> {
+  const to = process.env.ADMIN_EMAIL;
+  if (!to) return;
+  await send({ from: fromAddress(), to, subject, html });
+}

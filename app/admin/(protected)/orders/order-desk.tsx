@@ -14,6 +14,8 @@ type OrderRow = {
   paymentStatus: string;
   orderStatus: string;
   reservationExpiresAt: string | null;
+  postexTrackingNumber: string | null;
+  postexStatus: string | null;
   createdAt: string;
   proofId: string | null;
   proofStatus: string | null;
@@ -67,8 +69,8 @@ type PostexForm = {
 // in which case the whole courier section stays hidden.
 type PostexState =
   | { configured: false }
-  | { configured: true; booking: { trackingNumber: string; bookedAt: string | null } }
-  | { configured: true; booking: null; canBook: boolean; form: PostexForm };
+  | { configured: true; booking: { trackingNumber: string; bookedAt: string | null; status: string | null; syncedAt: string | null } }
+  | { configured: true; booking: null; canBook: boolean; autoError: string | null; form: PostexForm };
 type PostexTracking = { transactionStatus: string | null; transactionStatusHistory: Array<{ transactionStatusMessage: string; transactionStatusMessageCode: string }> };
 
 const statuses = ["pending_confirmation", "confirmed", "processing", "packed", "shipped", "delivered", "cancelled", "returned"];
@@ -189,7 +191,11 @@ export function OrderDesk() {
         setPostexError(data?.error ?? "PostEx booking failed.");
         return;
       }
-      setMessage(`Booked with PostEx — tracking ${data.trackingNumber}.`);
+      setMessage(
+        data.booked
+          ? `Booked with PostEx — tracking ${data.trackingNumber}.`
+          : `Created at PostEx — tracking ${data.trackingNumber}. The pickup booking will complete automatically within a few minutes (or press “Sync from PostEx”).`,
+      );
       await openOrder(selectedId);
     } finally {
       setPostexBusy(false);
@@ -208,6 +214,36 @@ export function OrderDesk() {
         return;
       }
       setTracking(data as PostexTracking);
+    } finally {
+      setPostexBusy(false);
+    }
+  }
+
+  // Runs everything the 5-minute scheduled job does (auto-booking + status refresh) right now, for
+  // all orders, or just the open one when an orderId is given.
+  async function syncPostex(orderId?: string) {
+    setPostexBusy(true);
+    setPostexError("");
+    try {
+      const response = await fetch("/api/admin/postex/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderId ? { orderId } : {}),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const text = data?.error ?? "PostEx sync failed.";
+        setPostexError(text);
+        setMessage(text);
+        return;
+      }
+      const booked = data.autoBook?.booked ?? 0;
+      const sync = data.sync ?? { checked: 0, moved: 0 };
+      setMessage(
+        `PostEx synced — ${sync.checked} parcel${sync.checked === 1 ? "" : "s"} checked, ${sync.moved} order${sync.moved === 1 ? "" : "s"} updated${booked ? `, ${booked} newly booked` : ""}.`,
+      );
+      await refresh();
+      if (selectedId) await openOrder(selectedId);
     } finally {
       setPostexBusy(false);
     }
@@ -285,6 +321,12 @@ export function OrderDesk() {
           <button onClick={() => setMessage("")}>×</button>
         </div>
       )}
+      <div className="admin-top-actions">
+        <button disabled={postexBusy} onClick={() => syncPostex()}>
+          {postexBusy ? "Syncing…" : "Sync PostEx now"}
+        </button>
+        <small>Booking and courier status also sync automatically every few minutes.</small>
+      </div>
       <div className="order-filters">
         {["all", ...statuses].map((status) => (
           <button key={status} className={filter === status ? "active" : ""} onClick={() => setFilter(status)}>
@@ -328,6 +370,13 @@ export function OrderDesk() {
                   <td>PKR {order.total.toLocaleString("en-PK")}</td>
                   <td>
                     <span className={`status-pill status-${order.orderStatus}`}>{order.orderStatus.replaceAll("_", " ")}</span>
+                    {order.postexTrackingNumber && order.postexTrackingNumber !== "PENDING" && (
+                      <small>
+                        PostEx · {order.postexStatus ?? "booked"}
+                        <br />
+                        {order.postexTrackingNumber}
+                      </small>
+                    )}
                   </td>
                   <td>
                     <button className="edit-link" onClick={() => openOrder(order.id)}>
@@ -461,8 +510,14 @@ export function OrderDesk() {
                       <p>
                         Booked · tracking <strong>{postex.booking.trackingNumber}</strong>
                         {postex.booking.bookedAt ? <small> · {new Date(postex.booking.bookedAt).toLocaleString("en-PK")}</small> : null}
+                        <br />
+                        <small>
+                          PostEx status: <strong>{postex.booking.status ?? "—"}</strong>
+                          {postex.booking.syncedAt ? ` · checked ${new Date(postex.booking.syncedAt).toLocaleString("en-PK")}` : ""}
+                        </small>
                       </p>
                       <div className="admin-top-actions">
+                        <button disabled={postexBusy} onClick={() => syncPostex(selectedId ?? undefined)}>Sync from PostEx</button>
                         <button disabled={postexBusy} onClick={refreshTracking}>Refresh tracking</button>
                         <button
                           disabled={postexBusy}
@@ -491,6 +546,7 @@ export function OrderDesk() {
 
                   {postex?.configured && !postex.booking && postex.canBook && (
                     <>
+                      {postex.autoError && <p><small>Automatic booking: {postex.autoError}</small></p>}
                       <label>
                         <span>Delivery city (PostEx)</span>
                         <select value={bookCity} onChange={(event) => setBookCity(event.target.value)}>

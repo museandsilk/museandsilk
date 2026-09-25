@@ -52,6 +52,7 @@ jobs:
           echo "${{ secrets.WHATSAPP_WEBHOOK_VERIFY_TOKEN }}" | npx wrangler secret put WHATSAPP_WEBHOOK_VERIFY_TOKEN
           echo "${{ secrets.POSTEX_API_TOKEN }}" | npx wrangler secret put POSTEX_API_TOKEN
           echo "${{ secrets.POSTEX_PICKUP_ADDRESS_CODE }}" | npx wrangler secret put POSTEX_PICKUP_ADDRESS_CODE
+          echo "${{ secrets.POSTEX_AUTO_BOOK_FROM }}" | npx wrangler secret put POSTEX_AUTO_BOOK_FROM
 
       # NEXT_PUBLIC_* vars must be present at build time — they get inlined into client bundles.
       - name: Build
