@@ -8,13 +8,19 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Zone = { id: string; name: string; deliveryCharge: number; estimatedDaysMin: number; estimatedDaysMax: number };
 type Variant = { id: string; sku: string; productName: string; variantName: string; price: number; available: number };
-type Options = { zones: Zone[]; freeDeliveryThreshold: number; variants: Variant[] };
+type Options = { zones: Zone[]; freeDeliveryThreshold: number; autoCourierBooking: boolean; variants: Variant[] };
+// Outcome of the automatic PostEx booking that happens right after an order is placed.
+type Courier =
+  | { state: "booked"; trackingNumber: string }
+  | { state: "created"; trackingNumber: string }
+  | { state: "failed"; message: string; willRetry: boolean }
+  | { state: "skipped" };
 type Line = { variantId: string; quantity: number };
 
 type PreviewRow =
   | { ok: true; customerName: string; city: string; itemsLabel: string; subtotal: number; deliveryCharge: number; discount: number; total: number }
   | { ok: false; customerName: string; city: string; errors: string[] };
-type RowResult = { state: "waiting" | "placing" | "placed" | "failed"; orderNumber?: string; errors?: string[] };
+type RowResult = { state: "waiting" | "placing" | "placed" | "failed"; orderNumber?: string; errors?: string[]; courier?: Courier };
 
 export type PanelMode = "single" | "bulk";
 
@@ -23,6 +29,14 @@ const money = (value: number) => `PKR ${value.toLocaleString("en-PK")}`;
 const digits = (value: string) => value.replace(/\D/g, "");
 
 const TEMPLATE_URL = "/api/admin/orders/place/template";
+
+/** One-line description of the courier outcome, or "" when there's nothing to say (booking is off). */
+function courierText(courier: Courier | undefined): string {
+  if (!courier || courier.state === "skipped") return "";
+  if (courier.state === "booked") return `PostEx booked — tracking ${courier.trackingNumber}`;
+  if (courier.state === "created") return `PostEx parcel created (tracking ${courier.trackingNumber}) — pickup booking completes automatically`;
+  return `PostEx NOT booked: ${courier.message} ${courier.willRetry ? "It will be retried automatically." : "Fix the details and use “Book with PostEx” in the order drawer."}`;
+}
 
 async function postJson(url: string, body: unknown) {
   const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -93,7 +107,10 @@ export function PlaceOrderPanel({
           </button>
         </div>
         <p>
-          <small>Orders placed here are created as <strong>confirmed</strong>, in your name, and reserve stock immediately.</small>
+          <small>
+            Orders placed here are created as <strong>confirmed</strong>, in your name, and reserve stock immediately.
+            {options?.autoCourierBooking ? " Like customer-confirmed orders, they are then booked with PostEx automatically." : ""}
+          </small>
         </p>
 
         {loadError && <div className="admin-message" role="alert">{loadError}</div>}
@@ -137,7 +154,7 @@ function SingleOrderForm({
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-  const [placed, setPlaced] = useState<{ orderNumber: string; total: number } | null>(null);
+  const [placed, setPlaced] = useState<{ orderNumber: string; total: number; courier?: Courier } | null>(null);
   // One key per order being entered: if a submit is retried or double-clicked, the server returns
   // the order the first attempt created instead of making a second one. Renewed per new order.
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
@@ -217,8 +234,8 @@ function SingleOrderForm({
         setErrors(data?.errors ?? [data?.error ?? "The order could not be placed."]);
         return;
       }
-      setPlaced({ orderNumber: data.order.orderNumber, total: data.order.total });
-      onPlaced(`Order ${data.order.orderNumber} placed and confirmed — ${money(data.order.total)}.`);
+      setPlaced({ orderNumber: data.order.orderNumber, total: data.order.total, courier: data.order.courier });
+      onPlaced(`Order ${data.order.orderNumber} placed and confirmed — ${money(data.order.total)}.${courierText(data.order.courier) ? ` ${courierText(data.order.courier)}.` : ""}`);
     } catch {
       setErrors(["Could not reach the server. Check your connection — the order was not placed unless it shows in the list; retrying is safe."]);
     } finally {
@@ -233,6 +250,11 @@ function SingleOrderForm({
         <p>
           <strong>Order {placed.orderNumber}</strong> was placed and confirmed — {money(placed.total)}.
         </p>
+        {courierText(placed.courier) && (
+          <p>
+            <small>{courierText(placed.courier)}</small>
+          </p>
+        )}
         <footer>
           <button type="button" onClick={onClose}>
             Close
@@ -517,7 +539,7 @@ function BulkImport({
         try {
           const { response, data } = await postJson("/api/admin/orders/place", { order: orders[index], idempotencyKey: keys[index] });
           const next: RowResult = response.ok
-            ? { state: "placed", orderNumber: data.order.orderNumber }
+            ? { state: "placed", orderNumber: data.order.orderNumber, courier: data.order.courier }
             : { state: "failed", errors: data?.errors ?? [data?.error ?? "The order could not be placed."] };
           if (response.ok) placedNow++;
           setResults((current) => current.map((result, i) => (i === index ? next : result)));
@@ -606,7 +628,12 @@ function BulkImport({
                           )}
                           {row.ok && result?.state === "waiting" && "Ready"}
                           {row.ok && result?.state === "placing" && "Placing…"}
-                          {row.ok && result?.state === "placed" && <strong>Placed · {result.orderNumber}</strong>}
+                          {row.ok && result?.state === "placed" && (
+                            <>
+                              <strong>Placed · {result.orderNumber}</strong>
+                              {courierText(result.courier) && <small>{courierText(result.courier)}</small>}
+                            </>
+                          )}
                           {row.ok && result?.state === "failed" && (
                             <>
                               <strong>Not placed</strong>

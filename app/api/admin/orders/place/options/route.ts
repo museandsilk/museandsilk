@@ -2,6 +2,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { deliveryZones, productVariants, products, siteSettings } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
+import { isPostexConfigured } from "@/lib/postex";
+import { postexAutoBookSince } from "@/lib/postex-booking";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,8 @@ export async function GET() {
 
   return Response.json({
     zones,
+    // Whether orders placed here are booked with PostEx automatically (courier configured + auto switch on).
+    autoCourierBooking: isPostexConfigured() && Boolean(postexAutoBookSince()),
     freeDeliveryThreshold: settingsRows[0]?.freeDeliveryThreshold ?? 4000,
     // Same sellable rule resolveOrder enforces on submit: published product + active variant.
     variants: variants.map((variant) => ({

@@ -21,6 +21,7 @@ import {
   reclaimStaleIdempotencyKey,
   releaseIdempotencyKey,
 } from "@/lib/idempotency";
+import { autoBookJustPlacedOrder, type CourierOutcome } from "@/lib/postex-booking";
 import { cleanPhone } from "@/lib/slug";
 
 export const MAX_ITEMS_PER_ORDER = 20;
@@ -335,7 +336,15 @@ function generateOrderNumber(): string {
   return `MS-${stamp}-${random}`;
 }
 
-export type PlacedOrder = { orderId: string; orderNumber: string; total: number; customerName: string; duplicate: boolean };
+export type PlacedOrder = {
+  orderId: string;
+  orderNumber: string;
+  total: number;
+  customerName: string;
+  duplicate: boolean;
+  /** What happened with the automatic PostEx booking (absent for a duplicate submit). */
+  courier?: CourierOutcome;
+};
 export type PlaceResult = { ok: true; order: PlacedOrder } | { ok: false; errors: string[] };
 
 const KEY_PREFIX = "admin:";
@@ -493,5 +502,10 @@ export async function placeAdminOrder(raw: unknown, adminEmail: string, idempote
     console.error("Audit log failed for admin order", orderId, error);
   }
 
-  return { ok: true, order: { orderId, orderNumber, total: plan.total, customerName: plan.customerName, duplicate: false } };
+  // The order is saved. Book it with the courier right away, like any customer-confirmed order, so the
+  // admin never waits for the scheduled run. It never throws and never undoes the order: if PostEx
+  // is down or rejects the details, the outcome says so and the sweeper retries / the admin is emailed.
+  const courier = await autoBookJustPlacedOrder(orderId);
+
+  return { ok: true, order: { orderId, orderNumber, total: plan.total, customerName: plan.customerName, duplicate: false, courier } };
 }

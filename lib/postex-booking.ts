@@ -16,6 +16,7 @@ import {
   generateLoadSheet,
   getDeliveryCities,
   getPickupAddresses,
+  isPostexConfigured,
   isRetryablePostexError,
   orderStatusForPostexStatus,
   suggestCity,
@@ -237,8 +238,9 @@ export type AutoBookSummary = {
 
 /**
  * Books, with no admin involved, every order the *customer* has confirmed (their WhatsApp Confirm
- * tap) since automatic booking was switched on. Orders an admin confirmed by hand stay manual, and
- * so do email-only orders (PostEx requires a phone number, so those need a human to add one).
+ * tap) and every order an admin placed on a customer's behalf, since automatic booking was switched
+ * on. Orders an admin confirmed by hand stay manual, and so do email-only orders (PostEx requires a
+ * phone number, so those need a human to add one).
  *
  * Transient failures (PostEx down/timeout) are retried on later runs, up to MAX_AUTO_ATTEMPTS.
  * Permanent ones (unrecognised city, invalid phone) aren't retried; the reason is stored on the order
@@ -260,7 +262,11 @@ export async function autoBookConfirmedOrders(dryRun = false): Promise<AutoBookS
           select 1 from order_status_history h
           where h.order_id = ${orders.id}
             and h.to_status = 'confirmed'
-            and h.actor_email = 'customer'
+            -- either the customer's own Confirm tap, or an order an admin placed on their behalf
+            -- (lib/admin-order-placement.ts writes it straight to confirmed: from_status is null).
+            -- An admin confirming a pending order by hand has from_status 'pending_confirmation'
+            -- and stays manual.
+            and (h.actor_email = 'customer' or h.from_status is null)
             and h.created_at >= ${since.toISOString()}::timestamptz
         )`,
       ),
@@ -272,35 +278,70 @@ export async function autoBookConfirmedOrders(dryRun = false): Promise<AutoBookS
   if (dryRun) return summary;
 
   for (const row of rows) {
-    const result = await bookOrderWithPostex(row.id, "system");
-    if (result.ok) {
-      summary.booked++;
-      continue;
-    }
-    if (result.kind === "conflict" || result.kind === "not_bookable" || result.kind === "not_found") continue;
-
-    summary.failed++;
-    const attempts = row.attempts + 1;
-    const gaveUp = !result.retryable || attempts >= MAX_AUTO_ATTEMPTS;
-    await db
-      .update(orders)
-      .set({ postexAutoAttempts: gaveUp ? MAX_AUTO_ATTEMPTS : attempts, postexAutoError: result.message })
-      .where(eq(orders.id, row.id));
-    if (gaveUp) {
-      await db.insert(orderStatusHistory).values({
-        orderId: row.id,
-        fromStatus: "confirmed",
-        toStatus: "confirmed",
-        note: `Automatic PostEx booking failed: ${result.message} — please book it manually.`,
-        actorEmail: "system",
-      });
-      await sendAdminAlertEmail(
-        `Order ${row.orderNumber} needs a manual PostEx booking`,
-        `<p>Order <strong>${escapeHtml(row.orderNumber)}</strong> was confirmed by the customer, but couldn't be booked with PostEx automatically:</p><p>${escapeHtml(result.message)}</p><p>Open the order in the admin order desk and use “Book with PostEx” to fix the details and book it.</p>`,
-      );
-    }
+    const outcome = await autoBookOne(row);
+    if (outcome.result.ok) summary.booked++;
+    else if (outcome.counted) summary.failed++;
   }
   return summary;
+}
+
+/** Books one order automatically and does the failure bookkeeping shared by the scheduled sweeper and
+ * the immediate booking right after an admin places an order: transient failures count an attempt (the
+ * sweeper retries up to MAX_AUTO_ATTEMPTS), permanent ones stop retrying; either way the reason is
+ * stored on the order and, once we give up, written to its history and emailed to the owner. */
+async function autoBookOne(row: { id: string; orderNumber: string; attempts: number }): Promise<{ result: BookResult; counted: boolean }> {
+  const result = await bookOrderWithPostex(row.id, "system");
+  if (result.ok) return { result, counted: false };
+  // Someone else (an admin click, another run) got there first, or the order moved on — not a failure.
+  if (result.kind === "conflict" || result.kind === "not_bookable" || result.kind === "not_found") return { result, counted: false };
+
+  const attempts = row.attempts + 1;
+  const gaveUp = !result.retryable || attempts >= MAX_AUTO_ATTEMPTS;
+  await db
+    .update(orders)
+    .set({ postexAutoAttempts: gaveUp ? MAX_AUTO_ATTEMPTS : attempts, postexAutoError: result.message })
+    .where(eq(orders.id, row.id));
+  if (gaveUp) {
+    await db.insert(orderStatusHistory).values({
+      orderId: row.id,
+      fromStatus: "confirmed",
+      toStatus: "confirmed",
+      note: `Automatic PostEx booking failed: ${result.message} — please book it manually.`,
+      actorEmail: "system",
+    });
+    await sendAdminAlertEmail(
+      `Order ${row.orderNumber} needs a manual PostEx booking`,
+      `<p>Order <strong>${escapeHtml(row.orderNumber)}</strong> is confirmed, but couldn't be booked with PostEx automatically:</p><p>${escapeHtml(result.message)}</p><p>Open the order in the admin order desk and use “Book with PostEx” to fix the details and book it.</p>`,
+    );
+  }
+  return { result, counted: true };
+}
+
+export type CourierOutcome =
+  | { state: "booked"; trackingNumber: string }
+  | { state: "created"; trackingNumber: string }
+  | { state: "failed"; message: string; willRetry: boolean }
+  | { state: "skipped" };
+
+/**
+ * Immediately books an order an admin has just placed (already confirmed), exactly as the sweeper
+ * would for a customer-confirmed one — so the admin doesn't wait for the next scheduled run. Only
+ * acts when courier booking is configured AND automatic booking is switched on. Never throws: the
+ * order is already saved, so a PostEx problem is reported back (and retried by the sweeper), not raised.
+ */
+export async function autoBookJustPlacedOrder(orderId: string): Promise<CourierOutcome> {
+  if (!isPostexConfigured() || !postexAutoBookSince()) return { state: "skipped" };
+  try {
+    const [row] = await db.select({ id: orders.id, orderNumber: orders.orderNumber, attempts: orders.postexAutoAttempts }).from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!row) return { state: "skipped" };
+    const { result } = await autoBookOne(row);
+    if (result.ok) return { state: result.booked ? "booked" : "created", trackingNumber: result.trackingNumber };
+    if (result.kind === "conflict") return { state: "skipped" };
+    return { state: "failed", message: result.message, willRetry: result.retryable && row.attempts + 1 < MAX_AUTO_ATTEMPTS };
+  } catch (error) {
+    console.error("Immediate PostEx booking failed for", orderId, error);
+    return { state: "failed", message: "Couldn't reach PostEx just now.", willRetry: true };
+  }
 }
 
 /** Moves an order forward because the courier says so (picked up / delivered / returned), with the
