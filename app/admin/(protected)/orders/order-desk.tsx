@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { PlaceOrderPanel, type PanelMode } from "./place-order-panel";
 
 type OrderRow = {
   id: string;
@@ -23,6 +25,10 @@ type OrderRow = {
 
 type OrderItem = {
   id: string;
+  // From a left join on products: null once the product has been deleted, and productStatus is only
+  // "published" while the product is actually visible on the storefront.
+  productSlug: string | null;
+  productStatus: string | null;
   productName: string;
   variantName: string;
   sku: string;
@@ -96,6 +102,8 @@ export function OrderDesk() {
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [proofs, setProofs] = useState<PaymentProof[]>([]);
   const [note, setNote] = useState("");
+  // Which "place order for customer" panel is open (null = closed).
+  const [placeMode, setPlaceMode] = useState<PanelMode | null>(null);
 
   // PostEx courier booking (see the "Courier" section of the drawer below).
   const [postex, setPostex] = useState<PostexState | null>(null);
@@ -322,6 +330,11 @@ export function OrderDesk() {
         </div>
       )}
       <div className="admin-top-actions">
+        <button className="admin-primary" onClick={() => setPlaceMode("single")}>
+          Place order for customer
+        </button>
+        <button onClick={() => setPlaceMode("bulk")}>Bulk import (JSON)</button>
+        <button onClick={() => window.location.assign("/api/admin/orders/place/template")}>Download order_place_template.json</button>
         <button disabled={postexBusy} onClick={() => syncPostex()}>
           {postexBusy ? "Syncing…" : "Sync PostEx now"}
         </button>
@@ -442,8 +455,18 @@ export function OrderDesk() {
                       {items.map((item) => (
                         <tr key={item.id}>
                           <td>
-                            <strong>{item.productName}</strong>
-                            <small>{item.variantName}</small>
+                            {item.productSlug && item.productStatus === "published" ? (
+                              // Opens the live product page in its own tab, outside the admin panel.
+                              <Link href={`/products/${item.productSlug}`} target="_blank" rel="noopener noreferrer" prefetch={false}>
+                                <strong>{item.productName} ↗︎</strong>
+                              </Link>
+                            ) : (
+                              <strong>{item.productName}</strong>
+                            )}
+                            <small>
+                              {item.variantName}
+                              {!item.productSlug ? " · product no longer exists" : item.productStatus !== "published" ? " · not published — no public page" : ""}
+                            </small>
                           </td>
                           <td>{item.sku}</td>
                           <td>{item.quantity}</td>
@@ -615,6 +638,16 @@ export function OrderDesk() {
             </section>
           </aside>
         </div>
+      )}
+      {placeMode && (
+        <PlaceOrderPanel
+          initialMode={placeMode}
+          onClose={() => setPlaceMode(null)}
+          onPlaced={(text) => {
+            setMessage(text);
+            void refresh();
+          }}
+        />
       )}
     </section>
   );
