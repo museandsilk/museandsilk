@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { StoreHeader } from "@/app/(store)/_components/store-components";
 import { readCart, writeCart, type CartItem } from "@/lib/cart";
 
 const money = new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 });
@@ -16,11 +15,11 @@ export default function CartPage() {
   useEffect(() => {
     const update = () => setItems(readCart());
     const timer = window.setTimeout(update, 0);
-    window.addEventListener("muse-cart-change", update);
+    window.addEventListener("na-cart-change", update);
     window.addEventListener("storage", update);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener("muse-cart-change", update);
+      window.removeEventListener("na-cart-change", update);
       window.removeEventListener("storage", update);
     };
   }, []);
@@ -95,7 +94,6 @@ export default function CartPage() {
 
   return (
     <main>
-      <StoreHeader />
       <section className="cart-page">
         <header>
           <div>
@@ -108,7 +106,7 @@ export default function CartPage() {
         {!items.length ? (
           <div className="cart-empty">
             <h2>Your bag is waiting.</h2>
-            <p>Discover the first edit of scarves, bandanas and eyewear.</p>
+            <p>Discover the latest from Nure Asmir.</p>
             <Link className="button button-dark" href="/shop">
               Explore the collection
             </Link>
@@ -122,7 +120,7 @@ export default function CartPage() {
                     {item.imageUrl ? (
                       <Image src={item.imageUrl} alt="" fill sizes="130px" />
                     ) : (
-                      <Image src="/category-still-life.webp" alt="" fill unoptimized sizes="130px" />
+                      <Image src="/placeholder.webp" alt="" fill unoptimized sizes="130px" />
                     )}
                   </div>
                   <div>

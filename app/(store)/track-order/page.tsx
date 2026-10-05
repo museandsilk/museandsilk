@@ -2,7 +2,6 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { StoreHeader } from "@/app/(store)/_components/store-components";
 
 type Tracked = {
   courier: { name: string; trackingNumber: string; status: string } | null;
@@ -113,7 +112,6 @@ function TrackOrderForm() {
 export default function TrackOrderPage() {
   return (
     <main>
-      <StoreHeader />
       <Suspense fallback={null}>
         <TrackOrderForm />
       </Suspense>

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { StoreHeader } from "../../_components/store-components";
 import { StoreFooter } from "../../_components/store-footer";
 import { getPublicSettings } from "@/lib/commerce";
 
@@ -20,7 +19,7 @@ type Policy = {
 const policies: Record<string, Policy> = {
   shipping: {
     title: "Shipping & delivery",
-    intro: "Clear delivery expectations for every Muse & Silk order, delivered nationwide across Pakistan.",
+    intro: "Clear delivery expectations for every Nure Asmir order, delivered nationwide across Pakistan.",
     sections: [
       [
         "Order confirmation",
@@ -61,8 +60,8 @@ const policies: Record<string, Policy> = {
         "Items showing wear, marks, scent, alteration or missing packaging cannot be accepted. Final-sale items and any personalised items are not returnable unless they arrive defective.",
       ],
       [
-        "Eyewear returns",
-        "Eyewear must be returned without scratches, adjustment or signs of wear, with any hygiene seal or protective film still intact, for the same reasons a worn or altered garment cannot be resold.",
+        "Leather accessories",
+        "Belts, wallets and card holders must be returned unused and unmarked, with their original packaging and tags, for the same reasons a worn garment cannot be resold.",
       ],
       [
         "Refunds and exchanges",
@@ -98,7 +97,7 @@ const policies: Record<string, Policy> = {
   },
   terms: {
     title: "Terms of service",
-    intro: "The conditions that govern purchases made from Muse & Silk.",
+    intro: "The conditions that govern purchases made from Nure Asmir.",
     sections: [
       [
         "Product information",
@@ -158,7 +157,6 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
 
   return (
     <main>
-      <StoreHeader />
       <article className="content-page">
         <header>
           <p className="eyebrow">Customer care</p>

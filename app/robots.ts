@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://nureasmir.com";
   return {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/api/media/", "/api/campaign-media/", "/api/feeds/"],
+        allow: ["/", "/cdn/", "/api/media/", "/api/campaign-media/", "/api/feeds/"],
         // /api/media/[id] and /api/campaign-media/[id] serve every product and campaign photo on
         // the site — blocking all of /api/ (meant for admin/order/checkout endpoints, which have
         // no content worth crawling anyway) also blocked those image routes, which is exactly what

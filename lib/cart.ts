@@ -16,7 +16,7 @@ export type CartItem = {
   available?: number;
 };
 
-const KEY = "muse-and-silk-cart";
+const KEY = "nure-asmir-cart";
 const FALLBACK_MAX = 10;
 
 function capFor(item: Pick<CartItem, "available">): number {
@@ -35,7 +35,7 @@ export function readCart(): CartItem[] {
 
 export function writeCart(items: CartItem[]) {
   localStorage.setItem(KEY, JSON.stringify(items));
-  window.dispatchEvent(new CustomEvent("muse-cart-change", { detail: items }));
+  window.dispatchEvent(new CustomEvent("na-cart-change", { detail: items }));
 }
 
 export function addCartItem(item: CartItem) {

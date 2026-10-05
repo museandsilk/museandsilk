@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, paymentProofs } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
-import { getSignedObjectUrl } from "@/lib/r2";
+import { getSignedObjectUrl } from "@/lib/storage";
 import { auditLogEntry } from "@/lib/admin/audit";
 
 export const dynamic = "force-dynamic";

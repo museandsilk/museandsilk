@@ -1,0 +1,27 @@
+import { getPublicSettings } from "@/lib/commerce";
+import { CurrencyProvider, CurrencySwitcher } from "./_components/currency";
+import { WhatsAppIcon } from "./_components/icons";
+import { StoreHeader } from "./_components/store-header";
+
+/** Shell shared by every storefront page: display-currency context, the floating WhatsApp
+ * shortcut (bottom-left) and the currency switcher (bottom-right), as on the benchmark site. */
+export default async function StoreLayout({ children }: { children: React.ReactNode }) {
+  const settings = await getPublicSettings();
+  const digits = settings.whatsappNumber.replace(/[^\d]/g, "");
+  return (
+    <CurrencyProvider>
+      <StoreHeader />
+      {children}
+      <a
+        className="float-whatsapp"
+        href={digits ? `https://wa.me/${digits}` : "/contact"}
+        target={digits ? "_blank" : undefined}
+        rel="noreferrer"
+        aria-label="Chat with us on WhatsApp"
+      >
+        <WhatsAppIcon size={26} />
+      </a>
+      <CurrencySwitcher />
+    </CurrencyProvider>
+  );
+}

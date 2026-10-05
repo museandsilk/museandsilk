@@ -3,13 +3,13 @@ import { buildProductFeedXml } from "@/lib/feed";
 
 export const revalidate = 3600;
 
-const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
+const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://nureasmir.com";
 
 /** Google Merchant Center product feed (RSS 2.0 + `g:` Google Shopping namespace). Register this
  * URL as a scheduled fetch in Merchant Center: /api/feeds/google */
 export async function GET() {
   const feedProducts = await getFeedProducts();
-  const xml = buildProductFeedXml(feedProducts, SITE_ORIGIN, "Muse & Silk — Product Feed", "Muse & Silk scarves, bandanas and eyewear, for Google Merchant Center.");
+  const xml = buildProductFeedXml(feedProducts, SITE_ORIGIN, "Nure Asmir — Product Feed", "Nure Asmir men's wear, for Google Merchant Center.");
 
   return new Response(xml, {
     headers: {

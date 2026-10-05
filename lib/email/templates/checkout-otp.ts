@@ -10,6 +10,6 @@ export function checkoutOtpEmail(payload: CheckoutOtpPayload): string {
     <p style="color:#6f675f;line-height:1.6;">Enter this code on the checkout page to confirm your order:</p>
     <p style="font-size:36px;letter-spacing:0.2em;font-weight:600;margin:24px 0;">${payload.code}</p>
     <p style="color:#6f675f;line-height:1.6;">This code expires in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
-    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Muse &amp; Silk</p>
+    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Nure Asmir</p>
   </div>`;
 }

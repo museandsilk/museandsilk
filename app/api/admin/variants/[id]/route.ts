@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { syncProductSearch } from "@/lib/search/algolia";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { productVariants } from "@/db/schema";
@@ -88,6 +89,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   await auditLogEntry({ actorEmail: admin.email, action: "variant.update", entityType: "variant", entityId: id, detail: data });
 
+  await syncProductSearch(existing.productId);
+
   return Response.json({ variant: row });
 }
 
@@ -116,6 +119,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   await auditLogEntry({ actorEmail: admin.email, action: "variant.archive", entityType: "variant", entityId: id });
+
+  await syncProductSearch(existing.productId);
 
   return Response.json({ ok: true, variant: row });
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { syncProductSearch } from "@/lib/search/algolia";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { productVariants } from "@/db/schema";
@@ -81,6 +82,8 @@ export async function POST(request: Request) {
     entityId: row.id,
     detail: { productId: data.productId, sku: data.sku },
   });
+
+  await syncProductSearch(data.productId);
 
   return Response.json({ variant: row }, { status: 201 });
 }

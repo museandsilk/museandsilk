@@ -66,7 +66,7 @@ function defaultPickupAddress(addresses: PostexPickupAddress[], explicitCode: st
 }
 
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
+  return process.env.NEXT_PUBLIC_SITE_URL || "https://nureasmir.com";
 }
 
 /**

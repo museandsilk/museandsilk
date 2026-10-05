@@ -44,7 +44,7 @@ export function middleware(request: NextRequest) {
   // once a browser has cached the policy (up to the full max-age, even after the header is
   // removed), and this domain's other subdomains (e.g. the one used for transactional email)
   // haven't been individually confirmed to always serve valid HTTPS.
-  if (request.headers.get("x-forwarded-proto") === "http") {
+  if (!isDev && request.headers.get("x-forwarded-proto") === "http") {
     const httpsUrl = new URL(request.url);
     httpsUrl.protocol = "https:";
     return NextResponse.redirect(httpsUrl, 308);
@@ -52,7 +52,8 @@ export function middleware(request: NextRequest) {
 
   const response = NextResponse.next();
   response.headers.set("Content-Security-Policy", buildCsp(getNonce()));
-  response.headers.set("Strict-Transport-Security", "max-age=63072000");
+  // Never in dev: browsers cache HSTS per host for the full max-age, which would pin localhost to https.
+  if (!isDev) response.headers.set("Strict-Transport-Security", "max-age=63072000");
   return response;
 }
 
@@ -60,5 +61,5 @@ export const config = {
   // /_next/static/* never reaches middleware anyway (Cloudflare's Workers Static Assets binding
   // serves it directly — see public/_headers), but excluding it here avoids running this on every
   // asset request regardless of adapter internals.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|cdn/|favicon.ico).*)"],
 };

@@ -1,7 +1,7 @@
 name: DNS resolution monitor
 
 # Diagnoses the recurring DNS_PROBE_FINISHED_NXDOMAIN report: customers across many different
-# devices/networks intermittently can't resolve museandsilk.com, but it always recovers once
+# devices/networks intermittently can't resolve nureasmir.com, but it always recovers once
 # someone succeeds. A keep-alive ping (see cron.yml) cannot fix this — NXDOMAIN happens at DNS
 # lookup, before any request ever reaches our server, so server "warmness" is irrelevant. This
 # workflow instead checks DNS resolution itself, every 5 minutes, from GitHub's network (fully
@@ -20,7 +20,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve museandsilk.com against public and authoritative nameservers
+      - name: Resolve nureasmir.com against public and authoritative nameservers
         id: dns
         run: |
           set +e
@@ -30,7 +30,7 @@ jobs:
           check() {
             local label="$1" server="$2"
             local out
-            out=$(dig +time=5 +tries=1 +short museandsilk.com @"$server" A 2>&1)
+            out=$(dig +time=5 +tries=1 +short nureasmir.com @"$server" A 2>&1)
             if [ -z "$out" ]; then
               FAIL_COUNT=$((FAIL_COUNT + 1))
               RESULTS="${RESULTS}FAIL  ${label} (@${server}): no answer\n"
@@ -69,7 +69,7 @@ jobs:
               console.log(JSON.stringify({
                 from: process.env.RESEND_FROM_EMAIL,
                 to: process.env.ADMIN_EMAIL,
-                subject: "DNS resolution failure detected for museandsilk.com",
-                html: "<p>At least one DNS resolver failed to resolve museandsilk.com just now, checked directly from GitHub Actions (independent of any customer network).</p><pre>" + results.replace(/</g, "&lt;") + "</pre><p>Run: " + process.env.GITHUB_SERVER_URL + "/" + process.env.GITHUB_REPOSITORY + "/actions/runs/" + process.env.GITHUB_RUN_ID + "</p>"
+                subject: "DNS resolution failure detected for nureasmir.com",
+                html: "<p>At least one DNS resolver failed to resolve nureasmir.com just now, checked directly from GitHub Actions (independent of any customer network).</p><pre>" + results.replace(/</g, "&lt;") + "</pre><p>Run: " + process.env.GITHUB_SERVER_URL + "/" + process.env.GITHUB_REPOSITORY + "/actions/runs/" + process.env.GITHUB_RUN_ID + "</p>"
               }));
             ' "${{ steps.dns.outputs.results }}")"

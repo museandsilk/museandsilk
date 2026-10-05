@@ -249,7 +249,7 @@ export function CampaignManager() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
+          <p className="eyebrow">Nure Asmir</p>
           <h1>Campaign</h1>
         </div>
       </header>
@@ -433,7 +433,7 @@ export function CampaignManager() {
           </label>
           <label>
             <span>Supporting text</span>
-            <textarea name="body" rows={3} defaultValue="Scarves, bandanas and eyewear selected for the way they transform an everyday look." />
+            <textarea name="body" rows={3} defaultValue="Shalwar kameez, shirts, pants and accessories for the modern man." />
           </label>
           <div>
             <label>

@@ -253,7 +253,7 @@ export function CollectionManager({ products }: { products: Product[] }) {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
+          <p className="eyebrow">Nure Asmir</p>
           <h1>Categories &amp; Collections</h1>
         </div>
         <div className="admin-top-actions">
@@ -425,11 +425,11 @@ export function CollectionManager({ products }: { products: Product[] }) {
             <h2>Create category</h2>
             <label>
               <span>Name</span>
-              <input required name="name" placeholder="Scarves" />
+              <input required name="name" placeholder="Eid Edit" />
             </label>
             <label>
               <span>URL slug (optional)</span>
-              <input name="slug" placeholder="scarves" />
+              <input name="slug" placeholder="eid-edit" />
             </label>
             <label>
               <span>Description</span>

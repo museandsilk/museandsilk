@@ -1,119 +1,93 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CampaignSlide } from "@/lib/commerce";
 import { buildSrcSet } from "@/lib/images";
+import { cdnSrcForWidth, isCdnUrl } from "@/lib/media-url";
 
 const fallback: CampaignSlide = {
   id: "campaign-default",
-  imageUrl: "/campaign-hero.webp",
+  imageUrl: "/placeholder.webp",
   mobileImageUrl: null,
-  altText: "Woman wearing an ivory and oxblood printed scarf with dark sunglasses",
-  eyebrow: "The first edit · 2026",
-  headline: "The final layer, considered.",
-  body: "Scarves, bandanas and eyewear selected for the way they transform an everyday look.",
-  ctaLabel: "Shop the first edit",
+  altText: "Nure Asmir — men's wear",
+  eyebrow: "",
+  headline: "",
+  body: "",
+  ctaLabel: "Shop now",
   ctaHref: "/shop",
   sortOrder: 0,
 };
 
+/** Full-width image banner. The campaign artwork carries its own typography (as on the benchmark
+ * site), so slides are just art + a link; the whole banner is clickable. Desktop/mobile crops are
+ * art-directed through <picture> when a slide has a separate mobile image. */
 export function CampaignCarousel({ slides }: { slides: CampaignSlide[] }) {
   const items = slides.length ? slides : [fallback];
   const [active, setActive] = useState(0);
-  const [zoomCycle, setZoomCycle] = useState(0);
-  const sectionRef = useRef<HTMLElement>(null);
-  const wasVisible = useRef(true);
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    if (items.length < 2) return;
-    const timer = window.setInterval(() => setActive((index) => (index + 1) % items.length), 5000);
+    if (items.length < 2 || paused) return;
+    const timer = window.setInterval(() => setActive((index) => (index + 1) % items.length), 6000);
     return () => window.clearInterval(timer);
-  }, [items.length]);
+  }, [items.length, paused]);
 
-  // Restart the hero image's slow zoom whenever it re-enters the viewport (e.g. the visitor
-  // scrolls down and back up), rather than leaving it mid-zoom or already fully zoomed in.
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !wasVisible.current) {
-          setZoomCycle((cycle) => cycle + 1);
-        }
-        wasVisible.current = entry.isIntersecting;
-      },
-      { threshold: 0.6 },
-    );
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, []);
+  const go = (delta: number) => setActive((index) => (index + delta + items.length) % items.length);
 
-  const slide = items[active];
   return (
-    <section ref={sectionRef} className="hero campaign-carousel" aria-labelledby="hero-title">
-      <div className="campaign-images">
-        {items.map((item, index) => (
-          <div
-            key={item.id}
-            className={`campaign-slide ${index === active ? "active" : ""}`}
-            style={item.blurDataUrl ? { backgroundImage: `url(${item.blurDataUrl})` } : undefined}
-          >
-            {item.mobileImageUrl ? (
-              <picture key={`${item.id}-${index === active ? zoomCycle : "idle"}`}>
-                <source media="(max-width: 760px)" srcSet={buildSrcSet(item.mobileImageUrl)} sizes="100vw" />
+    <section
+      className="banner"
+      aria-roledescription="carousel"
+      aria-label="Featured campaigns"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div className="banner-track">
+        {items.map((item, index) => {
+          const eager = index === 0;
+          const desktopSrc = isCdnUrl(item.imageUrl) ? cdnSrcForWidth(item.imageUrl, 1600) : item.imageUrl;
+          return (
+            <div
+              key={item.id}
+              className={`banner-slide ${index === active ? "active" : ""}`}
+              style={item.blurDataUrl ? { backgroundImage: `url(${item.blurDataUrl})` } : undefined}
+              aria-hidden={index !== active}
+            >
+              <picture>
+                {item.mobileImageUrl && <source media="(max-width: 700px)" srcSet={buildSrcSet(item.mobileImageUrl)} sizes="100vw" />}
                 <img
-                  src={item.imageUrl}
-                  srcSet={buildSrcSet(item.imageUrl)}
+                  src={desktopSrc}
+                  srcSet={buildSrcSet(item.imageUrl) || undefined}
                   sizes="100vw"
                   alt={index === active ? item.altText : ""}
-                  loading={index === 0 ? "eager" : "lazy"}
-                  fetchPriority={index === 0 ? "high" : "auto"}
+                  loading={eager ? "eager" : "lazy"}
+                  fetchPriority={eager ? "high" : "auto"}
+                  decoding={eager ? "sync" : "async"}
                 />
               </picture>
-            ) : (
-              <img
-                key={`${item.id}-${index === active ? zoomCycle : "idle"}`}
-                src={item.imageUrl}
-                srcSet={buildSrcSet(item.imageUrl)}
-                sizes="100vw"
-                alt={index === active ? item.altText : ""}
-                loading={index === 0 ? "eager" : "lazy"}
-                fetchPriority={index === 0 ? "high" : "auto"}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="hero-shade" />
-      <div className="hero-copy">
-        <p className="eyebrow">{slide.eyebrow}</p>
-        <h1 id="hero-title">{slide.headline}</h1>
-        <p className="hero-note">{slide.body}</p>
-        <div className="hero-actions">
-          <Link href={slide.ctaHref} className="button button-dark">{slide.ctaLabel}</Link>
-          <Link href="/collections/scarves" className="text-link light-link">Discover scarves <span aria-hidden="true">↗︎</span></Link>
-        </div>
+              <Link href={item.ctaHref} className="banner-link" tabIndex={index === active ? 0 : -1} aria-label={item.ctaLabel || "Shop now"} />
+            </div>
+          );
+        })}
       </div>
       {items.length > 1 && (
-        <div className="campaign-controls" aria-label="Campaign slides">
-          {items.map((item, index) => (
-            <button
-              key={item.id}
-              aria-label={`Show slide ${index + 1}`}
-              className={index === active ? "active" : ""}
-              onClick={() => setActive(index)}
-            >
-              <i />
-            </button>
-          ))}
-        </div>
+        <>
+          <button type="button" className="banner-arrow banner-prev" aria-label="Previous slide" onClick={() => go(-1)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <button type="button" className="banner-arrow banner-next" aria-label="Next slide" onClick={() => go(1)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+          </button>
+          <div className="banner-dots">
+            {items.map((item, index) => (
+              <button key={item.id} type="button" aria-label={`Show slide ${index + 1}`} className={index === active ? "active" : ""} onClick={() => setActive(index)}>
+                <i />
+              </button>
+            ))}
+          </div>
+        </>
       )}
-      <div className="hero-index" aria-hidden="true">
-        <span>{String(active + 1).padStart(2, "0")}</span>
-        <i />
-        <span>{String(items.length).padStart(2, "0")}</span>
-      </div>
     </section>
   );
 }

@@ -11,7 +11,7 @@ export default async function AdminSubscribersPage() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
+          <p className="eyebrow">Nure Asmir</p>
           <h1>Subscribers</h1>
           <p>Consent-recorded newsletter subscribers collected by the website.</p>
         </div>

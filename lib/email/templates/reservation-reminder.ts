@@ -26,6 +26,6 @@ export function reservationReminderEmail(payload: ReservationReminderPayload): s
         : "If you haven't yet made the deposit, please do so soon and reply with your payment proof so we can confirm and dispatch your order."}
     </p>
     ${payload.whatsappNumber ? `<p style="color:#6f675f;">Reach us on WhatsApp any time: ${payload.whatsappNumber}</p>` : ""}
-    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Muse &amp; Silk</p>
+    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Nure Asmir</p>
   </div>`;
 }

@@ -1,20 +1,23 @@
 import type { ImageLoaderProps } from "next/image";
 import { STANDARD_WIDTHS, nearestVariantWidth } from "./image-variants";
+import { cdnSrcForWidth, cdnSrcSet, isCdnUrl } from "./media-url";
 
 /**
- * Custom next/image loader. Product/category/campaign images are served through our own
- * /api/media/[id], /api/category-media/[id] and /api/campaign-media/[id] origin routes (reading
- * from private R2), which are pre-populated with resized WebP variants generated in the admin's
- * browser at upload time (see lib/client-image-processing.ts) — no paid Cloudflare Images/Image
- * Resizing subscription needed, and no image-codec CPU work ever runs in the deployed Worker.
- * This loader just appends the requested width so the origin route can pick the smallest variant
- * that still covers it. Static public assets (logo, hero fallback, category stills) have no
- * variants and are served as-is.
+ * Custom next/image loader — no image-resizing subscription, no codec work in the Worker.
+ * Every upload is converted to a ladder of WebP widths up front (in the admin's browser, or by
+ * scripts/seed.ts), so "optimisation" is just picking the right pre-made file:
+ *   - CDN URLs (lib/media-url.ts) resolve straight to the variant object in the bucket, cached
+ *     forever at Cloudflare's edge.
+ *   - Legacy /api/media|category-media|campaign-media routes (admin previews, feeds) still take a
+ *     `?w=` width.
+ *   - Anything else (static /public assets) is served as-is.
  */
 export function cloudflareImageLoader({ src, width }: ImageLoaderProps): string {
-  const isDynamicMedia =
+  if (isCdnUrl(src)) return cdnSrcForWidth(src, width);
+
+  const isLegacyMedia =
     src.startsWith("/api/media/") || src.startsWith("/api/category-media/") || src.startsWith("/api/campaign-media/");
-  if (!isDynamicMedia) return src;
+  if (!isLegacyMedia) return src;
 
   const resolvedWidth = nearestVariantWidth(width);
   const separator = src.includes("?") ? "&" : "?";
@@ -25,10 +28,9 @@ export function preWarmWidths(): readonly number[] {
   return STANDARD_WIDTHS;
 }
 
-/** Builds a width-descriptor srcset against our own resizing origin routes — used with a raw
- * <picture><source media="…"> pair wherever a page needs to show a genuinely different crop per
- * breakpoint (not just a smaller version of the same crop), since next/image doesn't render a
- * <picture> element directly. See CampaignCarousel for the original use of this pattern. */
+/** Builds a width-descriptor srcset — used with a raw <picture><source media="…"> pair wherever a
+ * page needs a genuinely different crop per breakpoint (next/image doesn't render <picture>). */
 export function buildSrcSet(url: string): string {
+  if (isCdnUrl(url)) return cdnSrcSet(url);
   return STANDARD_WIDTHS.map((width) => `${url}${url.includes("?") ? "&" : "?"}w=${width} ${width}w`).join(", ");
 }

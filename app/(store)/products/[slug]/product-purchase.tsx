@@ -6,28 +6,31 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CatalogProduct, CatalogVariant } from "@/lib/commerce";
 import { addCartItem, readCart } from "@/lib/cart";
-
-const money = new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 });
+import { Price } from "../../_components/currency";
 
 export function ProductPurchase({
   product,
-  variants,
-  selectedId,
-  onSelectVariant,
+  colors,
+  color,
+  onColor,
+  colorVariants,
+  sized,
+  selected,
+  onSize,
 }: {
   product: CatalogProduct;
-  variants: CatalogVariant[];
-  selectedId: string;
-  onSelectVariant: (id: string) => void;
+  colors: string[];
+  color: string;
+  onColor: (color: string) => void;
+  colorVariants: CatalogVariant[];
+  sized: boolean;
+  /** The chosen variant, or null while a size still has to be picked. */
+  selected: CatalogVariant | null;
+  onSize: (variantId: string) => void;
 }) {
   const router = useRouter();
-  // `message` covers the two error states (sold out / already at cap) — an inline line makes
-  // sense right there next to the button. A successful add gets its own toast below instead: the
-  // old version only ever showed a quiet line of text under the buttons for that too, easy to
-  // miss entirely, with no way to act on it without a full page navigation to /cart.
   const [message, setMessage] = useState("");
-  const [toast, setToast] = useState<{ variantName: string; price: number } | null>(null);
-  const selected = variants.find((variant) => variant.id === selectedId) ?? variants[0];
+  const [toast, setToast] = useState<{ variantName: string } | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -36,6 +39,10 @@ export function ProductPurchase({
   }, [toast]);
 
   function add(buyNow = false) {
+    if (!selected) {
+      setMessage("Please select a size.");
+      return;
+    }
     if (selected.available < 1) {
       setMessage("This option is currently sold out.");
       return;
@@ -63,55 +70,80 @@ export function ProductPurchase({
       router.push("/cart");
       return;
     }
-    setToast({ variantName: selected.color, price: selected.price });
+    setToast({ variantName: selected.name });
   }
+
+  const allSoldOut = colorVariants.every((variant) => variant.available < 1);
 
   return (
     <div className="purchase-block">
-      <div className="choice-row">
-        <span>Color</span>
-        <strong>{selected.color}</strong>
-      </div>
-      {selected.available < 1 ? (
+      {colors.length > 1 && (
+        <>
+          <div className="choice-row">
+            <span>Colour</span>
+            <strong>{color}</strong>
+          </div>
+          <div className="color-options">
+            {colors.map((item) => (
+              <button key={item} type="button" className={item === color ? "active" : ""} onClick={() => onColor(item)}>
+                {item}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {sized && (
+        <>
+          <div className="choice-row">
+            <span>Size</span>
+            <strong>{selected?.size ?? ""}</strong>
+          </div>
+          <div className="size-options" role="radiogroup" aria-label="Size">
+            {colorVariants.map((variant) => (
+              <button
+                key={variant.id}
+                type="button"
+                role="radio"
+                aria-checked={selected?.id === variant.id}
+                className={selected?.id === variant.id ? "active" : ""}
+                disabled={variant.available < 1}
+                onClick={() => {
+                  onSize(variant.id);
+                  setMessage("");
+                }}
+                title={variant.available < 1 ? "Sold out" : undefined}
+              >
+                {variant.size}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {selected && selected.available < 1 ? (
         <p className="stock-badge stock-badge-out">Sold out</p>
-      ) : selected.available < 5 ? (
+      ) : selected && selected.available < 5 ? (
         <p className="stock-badge stock-badge-low">Only {selected.available} left in stock</p>
+      ) : allSoldOut ? (
+        <p className="stock-badge stock-badge-out">Sold out</p>
       ) : null}
-      <div className="color-options">
-        {variants.map((variant, index) => (
-          <button
-            key={variant.id}
-            aria-label={`Choose ${variant.color}`}
-            className={selected.id === variant.id ? "active" : ""}
-            onClick={() => onSelectVariant(variant.id)}
-            disabled={variant.available < 1}
-          >
-            <i className={`option-${index % 3}`} />
-          </button>
-        ))}
-      </div>
-      <button className="add-button" disabled={selected.available < 1} onClick={() => add()}>
-        Add to bag{" "}
-        <span>
-          {selected.compareAtPrice && selected.compareAtPrice > selected.price && (
-            <span className="product-price-compare">PKR {selected.compareAtPrice.toLocaleString("en-PK")}</span>
-          )}{" "}
-          PKR {selected.price.toLocaleString("en-PK")}
-        </span>
+
+      <button className="add-button" type="button" disabled={allSoldOut || (selected !== null && selected.available < 1)} onClick={() => add()}>
+        {allSoldOut ? "Sold out" : "Add to bag"}
       </button>
-      <button className="buy-button" disabled={selected.available < 1} onClick={() => add(true)}>
-        Buy now
+      <button className="buy-button" type="button" disabled={allSoldOut || (selected !== null && selected.available < 1)} onClick={() => add(true)}>
+        Buy it now
       </button>
       {message && (
-        <p className="purchase-message" aria-live="polite">
+        <p className="purchase-message" role="alert">
           {message}
         </p>
       )}
       <div className="purchase-benefits">
-        <span>COD available</span>
-        <span>Secure checkout</span>
+        <span>Cash on delivery</span>
         <span>Nationwide delivery</span>
-        <Link href="/policies/returns">Easy returns</Link>
+        <Link href="/policies/returns">Easy exchanges</Link>
       </div>
       {toast && (
         <div className="cart-toast" role="status" aria-live="polite">
@@ -119,12 +151,18 @@ export function ProductPurchase({
             ×
           </button>
           <div className="cart-toast-thumb">
-            <Image src={product.imageUrl ?? "/category-still-life.webp"} alt="" fill sizes="56px" />
+            <Image src={product.imageUrl ?? "/placeholder.webp"} alt="" fill sizes="56px" />
           </div>
           <div className="cart-toast-body">
             <strong>Added to your bag</strong>
             <p>
-              {product.name} — {toast.variantName} · {money.format(toast.price)}
+              {product.name} — {toast.variantName}
+              {selected && (
+                <>
+                  {" · "}
+                  <Price amount={selected.price} />
+                </>
+              )}
             </p>
           </div>
           <div className="cart-toast-actions">

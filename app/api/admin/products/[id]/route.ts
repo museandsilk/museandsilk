@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { removeProductFromSearch, syncProductSearch } from "@/lib/search/algolia";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, productImages, products, productVariants } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { slugify } from "@/lib/slug";
 import { auditLogEntry } from "@/lib/admin/audit";
-import { deleteObject } from "@/lib/r2";
+import { deleteObject } from "@/lib/storage";
 import { variantKeyFor } from "@/lib/image-variants";
 import { generateSeoFields } from "@/lib/ai/seo";
 import { isUniqueViolation } from "@/lib/db/errors";
@@ -159,6 +160,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.update", entityType: "product", entityId: id, detail: data });
 
+  await syncProductSearch(id);
+
   return Response.json({ product: row });
 }
 
@@ -178,6 +181,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     if (!row) return Response.json({ error: "Product not found." }, { status: 404 });
 
     await auditLogEntry({ actorEmail: admin.email, action: "product.archive", entityType: "product", entityId: id });
+    await syncProductSearch(id);
     return Response.json({ ok: true });
   }
 
@@ -211,6 +215,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   );
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.delete_permanent", entityType: "product", entityId: id, detail: { imagesDeleted: images.length } });
+  await removeProductFromSearch(id);
 
   return Response.json({ ok: true });
 }

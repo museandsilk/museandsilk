@@ -11,9 +11,9 @@ function client(): Resend | null {
 }
 
 function fromAddress(): string {
-  const name = process.env.RESEND_FROM_NAME || "Muse & Silk";
+  const name = process.env.RESEND_FROM_NAME || "Nure Asmir";
   const email = process.env.RESEND_FROM_EMAIL;
-  return email ? `${name} <${email}>` : "Muse & Silk <onboarding@resend.dev>";
+  return email ? `${name} <${email}>` : "Nure Asmir <onboarding@resend.dev>";
 }
 
 // The Resend SDK does NOT throw on API-level failures (invalid recipient, quota exceeded, bad
@@ -55,7 +55,7 @@ export async function sendOrderEmails(payload: OrderEmailPayload): Promise<void>
   await send({
     from: fromAddress(),
     to: payload.toEmail,
-    subject: `Order ${payload.orderNumber} confirmed — Muse & Silk`,
+    subject: `Order ${payload.orderNumber} confirmed — Nure Asmir`,
     html: orderConfirmationEmail(payload),
   });
   if (payload.paymentMethod === "bank_deposit" && payload.bank) {
@@ -76,7 +76,7 @@ export async function sendReservationReminderEmail(payload: ReservationReminderP
   await send({
     from: fromAddress(),
     to: payload.toEmail,
-    subject: `Your order ${payload.orderNumber} is waiting — Muse & Silk`,
+    subject: `Your order ${payload.orderNumber} is waiting — Nure Asmir`,
     html: reservationReminderEmail(payload),
   });
 }
@@ -89,7 +89,7 @@ export async function sendCheckoutOtpEmail(toEmail: string, code: string): Promi
   return send({
     from: fromAddress(),
     to: toEmail,
-    subject: "Your Muse & Silk verification code",
+    subject: "Your Nure Asmir verification code",
     html: checkoutOtpEmail({ toEmail, code }),
   });
 }

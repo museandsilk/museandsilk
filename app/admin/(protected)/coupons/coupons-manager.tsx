@@ -181,7 +181,7 @@ export function CouponsManager() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
+          <p className="eyebrow">Nure Asmir</p>
           <h1>Coupons</h1>
           <p>Create and manage discount codes customers can apply at checkout.</p>
         </div>

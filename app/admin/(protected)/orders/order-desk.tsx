@@ -319,7 +319,7 @@ export function OrderDesk() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
+          <p className="eyebrow">Nure Asmir</p>
           <h1>Order desk</h1>
         </div>
       </header>

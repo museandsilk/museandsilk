@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Script from "next/script";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { StoreHeader } from "@/app/(store)/_components/store-components";
 import { clearCart, readCart, type CartItem } from "@/lib/cart";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
@@ -342,7 +341,6 @@ export default function CheckoutPage() {
   if (result) {
     return (
       <main>
-        <StoreHeader />
         <section className="order-success">
           <p className="eyebrow">Order received</p>
           <span className="success-mark">◇</span>
@@ -395,7 +393,6 @@ export default function CheckoutPage() {
 
   return (
     <main>
-      <StoreHeader />
       <section className="checkout-page">
         <header>
           <div>

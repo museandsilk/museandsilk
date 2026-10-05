@@ -102,55 +102,55 @@ type ImportedVariantDraft = {
 // Shared with the "Download sample JSON" buttons below — one source of truth for what the example
 // structure actually looks like, so the on-screen example and the downloadable file can't drift.
 const SINGLE_VARIANT_EXAMPLE = {
-  name: "The Nomad Silk Scarf",
-  slug: "the-nomad-silk-scarf",
-  category: "Scarves",
-  typeLabel: "Luxury Silk Scarf",
+  name: "Espresso Kameez Shalwar",
+  slug: "espresso-kameez-shalwar",
+  category: "Shalwar Kameez",
+  typeLabel: "Kameez Shalwar",
   visibility: "draft",
   featured: true,
   badge: "New",
-  shortDescription: "A luxurious chocolate brown silk scarf with an elegant equestrian-inspired print.",
-  description: "Inspired by classic equestrian heritage, this scarf blends rich chocolate brown tones with refined golden accents and intricate chain motifs.",
-  material: "Premium Satin Silk",
-  dimensions: { length: 90, width: 90, unit: "cm" },
-  careInstructions: ["Hand wash with cold water.", "Do not bleach.", "Iron on low heat."],
-  primaryColour: "Chocolate Brown",
-  attributes: { pattern: "Equestrian Chain & Monogram Print", gender: "Women", countryOfOrigin: "Pakistan" },
-  seo: { title: "The Nomad Silk Scarf | Muse & Silk", description: "Premium chocolate brown luxury silk scarf." },
+  shortDescription: "A clean, collared kameez shalwar in deep espresso brown.",
+  description: "Easy through the body with a relaxed shalwar, made to be worn from the office to dinner.",
+  material: "Wash & wear blend",
+  careInstructions: ["Machine wash cold.", "Do not bleach.", "Iron on medium heat."],
+  primaryColour: "Espresso",
+  attributes: { gender: "Men", countryOfOrigin: "Pakistan" },
+  seo: { title: "Espresso Kameez Shalwar | Nure Asmir", description: "Espresso brown kameez shalwar for men." },
   variants: [
     {
-      name: "Chocolate Brown",
-      color: "Chocolate Brown",
-      sku: "MS-SCF-NOM-BRN",
-      price: 3490,
-      compareAtPrice: 4490,
-      stockQuantity: 25,
-      images: [{ file: "nomad-desert.jpg", isPrimary: true, order: 0, alt: "The Nomad Silk Scarf in a desert setting." }],
+      name: "Espresso / M",
+      color: "Espresso",
+      size: "M",
+      sku: "NA-KS-ESP-M",
+      price: 12500,
+      stockQuantity: 20,
+      images: [{ file: "espresso-front.jpg", isPrimary: true, order: 0, alt: "Man wearing the espresso kameez shalwar." }],
     },
   ],
 };
 
 const MULTI_VARIANT_EXAMPLE = {
-  name: "The Atlas Silk Scarf",
-  category: "Scarves",
-  typeLabel: "Luxury Silk Scarf",
+  name: "Ivory Sashiko Tee",
+  category: "Shirts",
+  typeLabel: "T-Shirt",
   visibility: "published",
   variants: [
     {
-      name: "Chocolate Brown",
-      color: "Chocolate Brown",
-      sku: "MS-SCF-ATL-BRN",
-      price: 3490,
+      name: "Ivory / M",
+      color: "Ivory",
+      size: "M",
+      sku: "NA-TE-SAS-M",
+      price: 5500,
       stockQuantity: 12,
-      images: [{ file: "atlas-brown-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Chocolate Brown." }],
+      images: [{ file: "sashiko-front.jpg", isPrimary: true, order: 0, alt: "Ivory sashiko tee, front." }],
     },
     {
-      name: "Emerald Green",
-      color: "Emerald Green",
-      sku: "MS-SCF-ATL-GRN",
-      price: 3490,
+      name: "Ivory / L",
+      color: "Ivory",
+      size: "L",
+      sku: "NA-TE-SAS-L",
+      price: 5500,
       stockQuantity: 8,
-      images: [{ file: "atlas-green-1.jpg", isPrimary: true, order: 0, alt: "Atlas Silk Scarf in Emerald Green." }],
     },
   ],
 };
@@ -762,7 +762,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
+          <p className="eyebrow">Nure Asmir</p>
           <h1>Products</h1>
         </div>
         <div className="admin-top-actions">
@@ -943,7 +943,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                       const name = event.target.value;
                       setDraft({ ...draft, name, slug: slugTouched ? draft.slug : slugify(name) });
                     }}
-                    placeholder="The Serein Silk Scarf"
+                    placeholder="Espresso Kameez Shalwar"
                   />
                 </label>
                 <label>
@@ -973,7 +973,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                     required
                     value={draft.typeLabel}
                     onChange={(event) => setDraft({ ...draft, typeLabel: event.target.value })}
-                    placeholder="Silk scarf"
+                    placeholder="Kameez Shalwar"
                   />
                 </label>
                 <label>

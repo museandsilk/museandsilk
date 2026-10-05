@@ -29,7 +29,7 @@ export async function buildOrderTemplate() {
 
   return {
     _readme: [
-      "Bulk order template for the Muse & Silk admin (Orders > Bulk import). Save it, edit it, then upload it.",
+      "Bulk order template for the Nure Asmir admin (Orders > Bulk import). Save it, edit it, then upload it.",
       "Every order below is placed as CONFIRMED, on the customer's behalf. Delete the two examples and add your own.",
       `Up to ${MAX_BULK_ORDERS} orders per file, and up to ${MAX_ITEMS_PER_ORDER} items per order. You'll see a full check of every order before anything is placed.`,
       "Required per order: customerName, customerPhone, city, province, address, zone, paymentMethod, items.",

@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { syncProductSearch } from "@/lib/search/algolia";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { productImages } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
-import { deleteObject } from "@/lib/r2";
+import { deleteObject } from "@/lib/storage";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { variantKeyFor } from "@/lib/image-variants";
 
@@ -51,6 +52,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   await auditLogEntry({ actorEmail: admin.email, action: "image.update", entityType: "product", entityId: existing.productId, detail: { imageId: id, ...data } });
 
+  await syncProductSearch(existing.productId);
+
   return Response.json({ image: row });
 }
 
@@ -71,6 +74,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   await auditLogEntry({ actorEmail: admin.email, action: "image.delete", entityType: "product", entityId: existing.productId, detail: { imageId: id } });
+
+  await syncProductSearch(existing.productId);
 
   return Response.json({ ok: true });
 }

@@ -21,7 +21,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
   return (
     <main className="admin-shell">
       <aside className="admin-sidebar">
-        <Link href="/" className="admin-mark" aria-label="Muse & Silk, view store">
+        <Link href="/" className="admin-mark" aria-label="Nure Asmir, view store">
           <Image src="/logo.png" alt="" width={48} height={48} priority />
         </Link>
         <nav>

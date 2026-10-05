@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { syncProductSearch } from "@/lib/search/algolia";
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, productImages, products, productVariants } from "@/db/schema";
@@ -181,6 +182,8 @@ export async function POST(request: Request) {
   }
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.create", entityType: "product", entityId: row.id, detail: { name: data.name, slug } });
+
+  await syncProductSearch(row.id);
 
   return Response.json({ product: row }, { status: 201 });
 }

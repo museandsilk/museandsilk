@@ -43,3 +43,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.neon
+
+# local tooling / reference material (never committed)
+.claude/
+/ismail_farid/
+# client assets: only the web-optimised set is tracked (used by scripts/seed.ts)
+/nure_asmir_assets/*
+!/nure_asmir_assets/web/

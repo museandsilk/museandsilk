@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { StoreHeader } from "../_components/store-components";
 import { StoreFooter } from "../_components/store-footer";
 import { getPublicSettings } from "@/lib/commerce";
 import { getNonce } from "@/lib/nonce";
@@ -9,7 +8,7 @@ export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "FAQ",
-  description: "Answers to common questions about Muse & Silk orders — delivery, cash on delivery, bank deposit, returns, and sizing.",
+  description: "Answers to common questions about Nure Asmir orders — delivery, cash on delivery, bank deposit, returns, and sizing.",
   alternates: { canonical: "/faq" },
 };
 
@@ -37,7 +36,7 @@ export default async function FaqPage() {
     ],
     [
       "How do I know which size or fit to choose?",
-      "Each product page lists exact dimensions under \"Dimensions & care\", along with material and finish notes, so you can check the measurements before ordering. Scarves and bandanas are one size; eyewear frame details are listed per style. If you're unsure, write to us before ordering and we'll help you choose.",
+      "Choose your size on each product page — sizes that are out of stock are crossed out. If you are between sizes or unsure about fit, message us on WhatsApp before ordering and we will help you choose.",
     ],
     [
       "What if I need to return or exchange something?",
@@ -65,13 +64,12 @@ export default async function FaqPage() {
 
   return (
     <main>
-      <StoreHeader />
-      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="content-page">
         <header>
           <p className="eyebrow">Customer care</p>
           <h1>Frequently asked questions</h1>
-          <p>Straight answers on delivery, payment, returns and sizing — no digging through policy pages required.</p>
+          <p>Straight answers on delivery, payment, exchanges and sizing.</p>
         </header>
         <div className="product-accordions faq-accordions">
           {faqs.map(([question, answer]) => (

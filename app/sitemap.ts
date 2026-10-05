@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
-import { getActiveCollections, getCatalogProducts } from "@/lib/commerce";
-import { journalArticles } from "./(store)/journal/journal-data";
+import { getActiveCategories, getActiveCollections, getCatalogProducts } from "@/lib/commerce";
+import { siteOrigin } from "@/lib/brand";
 
 const POLICY_SLUGS = ["shipping", "returns", "privacy", "terms"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
-  const [products, collections] = await Promise.all([getCatalogProducts(), getActiveCollections()]);
+  const origin = siteOrigin();
+  const [products, collections, categories] = await Promise.all([getCatalogProducts(), getActiveCollections(), getActiveCategories()]);
   const now = new Date();
 
   return [
@@ -16,9 +16,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${origin}/contact`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
     { url: `${origin}/faq`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${origin}/track-order`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
-    { url: `${origin}/journal`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
-    ...["scarves", "bandanas", "glasses"].map((slug) => ({
-      url: `${origin}/collections/${slug}`,
+    ...categories.map((category) => ({
+      url: `${origin}/collections/${category.slug}`,
       lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.8,
@@ -34,12 +33,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.8,
-    })),
-    ...journalArticles.map((article) => ({
-      url: `${origin}/journal/${article.slug}`,
-      lastModified: now,
-      changeFrequency: "monthly" as const,
-      priority: 0.4,
     })),
     ...POLICY_SLUGS.map((slug) => ({
       url: `${origin}/policies/${slug}`,

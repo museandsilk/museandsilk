@@ -122,7 +122,7 @@ async function handleButtonReply(repliedToMessageId: string, buttonPayload: stri
     detail: { buttonPayload, toStatus },
   });
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://nureasmir.com";
   const replyText =
     toStatus === "confirmed"
       ? `Your order #${order.orderNumber} has been confirmed. You can track it on our website: ${siteUrl}/track-order`

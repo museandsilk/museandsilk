@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { reindexAll } from "@/lib/search/algolia";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
@@ -52,6 +53,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!row) return Response.json({ error: "Category not found." }, { status: 404 });
 
   await auditLogEntry({ actorEmail: admin.email, action: "category.update", entityType: "category", entityId: id, detail: data });
+
+  // Category name/slug are part of every product record in the search index.
+  await reindexAll().catch((error) => console.error("Algolia reindex after category change failed", error));
 
   return Response.json({ category: row });
 }

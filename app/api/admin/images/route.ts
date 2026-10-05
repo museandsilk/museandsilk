@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
+import { syncProductSearch } from "@/lib/search/algolia";
 import { db } from "@/db";
 import { productImages } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { validateImageUpload } from "@/lib/validation";
-import { newObjectKey, putObject } from "@/lib/r2";
+import { newObjectKey, putObject } from "@/lib/storage";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { variantKeyFor } from "@/lib/image-variants";
 
@@ -105,6 +106,8 @@ export async function POST(request: Request) {
     entityId: productId,
     detail: { imageId: row.id, altText: row.altText },
   });
+
+  await syncProductSearch(productId);
 
   return Response.json({ image: row }, { status: 201 });
 }

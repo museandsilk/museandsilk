@@ -18,7 +18,7 @@
     "enabled": true
   },
   "routes": [
-    { "pattern": "museandsilk.com", "custom_domain": true },
-    { "pattern": "www.museandsilk.com", "custom_domain": true }
+    { "pattern": "nureasmir.com", "custom_domain": true },
+    { "pattern": "www.nureasmir.com", "custom_domain": true }
   ]
 }

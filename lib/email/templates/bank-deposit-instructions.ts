@@ -23,6 +23,6 @@ export function bankDepositInstructionsEmail(payload: OrderEmailPayload): string
     <p style="color:#6f675f;line-height:1.7;">
       Your order will be confirmed after payment verification and then dispatched to your delivery address.
     </p>
-    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Muse &amp; Silk</p>
+    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Nure Asmir</p>
   </div>`;
 }

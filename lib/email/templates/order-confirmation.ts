@@ -37,6 +37,6 @@ export function orderConfirmationEmail(payload: OrderEmailPayload): string {
         : "Payment instructions for this bank-deposit order are in a separate email."}
     </p>
     ${payload.whatsappNumber ? `<p style="color:#6f675f;">Questions? Message us on WhatsApp: ${payload.whatsappNumber}</p>` : ""}
-    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Muse &amp; Silk</p>
+    <p style="margin-top:40px;color:#a99682;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Nure Asmir</p>
   </div>`;
 }

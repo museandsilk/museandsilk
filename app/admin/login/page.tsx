@@ -41,7 +41,7 @@ function LoginForm() {
     <main className="admin-standalone">
       <header>
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
+          <p className="eyebrow">Nure Asmir</p>
           <h1>Owner sign in</h1>
           <p>Sign in with your admin email and password to manage the store.</p>
         </div>
@@ -56,7 +56,7 @@ function LoginForm() {
               autoComplete="username"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="owner@museandsilk.com"
+              placeholder="owner@nureasmir.com"
             />
           </label>
           <label className="field-wide">
