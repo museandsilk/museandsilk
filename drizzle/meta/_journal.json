@@ -113,6 +113,13 @@
       "when": 1791188006572,
       "tag": "0015_nure_asmir_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791190667276,
+      "tag": "0016_admin_push_devices",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import {
 } from "@/db/schema";
 import { sendOrderEmails } from "@/lib/email/resend";
 import { sendOrderConfirmationWhatsApp, toWhatsAppPhone } from "@/lib/whatsapp";
+import { notifyAdmins } from "@/lib/push/notify";
 import {
   attachOrderToIdempotencyKey,
   claimIdempotencyKey,
@@ -56,7 +57,7 @@ function generateOrderNumber(): string {
   const random = Math.floor(Math.random() * 1_000_000)
     .toString()
     .padStart(6, "0");
-  return `MS-${stamp}-${random}`;
+  return `NA-${stamp}-${random}`;
 }
 
 function bankDetailsFrom(settings: SiteSettingsRow | undefined): BankDetails {
@@ -413,6 +414,12 @@ export async function POST(request: Request) {
   }
 
   await attachOrderToIdempotencyKey(idempotencyKey, orderId);
+
+  notifyAdmins({
+    title: `New order ${orderNumber}`,
+    body: `${customerName} · Rs. ${total.toLocaleString("en-PK")} · ${paymentMethod === "bank_deposit" ? "Bank deposit" : "Cash on delivery"}`,
+    url: "/admin/orders",
+  });
 
   try {
     await sendOrderEmails({

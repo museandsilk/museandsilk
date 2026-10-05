@@ -21,6 +21,17 @@ export const adminSessions = pgTable("admin_sessions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("admin_sessions_email_idx").on(table.adminEmail)]);
 
+// Browser/phone push registrations (Firebase Cloud Messaging) for the owner's order alerts. One row
+// per device token; tokens FCM reports as unregistered are deleted on the next send.
+export const adminPushDevices = pgTable("admin_push_devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminEmail: text("admin_email").notNull().references(() => adminOwners.email, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("admin_push_devices_email_idx").on(table.adminEmail)]);
+
 export const loginAttempts = pgTable("login_attempts", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull(),

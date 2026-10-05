@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { requireAdminUser } from "@/lib/auth/admin-auth";
 import { LogoutButton } from "./logout-button";
+import { PushToggle } from "./push-toggle";
 
 const navItems = [
   { href: "/admin", label: "Dashboard" },
@@ -39,6 +40,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
             <small>{user.role}</small>
           </div>
         </div>
+        <PushToggle />
         <LogoutButton />
       </aside>
       {children}

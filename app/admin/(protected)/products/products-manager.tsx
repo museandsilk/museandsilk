@@ -1100,7 +1100,7 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
                     <div className="admin-form-grid">
                       <label>
                         <span>SKU</span>
-                        <input required value={initialSku} onChange={(event) => setInitialSku(event.target.value)} placeholder="MS-SCF-LIL-PUR" />
+                        <input required value={initialSku} onChange={(event) => setInitialSku(event.target.value)} placeholder="NA-TE-SAS-M" />
                       </label>
                       <label>
                         <span>Price (PKR)</span>

@@ -52,7 +52,7 @@ function TrackOrderForm() {
         <form onSubmit={submit}>
           <label>
             <span>Order number</span>
-            <input required name="orderNumber" defaultValue={params.get("order") ?? ""} placeholder="MS-260728-123456" />
+            <input required name="orderNumber" defaultValue={params.get("order") ?? ""} placeholder="NA-261005-123456" />
           </label>
           <label>
             <span>Phone / WhatsApp</span>
