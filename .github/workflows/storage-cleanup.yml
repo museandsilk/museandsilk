@@ -1,0 +1,36 @@
+name: Storage orphan cleanup
+
+# Runs scripts/storage-audit.ts on a schedule so the Neon media bucket never accumulates files that
+# no longer belong to any product / category / campaign slide in the database — e.g. if an upload
+# ever crashes between finishing its storage writes and saving the database row, the orphaned files
+# it left behind get removed automatically instead of sitting there forever. Runs daily; this is a
+# full-bucket scan, not something that needs to happen every few minutes.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Delete orphaned media objects
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: node ./node_modules/tsx/dist/cli.mjs scripts/storage-audit.ts --delete

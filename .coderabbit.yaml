@@ -1,0 +1,39 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/guides/configure-coderabbit
+language: en-US
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+      - development
+  path_filters:
+    - "!drizzle/meta/**"
+    - "!package-lock.json"
+    - "!nure_asmir_assets/**"
+    - "!public/**"
+  path_instructions:
+    - path: "app/api/admin/**"
+      instructions: >
+        Every handler must call getAdminUser() first and return 401 when it is null. Check for missing
+        input validation (zod), audit-log entries on mutations, and that search/storage side effects
+        cannot fail the request.
+    - path: "lib/storage.ts"
+      instructions: >
+        Neon S3 access via aws4fetch. Public bucket = product/category/campaign imagery only; payment
+        proofs must stay in the private bucket and only be readable through presigned URLs.
+    - path: "app/**/*.tsx"
+      instructions: >
+        Next.js 16 (App Router) running on Cloudflare Workers via OpenNext — avoid Node-only APIs in
+        edge-reachable code, keep client bundles small, and prefer server components. Storefront prices
+        must render through the <Price> component so the currency switcher works.
+    - path: "db/schema.ts"
+      instructions: >
+        Any schema change needs a generated drizzle migration; the neon-http driver has no
+        transactions, so multi-step writes need guarded sequential statements.
+chat:
+  auto_reply: true

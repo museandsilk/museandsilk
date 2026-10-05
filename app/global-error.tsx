@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 // Catches errors thrown by the root layout itself (e.g. a slow/failed settings fetch) — rarer than
@@ -8,6 +9,7 @@ import { useEffect } from "react";
 // Next requires this file to render its own full <html>/<body>, since it replaces the root layout.
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
+    Sentry.captureException(error);
     console.error("Root layout error", error);
   }, [error]);
 

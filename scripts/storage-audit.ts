@@ -1,6 +1,6 @@
-// One-off audit: list everything in the R2 bucket, compare against every key referenced in the
+// Audit: list everything in the Neon public media bucket, compare against every key referenced in the
 // database (originals + generated variants), and report/delete anything orphaned.
-// Usage: node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/r2-audit.ts [--delete]
+// Usage: node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/storage-audit.ts [--delete]
 //
 // IMPORTANT: whenever a new image-bearing table or column is added anywhere in the app (a new
 // media field on a model, a new content type entirely), it MUST be added to the `referenced` set
@@ -9,18 +9,15 @@
 // photos and a campaign slide's mobile crop, believing them orphaned. Ran once without --delete
 // first is the only way to catch a gap like that before it deletes anything.
 //
-// This script audits admin-uploaded IMAGES only. The same R2 bucket also holds Next.js's ISR page
-// cache (see open-next.config.ts) under its own "incremental-cache/" prefix — those objects are
-// never in any of this app's own tables (Next.js manages them itself), so without this exclusion
-// every single one of them would show up as a false-positive "orphan" and get deleted by --delete,
-// which would just make every page slow again rather than clean anything up. Any future
-// non-image, non-database-tracked prefix added to this bucket must be added here too.
+// This script audits the PUBLIC media bucket (product / category / campaign images) only. Payment proofs
+// live in the separate private bucket and are never listed or deleted here.
 
 import { S3Client, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { db, schema } from "../db";
 import { variantKeyFor } from "../lib/image-variants";
 
-const NON_IMAGE_PREFIXES = ["incremental-cache/"];
+// Prefixes in the media bucket that are not tracked in the database (none today).
+const NON_IMAGE_PREFIXES: string[] = [];
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -29,14 +26,15 @@ function requireEnv(name: string): string {
 }
 
 const client = new S3Client({
-  region: "auto",
-  endpoint: requireEnv("R2_ENDPOINT"),
+  region: process.env.AWS_REGION || "ap-southeast-1",
+  endpoint: requireEnv("AWS_ENDPOINT_URL_S3"),
   credentials: {
-    accessKeyId: requireEnv("R2_ACCESS_KEY_ID"),
-    secretAccessKey: requireEnv("R2_SECRET_ACCESS_KEY"),
+    accessKeyId: requireEnv("AWS_ACCESS_KEY_ID"),
+    secretAccessKey: requireEnv("AWS_SECRET_ACCESS_KEY"),
   },
+  forcePathStyle: true,
 });
-const bucket = requireEnv("R2_BUCKET_NAME");
+const bucket = process.env.STORAGE_PUBLIC_BUCKET || "nure-asmir-media";
 
 async function listAllKeys(): Promise<{ key: string; size: number }[]> {
   const keys: { key: string; size: number }[] = [];
@@ -56,7 +54,7 @@ async function listAllKeys(): Promise<{ key: string; size: number }[]> {
 async function main() {
   const shouldDelete = process.argv.includes("--delete");
 
-  const [images, slides, categories, proofs] = await Promise.all([
+  const [images, slides, categories] = await Promise.all([
     db.select({ r2Key: schema.productImages.r2Key, variantWidths: schema.productImages.variantWidths }).from(schema.productImages),
     db
       .select({
@@ -74,7 +72,6 @@ async function main() {
         heroVariantWidths: schema.categories.heroVariantWidths,
       })
       .from(schema.categories),
-    db.select({ r2Key: schema.paymentProofs.r2Key }).from(schema.paymentProofs),
   ]);
 
   const referenced = new Set<string>();
@@ -116,7 +113,6 @@ async function main() {
       }
     }
   }
-  for (const row of proofs) referenced.add(row.r2Key);
 
   const allObjects = await listAllKeys();
   const excluded = allObjects.filter((obj) => NON_IMAGE_PREFIXES.some((prefix) => obj.key.startsWith(prefix)));
@@ -128,7 +124,7 @@ async function main() {
   const orphans = actual.filter((obj) => !referenced.has(obj.key));
   const totalOrphanBytes = orphans.reduce((sum, o) => sum + o.size, 0);
 
-  console.log(`Total objects in R2: ${actual.length}`);
+  console.log(`Total objects in the media bucket: ${actual.length}`);
   console.log(`Referenced in DB (incl. variants): ${referenced.size}`);
   console.log(`Orphaned objects: ${orphans.length} (${(totalOrphanBytes / 1024).toFixed(1)} KB)`);
   for (const o of orphans) console.log(`  - ${o.key} (${o.size} bytes)`);

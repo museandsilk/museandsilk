@@ -30,7 +30,9 @@ function buildCsp(nonce: string): string {
     // the small, fixed set of inline <script> tags, so style-src keeps 'unsafe-inline'.
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com`,
+    // Sentry's browser SDK spins up a small worker from a blob: URL for some features.
+    "worker-src 'self' blob:",
+    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com https://*.algolia.net https://*.algolianet.com https://*.ingest.de.sentry.io https://*.ingest.sentry.io`,
     // Turnstile's checkout widget renders inside an iframe from challenges.cloudflare.com; the
     // Google Customer Reviews opt-in survey itself renders inside an iframe from google.com.
     "frame-src https://challenges.cloudflare.com https://www.google.com",

@@ -1,0 +1,38 @@
+name: CI
+
+# Type-check, lint and make a production (Cloudflare) build of every push to development and every
+# pull request, so problems surface before they reach main. CodeRabbit reviews the PR itself.
+on:
+  push:
+    branches: [development]
+  pull_request:
+    branches: [main, development]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx eslint app lib scripts
+
+      - name: Production build (OpenNext / Cloudflare)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+        run: npm run cf:build

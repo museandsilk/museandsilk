@@ -103,6 +103,8 @@ export default function CheckoutPage() {
   // never re-opens it for this checkout attempt.
   useEffect(() => {
     if (emailOtpRequired && !phonePopupDismissed && !otpToken) {
+      // One-time nudge triggered by the derived condition above; not a cascading render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowPhonePopup(true);
     }
   }, [emailOtpRequired, phonePopupDismissed, otpToken]);

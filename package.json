@@ -18,14 +18,14 @@
     "brand:assets": "node ./node_modules/tsx/dist/cli.mjs scripts/build-brand-assets.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1097.0",
-    "@aws-sdk/s3-request-presigner": "^3.1097.0",
     "@hookform/resolvers": "^5.5.7",
     "@neon/config": "^1.8.3",
     "@neon/env": "^1.5.0",
     "@neondatabase/serverless": "^1.1.0",
     "@opennextjs/cloudflare": "^1.20.2",
+    "@sentry/nextjs": "^11.4.0",
     "algoliasearch": "^5.59.0",
+    "aws4fetch": "^1.0.20",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.27.0",
@@ -41,6 +41,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1097.0",
+    "@aws-sdk/s3-request-presigner": "^3.1097.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

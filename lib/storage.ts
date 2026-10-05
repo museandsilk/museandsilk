@@ -1,6 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { AwsClient } from "aws4fetch";
 
 /**
  * Neon Object Storage (S3-compatible), declared in neon.ts. Two buckets:
@@ -9,6 +7,9 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
  *   - private ("nure-asmir-private", private)     — customer payment proofs. Only ever read back
  *     through a short-lived presigned URL handed to a signed-in admin.
  * Credentials come from the AWS_* variables `neon env pull` / `neon deploy` write to .env.local.
+ *
+ * Requests are signed with aws4fetch (SigV4 over plain fetch, ~3 KB) rather than the AWS SDK, which
+ * would add well over a megabyte to the Cloudflare Worker bundle.
  */
 export type Visibility = "public" | "private";
 
@@ -18,19 +19,15 @@ function requireEnv(name: string): string {
   return value;
 }
 
-let client: S3Client | null = null;
+let client: AwsClient | null = null;
 
-function s3(): S3Client {
+function aws(): AwsClient {
   if (client) return client;
-  client = new S3Client({
+  client = new AwsClient({
+    accessKeyId: requireEnv("AWS_ACCESS_KEY_ID"),
+    secretAccessKey: requireEnv("AWS_SECRET_ACCESS_KEY"),
     region: process.env.AWS_REGION || "ap-southeast-1",
-    endpoint: requireEnv("AWS_ENDPOINT_URL_S3"),
-    credentials: {
-      accessKeyId: requireEnv("AWS_ACCESS_KEY_ID"),
-      secretAccessKey: requireEnv("AWS_SECRET_ACCESS_KEY"),
-    },
-    // Required by the AWS SDK for any custom S3 endpoint (Neon documents this explicitly).
-    forcePathStyle: true,
+    service: "s3",
   });
   return client;
 }
@@ -41,14 +38,23 @@ export function bucketName(visibility: Visibility): string {
     : process.env.STORAGE_PRIVATE_BUCKET || "nure-asmir-private";
 }
 
+function endpoint(): string {
+  return requireEnv("AWS_ENDPOINT_URL_S3").replace(/\/$/, "");
+}
+
+/** Path-style object URL (Neon requires path-style addressing). */
+function objectUrl(key: string, visibility: Visibility): string {
+  return `${endpoint()}/${bucketName(visibility)}/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 /** Public origin of the media bucket, e.g. https://br-xxx.storage.c-4.ap-southeast-1.aws.neon.tech/nure-asmir-media */
 export function publicBucketOrigin(): string {
-  return `${requireEnv("AWS_ENDPOINT_URL_S3").replace(/\/$/, "")}/${bucketName("public")}`;
+  return `${endpoint()}/${bucketName("public")}`;
 }
 
 export function newObjectKey(prefix: string, contentType: string): string {
   const ext = contentType.split("/")[1] === "jpeg" ? "jpg" : contentType.split("/")[1];
-  return `${prefix}/${randomUUID()}.${ext}`;
+  return `${prefix}/${crypto.randomUUID()}.${ext}`;
 }
 
 export async function putObject(
@@ -57,16 +63,16 @@ export async function putObject(
   contentType: string,
   visibility: Visibility = "public",
 ): Promise<void> {
-  await s3().send(
-    new PutObjectCommand({
-      Bucket: bucketName(visibility),
-      Key: key,
-      Body: body,
-      ContentType: contentType,
+  const response = await aws().fetch(objectUrl(key, visibility), {
+    method: "PUT",
+    body: body as unknown as BodyInit,
+    headers: {
+      "Content-Type": contentType,
       // Keys are random UUIDs and never overwritten in place, so the CDN may cache them forever.
-      ...(visibility === "public" ? { CacheControl: "public, max-age=31536000, immutable" } : {}),
-    }),
-  );
+      ...(visibility === "public" ? { "Cache-Control": "public, max-age=31536000, immutable" } : {}),
+    },
+  });
+  if (!response.ok) throw new Error(`Storage PUT ${key} failed: ${response.status} ${await response.text().catch(() => "")}`);
 }
 
 export async function getObjectBytes(
@@ -74,22 +80,24 @@ export async function getObjectBytes(
   visibility: Visibility = "public",
 ): Promise<{ body: Uint8Array; contentType?: string } | null> {
   try {
-    const result = await s3().send(new GetObjectCommand({ Bucket: bucketName(visibility), Key: key }));
-    const bytes = await result.Body?.transformToByteArray();
-    if (!bytes) return null;
-    return { body: bytes, contentType: result.ContentType };
+    const response = await aws().fetch(objectUrl(key, visibility));
+    if (!response.ok) return null;
+    return { body: new Uint8Array(await response.arrayBuffer()), contentType: response.headers.get("content-type") ?? undefined };
   } catch {
     return null;
   }
 }
 
 export async function deleteObject(key: string, visibility: Visibility = "public"): Promise<void> {
-  await s3().send(new DeleteObjectCommand({ Bucket: bucketName(visibility), Key: key }));
+  const response = await aws().fetch(objectUrl(key, visibility), { method: "DELETE" });
+  // S3 answers 204 whether or not the key existed; anything else is a real failure.
+  if (!response.ok && response.status !== 404) throw new Error(`Storage DELETE ${key} failed: ${response.status}`);
 }
 
 /** Short-lived signed URL for admin-only access to private objects (payment proofs). */
 export async function getSignedObjectUrl(key: string, expiresInSeconds = 300): Promise<string> {
-  return getSignedUrl(s3(), new GetObjectCommand({ Bucket: bucketName("private"), Key: key }), {
-    expiresIn: expiresInSeconds,
-  });
+  const url = new URL(objectUrl(key, "private"));
+  url.searchParams.set("X-Amz-Expires", String(expiresInSeconds));
+  const signed = await aws().sign(url.toString(), { method: "GET", aws: { signQuery: true } });
+  return signed.url;
 }

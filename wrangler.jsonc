@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "muse-and-silk",
+  "name": "nure-asmir",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-07-29",
   "compatibility_flags": ["nodejs_compat"],
@@ -8,17 +8,20 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  // Backs OpenNext's incremental (ISR) cache — see open-next.config.ts. Reuses the same bucket
-  // already used for product/campaign/category images, under its own "incremental-cache" prefix,
-  // rather than provisioning a second bucket.
+  // Backs OpenNext's incremental (ISR) cache — see open-next.config.ts. A small Cloudflare R2
+  // bucket used only for cached page renders (product / category / campaign IMAGES live in Neon
+  // Object Storage, not here). Create it once with: npx wrangler r2 bucket create nure-asmir-cache
   "r2_buckets": [
-    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "muse-and-silk-media" }
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "nure-asmir-cache" }
   ],
   "observability": {
     "enabled": true
   },
-  "routes": [
-    { "pattern": "nureasmir.com", "custom_domain": true },
-    { "pattern": "www.nureasmir.com", "custom_domain": true }
-  ]
+  "workers_dev": true
+  // Attach the production domain once it is on this Cloudflare account, e.g.:
+  // "routes": [
+  //   { "pattern": "nureasmir.com", "custom_domain": true },
+  //   { "pattern": "www.nureasmir.com", "custom_domain": true },
+  //   { "pattern": "cdn.nureasmir.com", "custom_domain": true }   // optional dedicated CDN host
+  // ]
 }
