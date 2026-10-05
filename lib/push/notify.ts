@@ -1,28 +1,38 @@
 import { inArray } from "drizzle-orm";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { db } from "@/db";
-import { adminPushDevices } from "@/db/schema";
+import { adminPushDevices, customerPushDevices } from "@/db/schema";
+import { runInBackground } from "@/lib/background";
 import { pushConfigured, sendPush, type PushPayload } from "./fcm";
 
-async function deliver(payload: PushPayload): Promise<void> {
+const BATCH = 10;
+
+/** Sends to many tokens, BATCH at a time, and returns the ones FCM says are permanently gone. */
+async function fanOut(tokens: string[], payload: PushPayload): Promise<string[]> {
+  const dead: string[] = [];
+  for (let i = 0; i < tokens.length; i += BATCH) {
+    const slice = tokens.slice(i, i + BATCH);
+    const results = await Promise.all(slice.map(async (token) => ({ token, result: await sendPush(token, payload) })));
+    for (const entry of results) if (entry.result === "dead") dead.push(entry.token);
+  }
+  return dead;
+}
+
+async function deliverToAdmins(payload: PushPayload): Promise<void> {
   if (!pushConfigured()) return;
   const devices = await db.select({ token: adminPushDevices.token }).from(adminPushDevices);
   if (!devices.length) return;
-  const results = await Promise.all(devices.map(async (device) => ({ token: device.token, result: await sendPush(device.token, payload) })));
-  const dead = results.filter((entry) => entry.result === "dead").map((entry) => entry.token);
+  const dead = await fanOut(devices.map((device) => device.token), payload);
   if (dead.length) await db.delete(adminPushDevices).where(inArray(adminPushDevices.token, dead));
 }
 
-/**
- * Pushes an alert to every registered admin device without delaying the request that triggered it:
- * on Cloudflare it runs under `ctx.waitUntil`, elsewhere (local dev) it just runs in the background.
- * Never throws.
- */
+/** Pushes an alert to every registered admin device without delaying the request that triggered it. */
 export function notifyAdmins(payload: PushPayload): void {
-  const job = deliver(payload).catch((error) => console.error("notifyAdmins failed", error));
-  getCloudflareContext({ async: true })
-    .then(({ ctx }) => ctx.waitUntil(job))
-    .catch(() => {
-      // No Workers context — the promise above is already running.
-    });
+  runInBackground(deliverToAdmins(payload), "notifyAdmins");
+}
+
+/** Pushes to specific shopper devices (order updates, sale alerts) and prunes dead tokens. */
+export async function sendToCustomerTokens(tokens: string[], payload: PushPayload): Promise<void> {
+  if (!tokens.length || !pushConfigured()) return;
+  const dead = await fanOut(tokens, payload);
+  if (dead.length) await db.delete(customerPushDevices).where(inArray(customerPushDevices.token, dead));
 }

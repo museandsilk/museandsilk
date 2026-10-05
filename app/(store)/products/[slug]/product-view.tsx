@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CatalogProduct, CatalogVariant } from "@/lib/commerce";
 import { Price } from "../../_components/currency";
+import { discountLabel, SaleCountdown } from "../../_components/sale";
+import { WishlistButton } from "../../_components/wishlist-button";
 import { ProductGallery } from "./product-gallery";
 import { ProductPurchase } from "./product-purchase";
 import { BackButton } from "./back-button";
@@ -83,6 +85,12 @@ export function ProductView({
           )}
           <Price amount={shown.price} />
         </p>
+        {shown.saleEndsAt && (
+          <div className="sale-banner">
+            <span className="sale-tag">{discountLabel(shown.price, shown.compareAtPrice) ?? "Sale"}</span>
+            <SaleCountdown endsAt={shown.saleEndsAt} />
+          </div>
+        )}
         {product.shortDescription && <p className="product-intro">{product.shortDescription}</p>}
         <ProductPurchase
           product={product}
@@ -97,6 +105,7 @@ export function ProductView({
           selected={selected}
           onSize={setSizeId}
         />
+        <WishlistButton productId={product.id} name={product.name} variant="inline" />
         <div className="product-accordions">
           <details open>
             <summary>

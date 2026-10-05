@@ -30,7 +30,9 @@ export function ProductPurchase({
 }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
-  const [toast, setToast] = useState<{ variantName: string } | null>(null);
+  const [toast, setToast] = useState<{ variantName: string; price: number } | null>(null);
+  // Brief lock after a tap: stops a double-tap adding two pieces, and "Buy it now" from navigating twice.
+  const [lock, setLock] = useState<"add" | "buy" | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -39,6 +41,7 @@ export function ProductPurchase({
   }, [toast]);
 
   function add(buyNow = false) {
+    if (lock) return;
     if (!selected) {
       setMessage("Please select a size.");
       return;
@@ -67,10 +70,13 @@ export function ProductPurchase({
     }
     setMessage("");
     if (buyNow) {
+      setLock("buy"); // stays locked until the cart page replaces this one
       router.push("/cart");
       return;
     }
-    setToast({ variantName: selected.name });
+    setLock("add");
+    window.setTimeout(() => setLock(null), 900);
+    setToast({ variantName: selected.name, price: selected.price });
   }
 
   const allSoldOut = colorVariants.every((variant) => variant.available < 1);
@@ -129,11 +135,17 @@ export function ProductPurchase({
         <p className="stock-badge stock-badge-out">Sold out</p>
       ) : null}
 
-      <button className="add-button" type="button" disabled={allSoldOut || (selected !== null && selected.available < 1)} onClick={() => add()}>
-        {allSoldOut ? "Sold out" : "Add to bag"}
+      <button className="add-button" type="button" disabled={allSoldOut || lock !== null || (selected !== null && selected.available < 1)} onClick={() => add()} aria-busy={lock === "add"}>
+        {allSoldOut ? "Sold out" : lock === "add" ? "Added ✓" : "Add to bag"}
       </button>
-      <button className="buy-button" type="button" disabled={allSoldOut || (selected !== null && selected.available < 1)} onClick={() => add(true)}>
-        Buy it now
+      <button className="buy-button" type="button" disabled={allSoldOut || lock !== null || (selected !== null && selected.available < 1)} onClick={() => add(true)} aria-busy={lock === "buy"}>
+        {lock === "buy" ? (
+          <span className="busy-label">
+            <i className="spinner" /> Opening your bag…
+          </span>
+        ) : (
+          "Buy it now"
+        )}
       </button>
       {message && (
         <p className="purchase-message" role="alert">
@@ -157,12 +169,8 @@ export function ProductPurchase({
             <strong>Added to your bag</strong>
             <p>
               {product.name} — {toast.variantName}
-              {selected && (
-                <>
-                  {" · "}
-                  <Price amount={selected.price} />
-                </>
-              )}
+              {" · "}
+              <Price amount={toast.price} />
             </p>
           </div>
           <div className="cart-toast-actions">

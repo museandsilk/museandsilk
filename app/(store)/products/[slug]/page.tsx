@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getCatalogProducts, getProductBySlug, getPublicSettings } from "@/lib/commerce";
+import { getCatalogProducts, getProductBySlug, getPublicSettings, toCard } from "@/lib/commerce";
 import { BRAND, siteOrigin } from "@/lib/brand";
 import { getNonce } from "@/lib/nonce";
 import { ProductRail } from "../../_components/store-components";
 import { StoreFooter } from "../../_components/store-footer";
 import { ProductView } from "./product-view";
 
-export const revalidate = 300;
+// Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
+// always priced on the server regardless of what a cached page displays.
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -38,7 +40,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fallbackImage = "/placeholder.webp";
   const primaryImage = absolute(product.imageUrl ?? fallbackImage);
   const canonicalUrl = `${origin}/products/${product.slug}`;
-  const related = catalog.filter((entry) => entry.category === product.category && entry.slug !== product.slug).slice(0, 10);
+  const related = catalog.filter((entry) => entry.category === product.category && entry.slug !== product.slug).slice(0, 10).map(toCard);
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",

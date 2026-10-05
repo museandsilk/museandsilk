@@ -71,7 +71,11 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     fetch("/api/currency")
       .then((response) => (response.ok ? (response.json() as Promise<RatesPayload>) : null))
       .then((payload) => {
-        if (!payload?.rates) return;
+        if (!payload?.rates) {
+          // 503 / bad body: allow a later attempt (e.g. when the shopper re-opens the switcher).
+          requested.current = false;
+          return;
+        }
         setRates(payload.rates);
         writeStored(RATES_KEY, payload);
       })

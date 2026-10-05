@@ -19,5 +19,15 @@
  * it's ever suspected of leaking.
  */
 export function getNonce(): string {
-  return process.env.CSP_NONCE || "";
+  return process.env.CSP_NONCE || fallbackNonce();
+}
+
+/** Fail closed: if the CSP_NONCE secret is missing, use a random value generated once per isolate
+ * instead of an empty string (an empty nonce next to 'unsafe-inline' would allow every inline
+ * script). Pages cached by a different isolate would then mismatch, which is why the secret should
+ * always be configured in production. */
+let generated: string | null = null;
+function fallbackNonce(): string {
+  generated ??= Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  return generated;
 }

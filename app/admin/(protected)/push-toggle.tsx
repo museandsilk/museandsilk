@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { firebaseConfig, firebaseVapidKey } from "@/lib/firebase/config";
+import { SW_URL } from "@/lib/sw-url";
 
 const TOKEN_KEY = "na-admin-push-token";
 
@@ -40,7 +41,7 @@ export function PushToggle() {
       }
       const [{ initializeApp, getApps }, { getMessaging, getToken }] = await Promise.all([import("firebase/app"), import("firebase/messaging")]);
       const app = getApps()[0] ?? initializeApp(firebaseConfig);
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      const registration = await navigator.serviceWorker.register(SW_URL);
       await navigator.serviceWorker.ready;
       const token = await getToken(getMessaging(app), {
         serviceWorkerRegistration: registration,
@@ -69,11 +70,17 @@ export function PushToggle() {
     const token = window.localStorage.getItem(TOKEN_KEY);
     try {
       if (token) {
-        await fetch("/api/admin/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+        const response = await fetch("/api/admin/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+        if (!response.ok) throw new Error(`Unregister responded ${response.status}`);
       }
-    } finally {
       window.localStorage.removeItem(TOKEN_KEY);
+      setNote("");
       setState("off");
+    } catch (error) {
+      // Keep the local token and stay "on": the server still has this device registered.
+      console.error("Disabling order alerts failed", error);
+      setNote("Couldn't turn alerts off — please try again.");
+      setState("on");
     }
   }
 

@@ -33,5 +33,9 @@ export async function GET() {
       .limit(1),
   ]);
 
-  return Response.json({ zones, settings: settingsRows[0] ?? null });
+  // Delivery zones / bank details change rarely: let the browser and Cloudflare reuse this briefly.
+  return Response.json(
+    { zones, settings: settingsRows[0] ?? null },
+    { headers: { "Cache-Control": "public, max-age=30, s-maxage=60, stale-while-revalidate=300" } },
+  );
 }

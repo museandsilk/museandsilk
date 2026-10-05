@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orderStatusHistory, orders } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { fulfillOrderReservation, releaseOrderReservation, restockReturnedOrder } from "@/lib/orders";
+import { announceOrderEvent, type OrderEventKind } from "@/lib/order-events";
 
 export const dynamic = "force-dynamic";
 
@@ -53,11 +54,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
   }
 
+  // Guarded on the status we just read: a double-click (or two admins) racing the same transition
+  // would otherwise run the stock side effects below twice. The loser gets a 409 and does nothing.
   const [row] = await db
     .update(orders)
     .set({ orderStatus: toStatus, updatedAt: new Date() })
-    .where(eq(orders.id, id))
+    .where(and(eq(orders.id, id), eq(orders.orderStatus, order.orderStatus)))
     .returning();
+  if (!row) {
+    return Response.json({ error: "This order was just updated by someone else — refresh and try again." }, { status: 409 });
+  }
 
   await db.insert(orderStatusHistory).values({
     orderId: id,
@@ -85,6 +91,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       await releaseOrderReservation(id, "Order returned by admin", admin.email);
     }
   }
+
+  const announced: Partial<Record<string, OrderEventKind>> = {
+    confirmed: "confirmed",
+    shipped: "shipped",
+    delivered: "delivered",
+    cancelled: "cancelled",
+    returned: "returned",
+  };
+  const kind = announced[toStatus];
+  if (kind) announceOrderEvent(id, kind, "admin");
 
   await auditLogEntry({
     actorEmail: admin.email,

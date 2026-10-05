@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ProductCard } from "../_components/store-components";
-import type { CatalogProduct } from "@/lib/commerce";
+import type { CardProduct } from "@/lib/commerce";
 
 /**
  * `categories` drives the filter tabs on /shop ("All" plus one tab per live category). Collection
@@ -13,7 +13,7 @@ export function ShopGrid({
   products,
   categories,
 }: {
-  products: CatalogProduct[];
+  products: CardProduct[];
   categories?: Array<{ slug: string; name: string }>;
 }) {
   const [category, setCategory] = useState("all");

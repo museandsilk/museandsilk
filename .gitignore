@@ -54,3 +54,11 @@ next-env.d.ts
 
 .dev.vars
 !.env.example
+
+# split-build scratch + e2e output
+.build-excluded/
+/test-results/
+/playwright-report/
+/e2e/.artifacts/
+.env.development.local
+.next-prod/

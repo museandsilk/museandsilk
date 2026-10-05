@@ -14,6 +14,7 @@
   "r2_buckets": [
     { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "nure-asmir-cache" }
   ],
+  "vars": { "APP_TARGET": "store" },
   "observability": {
     "enabled": true
   },

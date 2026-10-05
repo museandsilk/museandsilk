@@ -8,7 +8,7 @@
 //   Origin Rules (Zone:Rulesets:Edit), DNS:Edit, Bot Management:Edit (Zone:Zone Settings is enough on free).
 //
 // What it sets up
-//   1. TLS/transport: Full (strict) SSL, Always-HTTPS, TLS >= 1.2 (1.3 on), HSTS (6 months, no
+//   1. TLS/transport: Full (strict) SSL, Always-HTTPS, TLS >= 1.2 (1.3 on), HSTS (2 years like the app, no
 //      subdomains/preload), automatic HTTPS rewrites, HTTP/3, Brotli, Early Hints.
 //   2. Bot Fight Mode + Browser Integrity Check + security level "medium".
 //   3. Custom WAF rules (free plan allows 5): block scanner paths, block empty-UA API calls,
@@ -60,8 +60,29 @@ async function cf(method: string, path: string, body?: unknown): Promise<unknown
   return json.result ?? null;
 }
 
+const replaceExisting = process.argv.includes("--replace-existing");
+
+/** Each `phase()` call REPLACES every rule in that phase. Show what is there now and refuse to wipe
+ * a non-empty phase unless --replace-existing is passed. */
+async function existingRules(name: string): Promise<number> {
+  if (!token) return 0;
+  const response = await fetch(`${API}/zones/${zone}/rulesets/phases/${name}/entrypoint`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) return 0; // 404 = no ruleset yet
+  const json = (await response.json()) as { result?: { rules?: Array<{ description?: string }> } };
+  const rules = json.result?.rules ?? [];
+  if (rules.length) console.log(`  ! phase ${name} already has ${rules.length} rule(s): ${rules.map((r) => r.description ?? "(unnamed)").join("; ")}`);
+  return rules.length;
+}
+
 const setting = (name: string, value: unknown) => cf("PATCH", `/zones/${zone}/settings/${name}`, { value });
-const phase = (name: string, rules: unknown[]) => cf("PUT", `/zones/${zone}/rulesets/phases/${name}/entrypoint`, { rules });
+const phase = async (name: string, rules: unknown[]) => {
+  const present = await existingRules(name);
+  if (present && apply && !replaceExisting) {
+    console.error(`  ✗ skipped ${name}: it has ${present} existing rule(s). Re-run with --replace-existing to overwrite them.`);
+    return null;
+  }
+  return cf("PUT", `/zones/${zone}/rulesets/phases/${name}/entrypoint`, { rules });
+};
 
 async function main() {
   console.log(`\n== ${apply ? "APPLYING" : "DRY RUN"} for zone ${zone} ==\n`);
@@ -73,7 +94,7 @@ async function main() {
   await setting("tls_1_3", "on");
   await setting("automatic_https_rewrites", "on");
   await setting("security_header", {
-    strict_transport_security: { enabled: true, max_age: 15552000, include_subdomains: false, preload: false, nosniff: true },
+    strict_transport_security: { enabled: true, max_age: 63072000, include_subdomains: false, preload: false, nosniff: true },
   });
   await setting("http3", "on");
   await setting("brotli", "on");
@@ -117,8 +138,11 @@ async function main() {
     },
   ]);
 
-  // 5. Cache rule for media
+  // 5. Cache rules (media + HTML) – see 5b.
   const cdnMatch = cdnHost ? `(http.host eq "${cdnHost}") or ` : "";
+
+  // 5b. Storefront HTML: cache at the edge exactly as long as Next.js says (ISR s-maxage / stale-while-
+  // revalidate); dynamic and private responses carry no-store and stay uncached.
   await phase("http_request_cache_settings", [
     {
       description: "Cache product imagery for a year",
@@ -129,6 +153,13 @@ async function main() {
         edge_ttl: { mode: "override_origin", default: 31536000 },
         browser_ttl: { mode: "override_origin", default: 31536000 },
       },
+    },
+    {
+      description: "Edge-cache storefront pages per Cache-Control",
+      expression:
+        '(http.request.method eq "GET") and not starts_with(http.request.uri.path, "/api/") and not starts_with(http.request.uri.path, "/admin") and not starts_with(http.request.uri.path, "/cart") and not starts_with(http.request.uri.path, "/checkout") and not starts_with(http.request.uri.path, "/track-order") and not starts_with(http.request.uri.path, "/wishlist") and not starts_with(http.request.uri.path, "/search")',
+      action: "set_cache_settings",
+      action_parameters: { cache: true, edge_ttl: { mode: "respect_origin" }, browser_ttl: { mode: "respect_origin" } },
     },
   ]);
 
@@ -166,7 +197,6 @@ async function main() {
         action: "rewrite",
         action_parameters: {
           headers: {
-            "Access-Control-Allow-Origin": { operation: "set", value: "*" },
             "X-Content-Type-Options": { operation: "set", value: "nosniff" },
           },
         },

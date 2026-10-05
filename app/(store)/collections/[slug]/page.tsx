@@ -3,11 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StoreFooter } from "../../_components/store-footer";
 import { ShopGrid } from "../../shop/shop-grid";
-import { getActiveCategories, getCatalogProducts, getCollectionBySlug } from "@/lib/commerce";
+import { getActiveCategories, getCatalogProducts, getCollectionBySlug, toCard } from "@/lib/commerce";
 import { BRAND, siteOrigin } from "@/lib/brand";
 import { getNonce } from "@/lib/nonce";
 
-export const revalidate = 300;
+// Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
+// always priced on the server regardless of what a cached page displays.
+export const revalidate = 60;
 
 /** A slug resolves to a category first (the main storefront navigation) and otherwise to a custom,
  * admin-curated collection. */
@@ -60,7 +62,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
         <h1 className="page-title">{found.title}</h1>
         {found.description && <p>{found.description}</p>}
       </header>
-      <ShopGrid products={products} />
+      <ShopGrid products={products.map(toCard)} />
       <StoreFooter />
     </main>
   );

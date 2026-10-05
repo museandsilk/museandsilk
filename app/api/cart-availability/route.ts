@@ -1,39 +1,51 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { productVariants } from "@/db/schema";
+import { productVariants, products } from "@/db/schema";
+import { applySales, loadFreshActiveSales } from "@/lib/sales";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Public, read-only stock check for the items already sitting in a visitor's cart (cart is
- * client-side/localStorage only, so there's no server session to look this up from). The cart and
- * checkout pages call this on load to catch stock that changed — sold out, or reduced — since the
- * item was originally added; the actual authoritative check still happens again at order creation
- * in /api/orders.
+ * Public, read-only check for the items sitting in a visitor's cart (the cart lives in the browser,
+ * so there is no server session to look it up from). Returns, per variant, the stock that is
+ * available *right now* and the price the shopper would be charged right now (flash sales
+ * included), so the cart / checkout pages can flag items that sold out or changed price since they
+ * were added. `/api/orders` re-validates everything again at purchase time regardless.
  */
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
-  const variantIds = Array.isArray(body?.variantIds) ? body.variantIds.filter((id: unknown) => typeof id === "string") : [];
+  const variantIds: string[] = Array.isArray(body?.variantIds) ? body.variantIds.filter((id: unknown): id is string => typeof id === "string") : [];
   if (!variantIds.length || variantIds.length > 50) {
     return Response.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const rows = await db
-    .select({
-      id: productVariants.id,
-      stockQuantity: productVariants.stockQuantity,
-      reservedQuantity: productVariants.reservedQuantity,
-      status: productVariants.status,
-    })
-    .from(productVariants)
-    .where(inArray(productVariants.id, variantIds));
+  const [rows, sales] = await Promise.all([
+    db
+      .select({
+        id: productVariants.id,
+        productId: productVariants.productId,
+        price: productVariants.price,
+        stockQuantity: productVariants.stockQuantity,
+        reservedQuantity: productVariants.reservedQuantity,
+        status: productVariants.status,
+        productStatus: products.status,
+      })
+      .from(productVariants)
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(inArray(productVariants.id, variantIds)),
+    loadFreshActiveSales(),
+  ]);
 
   const byId = new Map(rows.map((row) => [row.id, row]));
-  const availability = variantIds.map((id: string) => {
+  const availability = variantIds.map((id) => {
     const row = byId.get(id);
-    const available = row && row.status === "active" ? Math.max(0, row.stockQuantity - row.reservedQuantity) : 0;
-    return { variantId: id, available };
+    const live = !!row && row.status === "active" && row.productStatus === "published";
+    return {
+      variantId: id,
+      available: live ? Math.max(0, row.stockQuantity - row.reservedQuantity) : 0,
+      price: row ? (applySales(row.price, row.productId, sales)?.price ?? row.price) : null,
+    };
   });
 
-  return Response.json({ availability });
+  return Response.json({ availability }, { headers: { "Cache-Control": "no-store" } });
 }

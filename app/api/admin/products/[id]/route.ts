@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runInBackground } from "@/lib/background";
 import { removeProductFromSearch, syncProductSearch } from "@/lib/search/algolia";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -160,7 +161,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.update", entityType: "product", entityId: id, detail: data });
 
-  await syncProductSearch(id);
+  runInBackground(syncProductSearch(id), "syncProductSearch");
 
   return Response.json({ product: row });
 }
@@ -181,7 +182,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     if (!row) return Response.json({ error: "Product not found." }, { status: 404 });
 
     await auditLogEntry({ actorEmail: admin.email, action: "product.archive", entityType: "product", entityId: id });
-    await syncProductSearch(id);
+    runInBackground(syncProductSearch(id), "syncProductSearch");
     return Response.json({ ok: true });
   }
 
@@ -215,7 +216,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   );
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.delete_permanent", entityType: "product", entityId: id, detail: { imagesDeleted: images.length } });
-  await removeProductFromSearch(id);
+  runInBackground(removeProductFromSearch(id), "removeProductFromSearch");
 
   return Response.json({ ok: true });
 }

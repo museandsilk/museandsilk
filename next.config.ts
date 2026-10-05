@@ -11,7 +11,13 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
 ];
 
+// Identifies this build to the service worker (/sw.js?v=…) so every deploy swaps cached pages/chunks.
+const BUILD_ID = (process.env.GITHUB_SHA || process.env.CF_PAGES_COMMIT_SHA || String(Date.now())).slice(0, 10);
+
 const nextConfig: NextConfig = {
+  // Lets the e2e suite build/serve a production copy next to a running `next dev` (.next is locked by dev).
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
+  env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   images: {
     loader: "custom",
     loaderFile: "./lib/image-loader.ts",
@@ -22,6 +28,10 @@ const nextConfig: NextConfig = {
   // own convention for that layer, same as Cloudflare Pages). A rule here targeting
   // /_next/static/* was tried first and confirmed, live, to never take effect — removed rather
   // than left in as code that looks like it works but doesn't.
+  // The admin deployable has no storefront home page – its root goes straight to the panel.
+  async redirects() {
+    return process.env.APP_TARGET === "admin" ? [{ source: "/", destination: "/admin", permanent: false }] : [];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

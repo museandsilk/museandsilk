@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { runInBackground } from "@/lib/background";
 import { syncProductSearch } from "@/lib/search/algolia";
 import { db } from "@/db";
 import { productImages } from "@/db/schema";
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
     detail: { imageId: row.id, altText: row.altText },
   });
 
-  await syncProductSearch(productId);
+  runInBackground(syncProductSearch(productId), "syncProductSearch");
 
   return Response.json({ image: row }, { status: 201 });
 }

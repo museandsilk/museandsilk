@@ -66,6 +66,50 @@ linked in `.neon` (git-ignored): project `blue-bread-34552165`, branch `producti
 product/variant/image/category routes re-index on change; a nightly workflow calls
 `/api/cron/search-reindex`. The browser only ever sees the **search-only** key.
 
+## Two deployables, one repo
+
+The customer storefront and the owner's admin panel are built and deployed as **separate Cloudflare Workers**
+(`scripts/build-target.mjs`): `nure-asmir` (storefront, no admin code in the bundle) and
+`nure-asmir-admin` (admin panel, own origin/cookies, `X-Robots-Tag: noindex`). Shoppers never download
+admin code or admin CSS (`app/admin/admin.css` is loaded only by the admin layout); the storefront footer
+links to the admin URL (`NEXT_PUBLIC_ADMIN_URL`) and nothing of it loads until that link is opened.
+`npm run dev`, tests and a plain `next build` still run the whole app on one origin.
+
+```bash
+npm run cf:build:store     # → .open-next, deploy with: npx wrangler deploy -c wrangler.jsonc
+npm run cf:build:admin     # → .open-next, deploy with: npx wrangler deploy -c wrangler.admin.jsonc
+```
+
+## Shopper experience details
+
+* **Never oversold.** Stock is reserved with a guarded `UPDATE … WHERE stock − reserved ≥ qty`; a
+  reservation is released on cancel / expiry, converted to a sale on delivery, and a 5-minute cron repairs
+  any drift (`reconcileReservedStock`). Checkout is idempotent per bag (a dropped connection or a closed tab
+  can never create a second order).
+* **Flash sales** (admin → Flash sales): percentage / fixed discounts over a time window for chosen products or
+  everything. The *server* decides the price at order time; pages show a countdown and a −% badge. When a
+  sale goes live the cron pushes to shoppers who saved the product (wishlist) or asked for sale alerts.
+* **Wishlist** (browser-local, optional push for sale alerts) and **order updates** (paid / on its way /
+  delivered / cancelled) by push (Firebase) and email.
+* **Owner alerts** (admin push): new orders, payment receipts, low stock, out of stock.
+* **Browser cache**: `public/sw.js` – stale-while-revalidate pages (5 min fresh, then network-first; 7-day offline fallback), immutable chunks/images, 10-minute
+  API cache, offline fallback, per-deploy cache versioning; never caches admin/API/cart/checkout/tracking.
+
+## Testing
+
+```bash
+npx playwright install            # once
+npm run test:e2e                  # unit + API/race + UI on 7 device profiles
+npx playwright test --project=api # server-side: last-piece races, idempotency, pricing, push (mock FCM)
+npx playwright test --project=mobile-safari --project=small-android e2e/ui/layout.spec.ts
+# service-worker / cache behaviour needs a production build:
+NEXT_DIST_DIR=.next-prod npx next build && E2E_PROD=1 npx playwright test --project=pwa
+```
+
+The suite refuses to run unless `DATABASE_URL` points at the disposable Neon branch `e2e-test` (set in the
+git-ignored `.env.development.local`); Algolia, email, WhatsApp and PostEx are switched off for it and push
+notifications go to a local mock of Google's OAuth + FCM endpoints (`e2e/support/mock-fcm.mjs`).
+
 ## Deployment (GitHub Actions → Cloudflare)
 
 * `development` → CI (`.github/workflows/ci.yml`: tsc, eslint, OpenNext build) and CodeRabbit review.
@@ -75,7 +119,7 @@ product/variant/image/category routes re-index on change; a nightly workflow cal
   `CRON_SECRET`, `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
   `ALGOLIA_APP_ID`, `ALGOLIA_ADMIN_KEY`, `ALGOLIA_INDEX_NAME`, `NEXT_PUBLIC_ALGOLIA_SEARCH_KEY`,
   `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_CDN_URL` (optional), plus the Resend / WhatsApp / PostEx /
-  Turnstile ones listed in `.env.example`, and `R2_*` (S3 credentials for the ISR cache bucket only).
+  Turnstile ones listed in `.env.example`, and `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT` (S3 credentials for the ISR cache bucket only, used by `scripts/purge-isr-cache.ts`).
 * The ISR page cache lives in a small Cloudflare R2 bucket, `nure-asmir-cache`
   (`npx wrangler r2 bucket create nure-asmir-cache`; the workflow does this idempotently).
 * The Worker bundle must stay under Cloudflare's 3 MB gzip limit on the free plan (currently

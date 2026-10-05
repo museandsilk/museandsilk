@@ -22,7 +22,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly" as const,
       priority: 0.8,
     })),
-    ...collections.map((collection) => ({
+    ...collections
+      .filter((collection) => !categories.some((category) => category.slug === collection.slug))
+      .map((collection) => ({
       url: `${origin}/collections/${collection.slug}`,
       lastModified: now,
       changeFrequency: "weekly" as const,

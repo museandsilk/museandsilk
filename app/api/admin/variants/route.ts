@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runInBackground } from "@/lib/background";
 import { syncProductSearch } from "@/lib/search/algolia";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     detail: { productId: data.productId, sku: data.sku },
   });
 
-  await syncProductSearch(data.productId);
+  runInBackground(syncProductSearch(data.productId), "syncProductSearch");
 
   return Response.json({ variant: row }, { status: 201 });
 }

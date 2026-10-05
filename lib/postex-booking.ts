@@ -2,6 +2,7 @@
 // scheduled job (app/api/cron/postex-sync). Keeping it in one place means an admin click and the
 // automation can never disagree about how an order is booked, or about what a courier status means.
 
+import { announceOrderEvent } from "@/lib/order-events";
 import { and, asc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { orderItems, orderStatusHistory, orders } from "@/db/schema";
@@ -369,6 +370,7 @@ export async function applyCourierTransition(order: OrderRow, target: CourierOrd
   // leaves the shelf; a return before delivery just frees the reservation.
   if (target === "delivered") await fulfillOrderReservation(order.id, "system");
   else if (target === "returned") await releaseOrderReservation(order.id, "Order returned by courier (PostEx)", "system");
+  announceOrderEvent(order.id, target, "system");
 
   await auditLogEntry({
     actorEmail: "system",

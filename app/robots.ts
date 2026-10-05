@@ -12,7 +12,7 @@ export default function robots(): MetadataRoute.Robots {
         // no content worth crawling anyway) also blocked those image routes, which is exactly what
         // Google Merchant Center flags as "unable to crawl landing page/image" and disapproves the
         // product for. The Allow rules above are more specific and take precedence over Disallow.
-        disallow: ["/admin", "/admin/", "/cart", "/checkout", "/api", "/api/", "/preview", "/preview/"],
+        disallow: ["/admin", "/admin/", "/cart", "/checkout", "/wishlist", "/api", "/api/", "/preview", "/preview/"],
       },
     ],
     sitemap: `${origin}/sitemap.xml`,

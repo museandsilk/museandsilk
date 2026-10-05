@@ -35,6 +35,8 @@ export async function fetchRates(): Promise<RatesPayload> {
   const quotes = CURRENCIES.map((c) => c.code).join(",");
   const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=USD&quotes=${quotes}`, {
     headers: { Accept: "application/json" },
+    // Frankfurter is free and external: never let a slow response hold a Worker request open.
+    signal: AbortSignal.timeout(5000),
   });
   if (!response.ok) throw new Error(`Frankfurter responded ${response.status}`);
   const rows = (await response.json()) as Array<{ date: string; quote: string; rate: number }>;

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { algoliasearch } from "algoliasearch";
-import { getCatalogProducts, type CatalogProduct } from "@/lib/commerce";
+import { getCatalogProducts, toCard, type CatalogProduct } from "@/lib/commerce";
 import { ProductCard } from "../_components/store-components";
 import { StoreFooter } from "../_components/store-footer";
 
@@ -50,7 +50,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         {results.length > 0 && (
           <div className="product-grid">
             {results.map((product) => (
-              <ProductCard key={product.slug} product={product} />
+              <ProductCard key={product.slug} product={toCard(product)} />
             ))}
           </div>
         )}

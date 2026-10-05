@@ -17,6 +17,9 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid token." }, { status: 400 });
 
   const userAgent = request.headers.get("user-agent")?.slice(0, 300) ?? null;
+  // A device token belongs to the browser profile, not to a person: if a different admin signs in on
+  // the same browser, the registration intentionally moves to them (alerts go to every admin device
+  // regardless, so ownership only matters for cleanup via ON DELETE CASCADE).
   await db
     .insert(adminPushDevices)
     .values({ adminEmail: admin.email, token: parsed.data.token, userAgent })

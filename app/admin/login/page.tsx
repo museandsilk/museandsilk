@@ -2,6 +2,7 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useLockedAction } from "@/lib/use-locked-action";
 
 function LoginForm() {
   const router = useRouter();
@@ -10,11 +11,15 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const action = useLockedAction();
+  const busy = action.pending;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
+    await action.run(() => signIn());
+  }
+
+  async function signIn() {
     setError("");
     try {
       const response = await fetch("/api/admin/login", {
@@ -32,8 +37,6 @@ function LoginForm() {
     } catch (error) {
       console.error("login failed", error);
       setError("Something went wrong — check your connection and try again.");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -46,7 +49,8 @@ function LoginForm() {
           <p>Sign in with your admin email and password to manage the store.</p>
         </div>
       </header>
-      <form className="admin-settings-card" onSubmit={submit}>
+      {/* method="post": if the form is submitted before the page has hydrated, credentials must never end up in the URL. */}
+      <form className="admin-settings-card" method="post" action="/admin/login" onSubmit={submit}>
         <div className="admin-form-grid">
           <label className="field-wide">
             <span>Email</span>

@@ -1,12 +1,25 @@
-# Cloudflare's Workers Static Assets serves everything under /_next/static/* (and other files in
-# this public/ directory) directly through its own asset-serving path — Next.js's own
-# next.config.ts `headers()` never runs for these, since that config only applies to requests that
-# actually reach the Next.js/Worker request handler. This is the mechanism Cloudflare actually
-# checks for static-asset responses (same "_headers" file convention as Cloudflare Pages).
-#
-# /_next/static/* holds content-hashed build output — a fresh filename every deploy, the exact
-# same file's bytes never change once built — so it's safe to cache for a year. Without this it
-# was being served as max-age=0, must-revalidate, forcing a revalidation request for every JS/CSS
-# chunk on every single page view.
+# Cloudflare's Workers Static Assets serves everything in public/ directly — Next.js's own headers()
+# never runs for these files, so cache policy is declared here (same convention as Cloudflare Pages).
+
+# Content-hashed build output: a new filename every deploy, so it can be cached for a year.
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The service worker must always be re-checked so a deploy reaches visitors promptly.
+/sw.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
+# Brand files keep their names across deploys: cache for a week and refresh quietly after that.
+/brand/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/logo*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/apple-touch-icon.png
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/placeholder.webp
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/og.jpg
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/llms.txt
+  Cache-Control: public, max-age=3600

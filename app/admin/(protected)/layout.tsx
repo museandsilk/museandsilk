@@ -10,6 +10,7 @@ const navItems = [
   { href: "/admin/collections", label: "Categories & Collections" },
   { href: "/admin/delivery", label: "Delivery Zones" },
   { href: "/admin/coupons", label: "Coupons" },
+  { href: "/admin/flash-sales", label: "Flash sales" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/campaign", label: "Campaign" },
   { href: "/admin/subscribers", label: "Subscribers" },
@@ -22,9 +23,9 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
   return (
     <main className="admin-shell">
       <aside className="admin-sidebar">
-        <Link href="/" className="admin-mark" aria-label="Nure Asmir, view store">
+        <a href={process.env.NEXT_PUBLIC_STORE_URL || "/"} className="admin-mark" aria-label="Nure Asmir, view store">
           <Image src="/logo.png" alt="" width={48} height={48} priority />
-        </Link>
+        </a>
         <nav>
           {navItems.map((item, index) => (
             <Link key={item.href} href={item.href}>

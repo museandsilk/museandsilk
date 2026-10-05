@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import Script from "next/script";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { clearCart, readCart, type CartItem } from "@/lib/cart";
+import { checkoutAttemptKey, clearCheckoutAttempt, syncCartWithServer } from "@/lib/cart-sync";
+import { hasCustomerPushToken, pushSupport, registerCustomerPush } from "@/lib/customer-push";
+import { useLockedAction } from "@/lib/use-locked-action";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 const GOOGLE_MERCHANT_ID = process.env.NEXT_PUBLIC_GOOGLE_MERCHANT_ID;
@@ -54,6 +57,15 @@ export default function CheckoutPage() {
   const [zoneId, setZoneId] = useState("");
   const [payment, setPayment] = useState<"cod" | "bank_deposit">("cod");
   const [busy, setBusy] = useState(false);
+  const submitLock = useRef(false);
+  const otpLock = useRef(false);
+  const couponLock = useRef(false);
+  const receiptAction = useLockedAction();
+  const pushAction = useLockedAction();
+  const [pushState, setPushState] = useState<"idle" | "on" | "error">("idle");
+  const [pushNote, setPushNote] = useState("");
+  const [cartNotice, setCartNotice] = useState("");
+  const [orderPhone, setOrderPhone] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState<OrderResult | null>(null);
   const [receiptMessage, setReceiptMessage] = useState("");
@@ -115,7 +127,8 @@ export default function CheckoutPage() {
   }
 
   async function requestOtp() {
-    if (!emailValid || otpBusy || (TURNSTILE_SITE_KEY && !turnstileToken)) return;
+    if (!emailValid || otpLock.current || otpBusy || (TURNSTILE_SITE_KEY && !turnstileToken)) return;
+    otpLock.current = true;
     setOtpBusy(true);
     setOtpMessage("");
     try {
@@ -135,12 +148,14 @@ export default function CheckoutPage() {
     } catch {
       setOtpMessage("Could not reach the server. Check your connection and try again.");
     } finally {
+      otpLock.current = false;
       setOtpBusy(false);
     }
   }
 
   async function verifyOtpCode() {
-    if (!/^\d{6}$/.test(otpCode) || otpBusy) return;
+    if (!/^\d{6}$/.test(otpCode) || otpLock.current || otpBusy) return;
+    otpLock.current = true;
     setOtpBusy(true);
     setOtpMessage("");
     try {
@@ -159,6 +174,7 @@ export default function CheckoutPage() {
     } catch {
       setOtpMessage("Could not reach the server. Check your connection and try again.");
     } finally {
+      otpLock.current = false;
       setOtpBusy(false);
     }
   }
@@ -184,13 +200,21 @@ export default function CheckoutPage() {
       setOtpMessage("");
     }
   }
-  // Generated once per page load / checkout attempt. Reusing it across retries of the same submit
-  // (network errors, double-clicks) lets the server treat a retry as the same order via
-  // findOrderByIdempotencyKey instead of creating a duplicate.
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  // The idempotency key (see lib/cart-sync.ts) is remembered per bag contents, so retries — double
+  // clicks, flaky networks, or closing the tab mid-order and coming back — resolve to the same order
+  // via findOrderByIdempotencyKey instead of creating a duplicate.
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setItems(readCart()), 0);
+    const timer = window.setTimeout(() => {
+      const saved = readCart();
+      setItems(saved);
+      // Bring a returning shopper's bag up to date (sold out / repriced) before they commit.
+      void syncCartWithServer(saved).then((result) => {
+        if (!result) return;
+        if (result.changed) setItems(result.items);
+        if (result.notice) setCartNotice(result.notice);
+      });
+    }, 0);
     fetch("/api/checkout/options")
       .then((response) => response.json())
       .then((data: { zones?: Zone[]; settings?: Settings | null }) => {
@@ -218,7 +242,8 @@ export default function CheckoutPage() {
   }, [subtotal, delivery]);
 
   async function applyCoupon(code: string, silent = false) {
-    if (!code.trim()) return;
+    if (!code.trim() || (couponLock.current && !silent)) return;
+    couponLock.current = true;
     setCouponBusy(true);
     setCouponError("");
     try {
@@ -238,6 +263,7 @@ export default function CheckoutPage() {
       setCoupon(null);
       if (!silent) setCouponError("Could not check this coupon. Please try again.");
     } finally {
+      couponLock.current = false;
       setCouponBusy(false);
     }
   }
@@ -250,6 +276,7 @@ export default function CheckoutPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitLock.current) return; // a second tap in the same frame must not start a second request
     const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
     // Re-derive from the form's actual current values rather than trusting React state alone here
     // — the autofill-detection fix above (onAutofill/:-webkit-autofill) covers the normal case, but
@@ -265,12 +292,13 @@ export default function CheckoutPage() {
       setError("Verify your email before placing the order.");
       return;
     }
+    submitLock.current = true;
     setBusy(true);
     setError("");
     try {
       const response = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": checkoutAttemptKey(items) },
         body: JSON.stringify({
           ...values,
           zoneId,
@@ -285,6 +313,8 @@ export default function CheckoutPage() {
         setError(data.error ?? "The order could not be placed.");
       } else {
         setResult(data as OrderResult);
+        setOrderPhone(values.customerPhone ?? "");
+        clearCheckoutAttempt();
         clearCart();
         setItems([]);
         // Fire the actual conversion event — without this, Meta/Google only ever see PageViews and
@@ -303,6 +333,7 @@ export default function CheckoutPage() {
     } catch {
       setError("The order could not be placed. Please check your connection and try again.");
     } finally {
+      submitLock.current = false;
       setBusy(false);
     }
   }
@@ -332,12 +363,19 @@ export default function CheckoutPage() {
   async function uploadReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!result) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     form.set("orderId", result.orderId);
-    const response = await fetch("/api/orders/payment-proof", { method: "POST", body: form });
-    const data = await response.json();
-    setReceiptMessage(response.ok ? "Receipt received. We will verify it shortly." : data.error);
-    if (response.ok) event.currentTarget.reset();
+    await receiptAction.run(async () => {
+      try {
+        const response = await fetch("/api/orders/payment-proof", { method: "POST", body: form });
+        const data = await response.json().catch(() => ({}));
+        setReceiptMessage(response.ok ? "Receipt received. We will verify it shortly." : (data as { error?: string }).error ?? "The receipt could not be uploaded.");
+        if (response.ok) formElement.reset();
+      } catch {
+        setReceiptMessage("The receipt could not be uploaded. Please check your connection and try again.");
+      }
+    });
   }
 
   if (result) {
@@ -377,11 +415,43 @@ export default function CheckoutPage() {
                   <span>Upload payment receipt</span>
                   <input required type="file" name="file" accept="image/jpeg,image/png,image/webp" />
                 </label>
-                <button>Submit receipt</button>
+                <button disabled={receiptAction.pending} aria-busy={receiptAction.pending}>
+                  {receiptAction.pending ? (
+                    <span className="busy-label">
+                      <span className="spinner spinner-light" aria-hidden="true" /> Uploading…
+                    </span>
+                  ) : (
+                    "Submit receipt"
+                  )}
+                </button>
               </form>
               {receiptMessage && <small>{receiptMessage}</small>}
             </aside>
           )}
+          {pushSupport() === "available" && !hasCustomerPushToken() && pushState !== "on" && (
+            <div className="push-optin">
+              <button
+                type="button"
+                className="text-link"
+                disabled={pushAction.pending}
+                aria-busy={pushAction.pending}
+                onClick={() =>
+                  pushAction.run(async () => {
+                    const outcome = await registerCustomerPush({ orderNumber: result.orderNumber, phone: orderPhone });
+                    if (outcome.ok) setPushState("on");
+                    else {
+                      setPushState("error");
+                      setPushNote(outcome.error);
+                    }
+                  })
+                }
+              >
+                {pushAction.pending ? "Enabling…" : "Get order updates on this device"}
+              </button>
+              {pushState === "error" && <small>{pushNote}</small>}
+            </div>
+          )}
+          {pushState === "on" && <p className="push-optin">You&apos;ll get updates here when your order is paid, shipped or delivered.</p>}
           <Link className="button button-dark" href={`/track-order?order=${encodeURIComponent(result.orderNumber)}`}>
             Track this order
           </Link>
@@ -402,6 +472,7 @@ export default function CheckoutPage() {
             <h1>Delivery &amp; payment</h1>
           </div>
         </header>
+        {cartNotice && <p className="cart-stock-notice">{cartNotice}</p>}
         {!items.length ? (
           <div className="cart-empty">
             <h2>Your bag is empty.</h2>

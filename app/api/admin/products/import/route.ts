@@ -1,4 +1,5 @@
 import { ilike } from "drizzle-orm";
+import { runInBackground } from "@/lib/background";
 import { reindexAll } from "@/lib/search/algolia";
 import { db } from "@/db";
 import { categories, products, productVariants } from "@/db/schema";
@@ -198,7 +199,7 @@ export async function POST(request: Request) {
   }
 
   // Bulk import touched many products — rebuild the search index once rather than per product.
-  await reindexAll().catch((error) => console.error("Algolia reindex after import failed", error));
+  if (succeeded.length) runInBackground(reindexAll(), "reindexAll");
 
   return Response.json({ results });
 }

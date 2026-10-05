@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { liteClient } from "algoliasearch/lite";
 import { cartCount, readCart } from "@/lib/cart";
+import { useWishlist } from "@/lib/wishlist";
 import { Price } from "./currency";
 
 type NavCategory = { name: string; slug: string };
@@ -30,6 +31,7 @@ const Icon = {
   menu: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18" /></svg>,
   search: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>,
   bag: <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8z" /><path d="M9 8V6a3 3 0 016 0v2" /></svg>,
+  heart: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M12 21s-7.5-4.6-10.2-9.1C.2 8.9 1.4 5 5 4c2.4-.7 4.6.4 7 3 2.4-2.6 4.6-3.7 7-3 3.6 1 4.8 4.9 3.2 7.9C19.5 16.4 12 21 12 21z" strokeLinejoin="round" /></svg>,
   close: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" /></svg>,
 };
 
@@ -47,6 +49,7 @@ export function HeaderClient({
   const [searchOpen, setSearchOpen] = useState(false);
   const [bagCount, setBagCount] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
+  const wishlistCount = useWishlist().length;
 
   useEffect(() => {
     const update = () => setBagCount(cartCount(readCart()));
@@ -90,6 +93,11 @@ export function HeaderClient({
   }, [messages.length]);
 
   const waLink = whatsappNumber ? `https://wa.me/${whatsappNumber.replace(/[^\d]/g, "")}` : "/contact";
+  // Open and focus in the same tap: on iOS the keyboard only appears for a focus() made inside the gesture.
+  const openSearch = () => {
+    setSearchOpen(true);
+    document.getElementById("site-search-input")?.focus();
+  };
   const closeAll = () => {
     setMenuOpen(false);
     setSearchOpen(false);
@@ -116,10 +124,10 @@ export function HeaderClient({
           <button type="button" className="icon-btn" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>
             {Icon.menu}
           </button>
-          <button type="button" className="icon-btn" aria-label="Search" onClick={() => setSearchOpen(true)}>
+          <button type="button" className="icon-btn" aria-label="Search" onClick={openSearch}>
             {Icon.search}
           </button>
-          <button type="button" className="hdr-search-hint" onClick={() => setSearchOpen(true)}>
+          <button type="button" className="hdr-search-hint" onClick={openSearch}>
             Search
           </button>
         </div>
@@ -127,6 +135,12 @@ export function HeaderClient({
           <Image src="/brand/wordmark.png" alt="Nure Asmir" width={395} height={100} priority unoptimized />
         </Link>
         <div className="hdr-side hdr-right">
+          <Link href="/wishlist" className="icon-btn" aria-label={`Wishlist, ${wishlistCount} saved`}>
+            {Icon.heart}
+            <span className="cart-count" data-empty={wishlistCount === 0}>
+              {wishlistCount}
+            </span>
+          </Link>
           <Link href="/cart" className="icon-btn" aria-label={`Bag, ${bagCount} items`}>
             {Icon.bag}
             <span className="cart-count" data-empty={bagCount === 0}>
@@ -256,6 +270,7 @@ function SearchOverlay({
       >
         {Icon.search}
         <input
+          id="site-search-input"
           ref={inputRef}
           type="search"
           value={query}

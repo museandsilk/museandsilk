@@ -1,0 +1,140 @@
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { defineConfig, devices } from "@playwright/test";
+
+/**
+ * End-to-end suite. Everything runs against a disposable Neon branch ("e2e-test", a child of
+ * production), never production data: DATABASE_URL / AWS_ENDPOINT_URL_S3 come from
+ * .env.development.local (git-ignored), and Algolia / email / WhatsApp / PostEx credentials are
+ * blanked for the servers started below. Push notifications are tested against a local mock of
+ * Google's OAuth + FCM endpoints (e2e/support/mock-fcm.mjs).
+ *
+ *   npm run test:e2e                         everything
+ *   npx playwright test --project=api        server-side race / pricing / push tests
+ *   npx playwright test --project=unit       pure logic
+ *   npx playwright test --project=mobile-safari
+ */
+function parseEnvFile(file: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!fs.existsSync(file)) return out;
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m) out[m[1]] = m[2].replace(/^"|"$/g, "");
+  }
+  return out;
+}
+
+const root = process.cwd();
+const base = parseEnvFile(path.join(root, ".env.local"));
+const dev = parseEnvFile(path.join(root, ".env.development.local"));
+const testEnv: Record<string, string> = { ...base, ...dev };
+
+if (!/ep-restless-art|e2e/.test(testEnv.DATABASE_URL ?? "") && !process.env.E2E_ALLOW_ANY_DB) {
+  throw new Error("Refusing to run: DATABASE_URL is not the e2e-test branch. Create .env.development.local first (see README).");
+}
+
+// One RSA key pair per run: the app signs with the private half, the mock verifies with the public half.
+const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+  privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  publicKeyEncoding: { type: "spki", format: "pem" },
+});
+const MOCK_PORT = 4010;
+const APP_PORT = 3100;
+const PROD_PORT = 3200;
+
+const serverEnv = {
+  ...testEnv,
+  NEXT_PUBLIC_SITE_URL: `http://localhost:${APP_PORT}`,
+  // No third-party side effects from tests.
+  ALGOLIA_ADMIN_KEY: "",
+  NEXT_PUBLIC_ALGOLIA_SEARCH_KEY: "",
+  RESEND_API_KEY: "",
+  WHATSAPP_ACCESS_TOKEN: "",
+  POSTEX_API_TOKEN: "",
+  TURNSTILE_SECRET_KEY: "",
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
+  NEXT_PUBLIC_SENTRY_DSN: "",
+  // Push goes to the local mock.
+  FIREBASE_SERVICE_ACCOUNT: JSON.stringify({ project_id: "mock-project", client_email: "mock@mock-project.iam.gserviceaccount.com", private_key: privateKey }),
+  FCM_BASE_URL: `http://127.0.0.1:${MOCK_PORT}`,
+  GOOGLE_OAUTH_TOKEN_URL: `http://127.0.0.1:${MOCK_PORT}/token`,
+  CRON_SECRET: testEnv.CRON_SECRET || "e2e-cron-secret",
+  SALES_MEMO_MS: "0",
+};
+// Expose to the test processes too.
+// Test-process access to lib/* modules that import the db client (always the e2e branch).
+process.env.DATABASE_URL = testEnv.DATABASE_URL;
+process.env.E2E_BASE_URL = `http://localhost:${APP_PORT}`;
+process.env.E2E_PROD_URL = `http://localhost:${PROD_PORT}`;
+process.env.E2E_MOCK_FCM = `http://127.0.0.1:${MOCK_PORT}`;
+process.env.E2E_DATABASE_URL = testEnv.DATABASE_URL;
+process.env.E2E_S3_ENDPOINT = testEnv.AWS_ENDPOINT_URL_S3;
+process.env.E2E_CRON_SECRET = serverEnv.CRON_SECRET;
+process.env.E2E_ADMIN_EMAIL = testEnv.ADMIN_EMAIL || "admin@nureasmir.com";
+process.env.E2E_ADMIN_PASSWORD = testEnv.ADMIN_INITIAL_PASSWORD || "";
+
+const only = (project: string, device: Record<string, unknown>) => ({
+  name: project,
+  testDir: "./e2e/ui",
+  testIgnore: ["**/pwa.spec.ts"],
+  use: { baseURL: `http://localhost:${APP_PORT}`, ...device },
+});
+
+export default defineConfig({
+  testDir: "./e2e",
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
+  fullyParallel: false,
+  workers: 1,
+  retries: process.env.CI ? 1 : 0,
+  reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
+  outputDir: "e2e/.artifacts",
+  use: { trace: "retain-on-failure", screenshot: "only-on-failure", video: "off", actionTimeout: 15_000, navigationTimeout: 45_000 },
+
+  projects: [
+    { name: "unit", testDir: "./e2e/unit", use: {} },
+    { name: "api", testDir: "./e2e/api", use: { baseURL: `http://localhost:${APP_PORT}` } },
+
+    // Desktop browsers
+    only("chromium", devices["Desktop Chrome"]),
+    only("firefox", devices["Desktop Firefox"]),
+    only("webkit", devices["Desktop Safari"]),
+    // Phones & tablet
+    only("mobile-chrome", devices["Pixel 7"]),
+    only("mobile-safari", devices["iPhone 14"]),
+    only("small-android", { ...devices["Galaxy S9+"], viewport: { width: 360, height: 640 } }),
+    only("tablet", devices["iPad Mini"]),
+
+    // Production build only: service worker / cache behaviour.
+    { name: "pwa", testDir: "./e2e/ui", testMatch: ["**/pwa.spec.ts"], use: { ...devices["Desktop Chrome"], baseURL: `http://localhost:${PROD_PORT}`, serviceWorkers: "allow" } },
+  ],
+
+  webServer: [
+    {
+      command: "node e2e/support/mock-fcm.mjs",
+      url: `http://127.0.0.1:${MOCK_PORT}/health`,
+      reuseExistingServer: true,
+      env: { MOCK_FCM_PORT: String(MOCK_PORT), MOCK_FCM_PUBLIC_KEY: publicKey },
+    },
+    {
+      command: `npx next dev -p ${APP_PORT}`,
+      url: `http://localhost:${APP_PORT}/api/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+      env: serverEnv as Record<string, string>,
+    },
+    ...(process.env.E2E_PROD
+      ? [
+          {
+            command: `npx next start -p ${PROD_PORT}`,
+            url: `http://localhost:${PROD_PORT}/api/health`,
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+            env: { ...serverEnv, NEXT_DIST_DIR: ".next-prod", NODE_ENV: "production", ALLOW_INSECURE_HTTP: "1" } as Record<string, string>,
+          },
+        ]
+      : []),
+  ],
+});

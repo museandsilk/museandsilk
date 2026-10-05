@@ -3,6 +3,7 @@ import { orderConfirmationEmail } from "./templates/order-confirmation";
 import { bankDepositInstructionsEmail } from "./templates/bank-deposit-instructions";
 import { reservationReminderEmail, type ReservationReminderPayload } from "./templates/reservation-reminder";
 import { checkoutOtpEmail } from "./templates/checkout-otp";
+import { ORDER_EVENT_COPY, orderStatusEmail, type OrderStatusEmailPayload } from "./templates/order-status";
 
 function client(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
@@ -100,4 +101,16 @@ export async function sendAdminAlertEmail(subject: string, html: string): Promis
   const to = process.env.ADMIN_EMAIL;
   if (!to) return;
   await send({ from: fromAddress(), to, subject, html });
+}
+
+/** Lifecycle email (paid / on its way / delivered / cancelled …). Best-effort: never throws. */
+export async function sendOrderStatusEmail(payload: Omit<OrderStatusEmailPayload, "whatsappNumber"> & { toEmail?: string }): Promise<void> {
+  const to = payload.toEmail;
+  if (!to) return;
+  await send({
+    from: fromAddress(),
+    to,
+    subject: `${ORDER_EVENT_COPY[payload.event].title} — order ${payload.orderNumber}`,
+    html: orderStatusEmail(payload),
+  });
 }

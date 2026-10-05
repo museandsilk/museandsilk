@@ -155,6 +155,9 @@ export const productVariants = pgTable("product_variants", {
   stockQuantity: integer("stock_quantity").notNull().default(0),
   reservedQuantity: integer("reserved_quantity").notNull().default(0),
   lowStockThreshold: integer("low_stock_threshold").notNull().default(3),
+  // Last stock level the owner was alerted about ("ok" | "low" | "out") so a push goes out once per
+  // transition instead of on every order — see lib/stock-alerts.ts.
+  stockAlertState: text("stock_alert_state").notNull().default("ok"),
   isDefault: boolean("is_default").notNull().default(false),
   status: text("status").notNull().default("active"),
   ...timestamps,
@@ -304,6 +307,49 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull(),
   lineTotal: integer("line_total").notNull(),
 }, (table) => [index("order_items_order_idx").on(table.orderId)]);
+
+// Time-boxed storewide or per-product discounts ("flash sales"). The price a shopper pays is always
+// computed server-side at order time from the sales active *right then* (lib/sales.ts), so a stale
+// cached page or a tampered cart can never get a discount that has ended.
+export const flashSales = pgTable("flash_sales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  discountType: text("discount_type").notNull(), // "percent" | "fixed"
+  discountValue: integer("discount_value").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  active: boolean("active").notNull().default(true),
+  appliesToAll: boolean("applies_to_all").notNull().default(false),
+  // Set once the "sale is live" push has gone out, so the cron never alerts twice.
+  startNotifiedAt: timestamp("start_notified_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => [index("flash_sales_window_idx").on(table.active, table.startsAt, table.endsAt)]);
+
+export const flashSaleProducts = pgTable("flash_sale_products", {
+  saleId: uuid("sale_id").notNull().references(() => flashSales.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.saleId, table.productId] })]);
+
+// Shopper devices that opted into push (Firebase Cloud Messaging): order updates for the orders they
+// placed on this device and sale alerts for wishlisted products. No account exists for shoppers, so a
+// device is tied to an order only after proving the order number + phone number.
+export const customerPushDevices = pgTable("customer_push_devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").notNull().unique(),
+  orderNumbers: jsonb("order_numbers").$type<string[]>().notNull().default([]),
+  wishlist: jsonb("wishlist").$type<string[]>().notNull().default([]),
+  salesOptIn: boolean("sales_opt_in").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One row per (order, lifecycle event) that has already been announced to the customer — makes the
+// notifications idempotent when an admin double-clicks or a webhook is retried.
+export const orderEventsSent = pgTable("order_events_sent", {
+  orderId: uuid("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  event: text("event").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.orderId, table.event] })]);
 
 export const orderStatusHistory = pgTable("order_status_history", {
   id: uuid("id").primaryKey().defaultRandom(),

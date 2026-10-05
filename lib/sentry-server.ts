@@ -35,7 +35,7 @@ export function reportServerError(
       timestamp: now.getTime() / 1000,
       platform: "javascript",
       level: "error",
-      environment: process.env.SENTRY_ENVIRONMENT || "production",
+      environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT || process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV,
       server_name: "cloudflare-worker",
       exception: { values: [{ type: error.name || "Error", value: error.message || "Unknown error" }] },
       // Path only — query strings can carry order numbers / phone numbers.

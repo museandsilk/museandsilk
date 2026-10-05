@@ -12,17 +12,22 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
+permissions: {}
+
 jobs:
   ping:
     runs-on: ubuntu-latest
+    env:
+      SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
       - name: Keep the database warm
-        run: curl -sf "${{ secrets.NEXT_PUBLIC_SITE_URL }}/api/health"
+        run: curl -sf "$SITE_URL/api/health"
 
       - name: Call expire-reservations endpoint
         run: |
-          curl -sf -X GET "${{ secrets.NEXT_PUBLIC_SITE_URL }}/api/cron/expire-reservations" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          curl -sf -X GET "$SITE_URL/api/cron/expire-reservations" \
+            -H "Authorization: Bearer $CRON_SECRET"
 
       # Books customer-confirmed orders with PostEx and syncs courier status back into the orders.
       # Last and continue-on-error on purpose: a PostEx problem must never fail (or block) the
@@ -30,5 +35,12 @@ jobs:
       - name: PostEx auto-booking + status sync
         continue-on-error: true
         run: |
-          curl -sf -X GET "${{ secrets.NEXT_PUBLIC_SITE_URL }}/api/cron/postex-sync" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          curl -sf -X GET "$SITE_URL/api/cron/postex-sync" \
+            -H "Authorization: Bearer $CRON_SECRET"
+
+      # Announces flash sales that just went live (push to opted-in shoppers) and repairs any
+      # reserved-stock drift. Also non-blocking.
+      - name: Flash-sale alerts + stock reconciliation
+        continue-on-error: true
+        run: |
+          curl -sf -X GET "$SITE_URL/api/cron/sales"             -H "Authorization: Bearer $CRON_SECRET"

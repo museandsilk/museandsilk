@@ -120,6 +120,13 @@
       "when": 1791190667276,
       "tag": "0016_admin_push_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791194252646,
+      "tag": "0017_flash_sales_push_stock_alerts",
+      "breakpoints": true
     }
   ]
 }

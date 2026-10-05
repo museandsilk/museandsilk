@@ -3,9 +3,11 @@ import Link from "next/link";
 import { ProductCard, ProductRail } from "./_components/store-components";
 import { StoreFooter } from "./_components/store-footer";
 import { CampaignCarousel } from "./_components/campaign-carousel";
-import { getActiveCategories, getCampaignSlides, getCatalogProducts } from "@/lib/commerce";
+import { getActiveCategories, getCampaignSlides, getCatalogProducts, toCard } from "@/lib/commerce";
 
-export const revalidate = 300;
+// Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
+// always priced on the server regardless of what a cached page displays.
+export const revalidate = 60;
 
 export default async function Home() {
   const [products, campaignSlides, categories] = await Promise.all([
@@ -17,9 +19,9 @@ export default async function Home() {
   // `products` arrives newest-first. "New arrivals" is the newest dozen; "Featured" is whatever the
   // owner has ticked "Featured on homepage" in the admin panel (hidden if nothing is featured, so
   // the page never repeats the same products twice in a row).
-  const newArrivals = products.slice(0, 12);
-  const featured = products.filter((product) => product.featured).slice(0, 8);
-  const showFeatured = featured.length >= 4 && featured.some((product) => !newArrivals.slice(0, 5).includes(product));
+  const newArrivals = products.slice(0, 12).map(toCard);
+  const featured = products.filter((product) => product.featured).slice(0, 8).map(toCard);
+  const showFeatured = featured.length >= 4 && featured.some((product) => !newArrivals.slice(0, 5).some((entry) => entry.id === product.id));
 
   return (
     <main className="page-fade-in">

@@ -8,11 +8,14 @@ on:
     - cron: "40 2 * * *"
   workflow_dispatch: {}
 
+permissions: {}
+
 jobs:
   reindex:
     runs-on: ubuntu-latest
     steps:
       - name: Rebuild the search index
-        run: |
-          curl -sf -X GET "${{ secrets.NEXT_PUBLIC_SITE_URL }}/api/cron/search-reindex" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+        env:
+          SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: curl -sf -X GET "$SITE_URL/api/cron/search-reindex" -H "Authorization: Bearer $CRON_SECRET"

@@ -16,6 +16,9 @@ import {
 import { sendOrderEmails } from "@/lib/email/resend";
 import { sendOrderConfirmationWhatsApp, toWhatsAppPhone } from "@/lib/whatsapp";
 import { notifyAdmins } from "@/lib/push/notify";
+import { applySales, loadFreshActiveSales } from "@/lib/sales";
+import { checkStockAlerts } from "@/lib/stock-alerts";
+import { runInBackground } from "@/lib/background";
 import {
   attachOrderToIdempotencyKey,
   claimIdempotencyKey,
@@ -149,6 +152,9 @@ export async function POST(request: Request) {
 
   const hasValidPhone = customerPhone.replace(/\D/g, "").length >= 10;
 
+  if (customerName.length > 120 || city.length > 80 || province.length > 80 || address.length > 400 || (notes?.length ?? 0) > 1000) {
+    return Response.json({ error: "One of the fields is too long." }, { status: 400 });
+  }
   if (!customerName || !city || !province || !address || !zoneId || !paymentMethod) {
     return Response.json({ error: "Complete all required details before placing the order." }, { status: 400 });
   }
@@ -198,6 +204,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "One of the selected products is no longer available." }, { status: 409 });
   }
 
+  // Price is decided here, on the server, from the sales that are active *right now* — what the
+  // shopper's (possibly cached) page or cart showed is only a preview.
+  const activeSales = await loadFreshActiveSales();
   let subtotal = 0;
   const lines: OrderLine[] = [];
   for (const item of items) {
@@ -209,7 +218,8 @@ export async function POST(request: Request) {
     if (variant.productStatus !== "published" || variant.variantStatus !== "active" || available < item.quantity) {
       return Response.json({ error: `${variant.productName} does not have enough available stock.` }, { status: 409 });
     }
-    const lineTotal = variant.price * item.quantity;
+    const unitPrice = applySales(variant.price, variant.productId, activeSales)?.price ?? variant.price;
+    const lineTotal = unitPrice * item.quantity;
     subtotal += lineTotal;
     lines.push({
       variantId: variant.variantId,
@@ -217,7 +227,7 @@ export async function POST(request: Request) {
       productName: variant.productName,
       variantName: variant.variantName,
       sku: variant.sku,
-      unitPrice: variant.price,
+      unitPrice,
       quantity: item.quantity,
       lineTotal,
     });
@@ -414,6 +424,8 @@ export async function POST(request: Request) {
   }
 
   await attachOrderToIdempotencyKey(idempotencyKey, orderId);
+
+  runInBackground(checkStockAlerts(lines.map((line) => line.variantId)), "checkStockAlerts");
 
   notifyAdmins({
     title: `New order ${orderNumber}`,

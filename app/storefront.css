@@ -52,8 +52,9 @@
 .drawer-foot a:hover { color: var(--ink); }
 
 /* ---------- search overlay (Algolia) ---------- */
-.search-overlay { position: fixed; z-index: 100; inset: 0 0 auto 0; max-height: 100vh; overflow-y: auto; padding: 22px clamp(16px, 4vw, 56px) 36px; background: #fff; visibility: hidden; transform: translateY(-102%); transition: transform .35s cubic-bezier(.22,.8,.22,1), visibility .35s; box-shadow: 0 20px 60px rgba(0,0,0,.12); }
-.search-overlay.is-open { visibility: visible; transform: translateY(0); }
+.search-overlay { position: fixed; z-index: 100; inset: 0 0 auto 0; max-height: 100vh; overflow-y: auto; padding: 22px clamp(16px, 4vw, 56px) 36px; background: #fff; visibility: hidden; transform: translateY(-102%); transition: transform .35s cubic-bezier(.22,.8,.22,1), visibility 0s linear .35s; box-shadow: 0 20px 60px rgba(0,0,0,.12); }
+/* Visible at once on open (no visibility delay) so the input can be focused inside the same tap – iOS only raises the keyboard for a focus() made in the user gesture. */
+.search-overlay.is-open { visibility: visible; transform: translateY(0); transition: transform .35s cubic-bezier(.22,.8,.22,1), visibility 0s; }
 .search-bar { max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--ink); }
 .search-bar input { flex: 1; padding: 14px 0; border: 0; outline: 0; background: transparent; font: 300 clamp(20px, 3vw, 30px) var(--sans); letter-spacing: .02em; }
 .search-bar input::placeholder { color: #aaa; }
@@ -83,7 +84,7 @@
 .banner-dots i { display: block; border-top: 2px solid rgba(255,255,255,.55); transition: border-color .2s; }
 .banner-dots button.active i { border-color: #fff; }
 .banner-arrow { position: absolute; z-index: 3; top: 50%; width: 44px; height: 44px; margin-top: -22px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255,255,255,.8); color: var(--ink); cursor: pointer; opacity: 0; transition: opacity .2s; }
-.banner:hover .banner-arrow { opacity: 1; }
+.banner:hover .banner-arrow, .banner:focus-within .banner-arrow, .banner-arrow:focus-visible { opacity: 1; }
 .banner-prev { left: 16px; }
 .banner-next { right: 16px; }
 
@@ -161,9 +162,9 @@
 .footer-bottom a:hover { color: #fff; }
 
 /* ---------- floating widgets ---------- */
-.float-whatsapp { position: fixed; z-index: 70; left: 16px; bottom: 16px; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: #25d366; color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.25); transition: transform .2s ease; }
+.float-whatsapp { position: fixed; z-index: 70; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: #25d366; color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.25); transition: transform .2s ease; }
 .float-whatsapp:hover { transform: scale(1.06); }
-.currency-switcher { position: fixed; z-index: 70; right: 16px; bottom: 16px; }
+.currency-switcher { position: fixed; z-index: 70; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); }
 .currency-switcher > button { height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: 6px; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 12px; font-weight: 500; letter-spacing: .08em; cursor: pointer; }
 .currency-switcher ul { position: absolute; right: 0; bottom: 46px; width: 250px; margin: 0; padding: 6px; list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
 .currency-switcher li button { width: 100%; padding: 9px 10px; display: flex; gap: 10px; align-items: baseline; border: 0; border-radius: 5px; background: transparent; text-align: left; font-size: 13px; cursor: pointer; }
@@ -179,7 +180,7 @@
 .breadcrumb a:hover { color: var(--ink); }
 .shop-shell { padding: 20px clamp(12px, 2vw, 28px) 100px; }
 .shop-toolbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
-.filter-tabs { display: flex; gap: 26px; overflow-x: auto; scrollbar-width: none; }
+.filter-tabs { display: flex; gap: 26px; max-width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .filter-tabs button { position: relative; padding: 18px 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
 .filter-tabs button.active { color: var(--ink); }
 .filter-tabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; border-bottom: 2px solid var(--ink); }
@@ -272,6 +273,10 @@
   .footer-main { grid-template-columns: 1fr; gap: 40px; }
   .search-hits { grid-template-columns: repeat(2, 1fr); }
 }
+@media (max-width: 900px) {
+  /* iOS Safari zooms the page when a focused field is under 16px. */
+  input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="range"]), select, textarea { font-size: 16px; }
+}
 @media (max-width: 700px) {
   .announcement { height: 30px; font-size: 9px; letter-spacing: .14em; }
   .site-header { height: 58px; }
@@ -291,7 +296,8 @@
   .section-heading > p { width: 100%; margin-top: 16px; }
   .footer-links { grid-template-columns: 1fr 1fr; }
   .footer-links > div:first-child { grid-column: 1 / -1; }
-  .shop-toolbar { align-items: flex-start; flex-direction: column; gap: 0; padding-bottom: 12px; }
+  .shop-toolbar { align-items: stretch; flex-direction: column; gap: 0; padding-bottom: 12px; }
+  .filter-tabs { width: 100%; }
   .shop-toolbar label { align-self: flex-end; }
   .cart-toast { left: 12px; right: 12px; bottom: 70px; width: auto; }
   .float-whatsapp { width: 46px; height: 46px; left: 12px; bottom: 12px; }
@@ -326,3 +332,20 @@
   .story-page { grid-template-columns: 1fr; }
   .story-image { position: relative; top: 0; height: 60vh; }
 }
+
+/* ---------- wishlist, flash sale ---------- */
+.wish-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; background: transparent; color: var(--ink); cursor: pointer; transition: transform .15s ease, color .15s ease; }
+.wish-card { position: absolute; z-index: 3; top: 8px; right: 8px; width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.92); }
+.wish-card:hover { transform: scale(1.08); }
+.wish-inline { margin: 4px 0 18px; padding: 8px 0; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.wish-btn.is-saved { color: #b3261e; }
+.pcard-badge.sale { background: #b3261e; color: #fff; }
+.sale-banner { margin: 12px 0 0; padding: 10px 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; background: #fdf0ee; border: 1px solid #f0c9c4; }
+.sale-tag { padding: 3px 8px; background: #b3261e; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: .12em; }
+.sale-countdown { margin: 0; font-size: 12px; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+.wish-alerts { margin: 0 auto 28px; display: grid; justify-items: center; gap: 8px; }
+.button:disabled, .button[aria-busy="true"] { opacity: .7; cursor: not-allowed; }
+.busy-label .spinner { margin-right: 4px; }
+
+.field-wide { grid-column: 1 / -1; }
+@media (max-width: 800px) { .field-wide { grid-column: auto; } }

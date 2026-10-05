@@ -188,7 +188,7 @@ const emptyDraft: ProductDetail = {
   occasion: "",
   style: "",
   countryOfOrigin: "",
-  gender: "female",
+  gender: "male",
   googleProductCategory: "",
 };
 

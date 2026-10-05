@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { readCart, writeCart, type CartItem } from "@/lib/cart";
-
-const money = new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 });
+import { syncCartWithServer } from "@/lib/cart-sync";
+import { Price } from "../_components/currency";
 
 export default function CartPage() {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -24,54 +24,33 @@ export default function CartPage() {
     };
   }, []);
 
-  // Stock in the cart is a snapshot from whenever each item was added — it can go stale (someone
-  // else bought the last one, or the admin adjusted stock). Re-check against the live database
-  // once the cart has loaded, and clamp/flag anything that changed. /api/orders re-validates
-  // again at the moment of purchase regardless, so this is a UX improvement, not the security net.
+  // The bag is a snapshot from whenever each item was added — stock and prices move. Re-check against
+  // the live catalogue once the bag has loaded (and again when the tab becomes visible, for a bag
+  // left open for hours) and clamp / flag anything that changed. /api/orders re-validates and
+  // re-prices again at the moment of purchase regardless, so this is UX, not the security net.
+  const itemCount = items.length;
   useEffect(() => {
-    if (!items.length) return;
-    const variantIds = items.map((item) => item.variantId);
-    fetch("/api/cart-availability", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ variantIds }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { availability?: { variantId: string; available: number }[] } | null) => {
-        if (!data?.availability) return;
-        const availableById = new Map(data.availability.map((entry) => [entry.variantId, entry.available]));
-        let changed = false;
-        const removedNames: string[] = [];
-        const reducedNames: string[] = [];
-        const next = items
-          .map((item) => {
-            const available = availableById.get(item.variantId);
-            if (available === undefined) return item;
-            if (available !== item.available) changed = true;
-            if (item.quantity > available) {
-              changed = true;
-              if (available < 1) removedNames.push(item.name);
-              else reducedNames.push(item.name);
-            }
-            return { ...item, available, quantity: Math.min(item.quantity, available) };
-          })
-          .filter((item) => item.quantity > 0);
-        if (changed) {
-          setItems(next);
-          writeCart(next);
-          const notes = [
-            removedNames.length && `${removedNames.join(", ")} sold out and ${removedNames.length > 1 ? "were" : "was"} removed from your bag.`,
-            reducedNames.length && `Stock changed for ${reducedNames.join(", ")} — quantity adjusted.`,
-          ].filter(Boolean);
-          setStockNotice(notes.join(" "));
-        }
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length]);
+    if (!itemCount) return;
+    const controller = new AbortController();
+    const check = () =>
+      syncCartWithServer(readCart(), controller.signal).then((result) => {
+        if (!result) return;
+        if (result.changed) setItems(result.items);
+        if (result.notice) setStockNotice(result.notice);
+      });
+    void check();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      controller.abort();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [itemCount]);
 
   useEffect(() => {
-    fetch("/api/checkout/options", { cache: "no-store" })
+    fetch("/api/checkout/options")
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (data?.settings?.freeDeliveryThreshold) setFreeDeliveryThreshold(data.settings.freeDeliveryThreshold);
@@ -144,7 +123,9 @@ export default function CartPage() {
                       <small className="stock-badge stock-badge-low">Only {item.available} left in stock</small>
                     )}
                   </div>
-                  <strong>{money.format(item.price * item.quantity)}</strong>
+                  <strong>
+                    <Price amount={item.price * item.quantity} />
+                  </strong>
                   <button className="cart-remove" onClick={() => update(item.variantId, 0)}>
                     Remove
                   </button>
@@ -155,7 +136,9 @@ export default function CartPage() {
               <p className="eyebrow">Order summary</p>
               <div>
                 <span>Subtotal</span>
-                <strong>{money.format(subtotal)}</strong>
+                <strong>
+                  <Price amount={subtotal} />
+                </strong>
               </div>
               <div>
                 <span>Delivery</span>
@@ -163,11 +146,12 @@ export default function CartPage() {
               </div>
               <p>
                 {freeDeliveryThreshold
-                  ? `Complimentary nationwide delivery above PKR ${freeDeliveryThreshold.toLocaleString("en-PK")}.`
+                  ? `Complimentary nationwide delivery above Rs. ${freeDeliveryThreshold.toLocaleString("en-PK")}.`
                   : "Complimentary nationwide delivery on qualifying orders."}
               </p>
+              <p className="cart-pkr-note">Orders are charged in PKR.</p>
               <Link className="add-button" href="/checkout">
-                Continue to checkout <span>→︎</span>
+                Continue to checkout <span>→</span>
               </Link>
               <Link href="/shop" className="text-link">
                 Continue shopping

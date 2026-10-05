@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { getNonce } from "@/lib/nonce";
 
 const isDev = process.env.NODE_ENV !== "production";
+// Lets a production build be served over plain http on localhost (e2e / `next start` smoke tests).
+const allowInsecure = isDev || process.env.ALLOW_INSECURE_HTTP === "1";
 
 /**
  * `'unsafe-inline'` stays in script-src as a fallback for browsers old enough not to understand
@@ -32,7 +34,7 @@ function buildCsp(nonce: string): string {
     "font-src 'self' data:",
     // Sentry's browser SDK spins up a small worker from a blob: URL for some features.
     "worker-src 'self' blob:",
-    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com https://*.algolia.net https://*.algolianet.com https://*.ingest.de.sentry.io https://*.ingest.sentry.io`,
+    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com https://*.algolia.net https://*.algolianet.com https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://fcm.googleapis.com`,
     // Turnstile's checkout widget renders inside an iframe from challenges.cloudflare.com; the
     // Google Customer Reviews opt-in survey itself renders inside an iframe from google.com.
     "frame-src https://challenges.cloudflare.com https://www.google.com",
@@ -46,7 +48,7 @@ export function middleware(request: NextRequest) {
   // once a browser has cached the policy (up to the full max-age, even after the header is
   // removed), and this domain's other subdomains (e.g. the one used for transactional email)
   // haven't been individually confirmed to always serve valid HTTPS.
-  if (!isDev && request.headers.get("x-forwarded-proto") === "http") {
+  if (!allowInsecure && request.headers.get("x-forwarded-proto") === "http") {
     const httpsUrl = new URL(request.url);
     httpsUrl.protocol = "https:";
     return NextResponse.redirect(httpsUrl, 308);
@@ -54,8 +56,10 @@ export function middleware(request: NextRequest) {
 
   const response = NextResponse.next();
   response.headers.set("Content-Security-Policy", buildCsp(getNonce()));
+  // The admin Worker (APP_TARGET=admin) must never be indexed.
+  if (process.env.APP_TARGET === "admin") response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   // Never in dev: browsers cache HSTS per host for the full max-age, which would pin localhost to https.
-  if (!isDev) response.headers.set("Strict-Transport-Security", "max-age=63072000");
+  if (!allowInsecure) response.headers.set("Strict-Transport-Security", "max-age=63072000");
   return response;
 }
 

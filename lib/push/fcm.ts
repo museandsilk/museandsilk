@@ -5,6 +5,8 @@
  * sign a short-lived JWT with WebCrypto (RS256), exchange it for an OAuth access token and cache it
  * until shortly before it expires. No firebase-admin SDK (far too heavy for a Worker).
  */
+// FCM_BASE_URL / GOOGLE_OAUTH_TOKEN_URL exist only so the e2e suite can point this sender at a local
+// mock (e2e/support/mock-fcm.mjs); production uses the Google defaults.
 type ServiceAccount = { project_id: string; client_email: string; private_key: string };
 
 let cached: { token: string; expiresAt: number } | null = null;
@@ -52,42 +54,79 @@ async function signJwt(account: ServiceAccount): Promise<string> {
 
 async function accessToken(account: ServiceAccount): Promise<string> {
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
-  const response = await fetch("https://oauth2.googleapis.com/token", {
+  const response = await fetch(process.env.GOOGLE_OAUTH_TOKEN_URL || "https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: await signJwt(account) }),
+    signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error(`Google OAuth responded ${response.status}`);
-  const json = (await response.json()) as { access_token: string; expires_in: number };
+  const json = (await response.json()) as { access_token?: string; expires_in?: number };
+  if (!json.access_token || typeof json.expires_in !== "number") throw new Error("Google OAuth response was missing access_token / expires_in");
   cached = { token: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
   return cached.token;
 }
 
-export type PushPayload = { title: string; body: string; url?: string };
+export type PushPayload = {
+  title: string;
+  body: string;
+  /** Where a click on the notification should go (same-origin path). */
+  url?: string;
+  /** Notifications with the same tag replace each other instead of stacking. */
+  tag?: string;
+};
 
-/** Sends one notification. Returns "ok", "dead" (token no longer valid — delete it) or "error". */
-export async function sendPush(deviceToken: string, payload: PushPayload): Promise<"ok" | "dead" | "error"> {
+// FCM data messages are capped at 4 KB in total — clip every user-influenced string well below that
+// so a long customer name can never turn into a rejected message.
+const clip = (value: string, max: number) => (value.length > max ? `${value.slice(0, max - 1)}…` : value);
+
+/** Outcome of one send. "dead" is reserved for a token FCM positively says is no longer registered. */
+export type SendResult = "ok" | "dead" | "error";
+
+/** Decides, from FCM's error body, whether the *token* is permanently invalid (vs. a bad payload, a
+ * wrong project or a transient failure — none of which may cost a device its registration). */
+export function isDeadTokenResponse(status: number, body: string): boolean {
+  let errorCode = "";
+  let message = "";
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string; details?: Array<{ errorCode?: string }> } };
+    errorCode = parsed.error?.details?.find((detail) => detail.errorCode)?.errorCode ?? "";
+    message = parsed.error?.message ?? "";
+  } catch {
+    return false;
+  }
+  if (errorCode === "UNREGISTERED") return true;
+  // INVALID_ARGUMENT is also returned for malformed payloads, so only count it when FCM names the token.
+  return status === 400 && errorCode === "INVALID_ARGUMENT" && /registration token|not a valid FCM/i.test(message);
+}
+
+/** Sends one notification to one device token. */
+export async function sendPush(deviceToken: string, payload: PushPayload): Promise<SendResult> {
   const account = loadServiceAccount();
   if (!account) return "error";
   try {
-    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`, {
+    const response = await fetch(`${process.env.FCM_BASE_URL || "https://fcm.googleapis.com"}/v1/projects/${account.project_id}/messages:send`, {
       method: "POST",
       headers: { Authorization: `Bearer ${await accessToken(account)}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         message: {
           token: deviceToken,
           // Data-only: the service worker (public/firebase-messaging-sw.js) builds the notification.
-          data: { title: payload.title, body: payload.body, url: payload.url ?? "/admin/orders" },
+          data: {
+            title: clip(payload.title, 120),
+            body: clip(payload.body, 400),
+            url: clip(payload.url ?? "/admin/orders", 300),
+            ...(payload.tag ? { tag: clip(payload.tag, 100) } : {}),
+          },
           webpush: { headers: { Urgency: "high", TTL: "86400" } },
         },
       }),
+      signal: AbortSignal.timeout(8000),
     });
     if (response.ok) return "ok";
-    if (response.status === 404 || response.status === 400) {
-      const text = await response.text();
-      if (/UNREGISTERED|NOT_FOUND|INVALID_ARGUMENT/.test(text)) return "dead";
-    }
-    console.error("FCM send failed", response.status);
+    const text = await response.text().catch(() => "");
+    if (isDeadTokenResponse(response.status, text)) return "dead";
+    console.error("FCM send failed", response.status, text.slice(0, 300));
     return "error";
   } catch (error) {
     console.error("FCM send threw", error);

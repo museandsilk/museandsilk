@@ -2,6 +2,7 @@ import { cache } from "react";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { mediaUrl } from "@/lib/media-url";
+import { applySales, getActiveSales } from "@/lib/sales";
 import { campaignSlides, categories, collections, productCollections, productImages, products, productVariants, siteSettings } from "@/db/schema";
 
 export type CatalogVariant = {
@@ -13,11 +14,38 @@ export type CatalogVariant = {
   fabric?: string;
   price: number;
   compareAtPrice?: number | null;
+  /** ISO time the flash sale pricing on this variant ends (undefined = not on sale). */
+  saleEndsAt?: string;
   stock: number;
   reserved: number;
   available: number;
   isDefault: boolean;
 };
+
+/** The slim shape product cards need. Client components serialise their props into the page's RSC
+ * payload, so listings pass this (see `toCard`) instead of the full catalogue entry – descriptions,
+ * variants and gallery images stay on the server. */
+export type CardProduct = Pick<
+  CatalogProduct,
+  "id" | "slug" | "name" | "price" | "compareAtPrice" | "imageUrl" | "altImageUrl" | "blurDataUrl" | "badge" | "stock" | "saleEndsAt" | "category"
+>;
+
+export function toCard(product: CatalogProduct): CardProduct {
+  return {
+    id: product.id,
+    slug: product.slug,
+    name: product.name,
+    price: product.price,
+    compareAtPrice: product.compareAtPrice ?? undefined,
+    imageUrl: product.imageUrl,
+    altImageUrl: product.altImageUrl,
+    blurDataUrl: product.blurDataUrl,
+    badge: product.badge,
+    stock: product.stock,
+    saleEndsAt: product.saleEndsAt,
+    category: product.category,
+  };
+}
 
 export type CatalogImage = {
   id: string;
@@ -59,6 +87,9 @@ export type CatalogProduct = {
   images: CatalogImage[];
   /** Second photo, shown on hover in product cards. */
   altImageUrl?: string;
+  /** ISO time the current flash sale on this product ends (undefined = not on sale). */
+  saleEndsAt?: string;
+  saleName?: string;
 };
 
 function imageUrlFor(key: string, variantWidths?: number[] | null) {
@@ -147,17 +178,21 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     .where(eq(products.status, "published"))
     .orderBy(desc(products.publishedAt), desc(products.createdAt));
 
-  const extras = await getListingExtras(rows.map((row) => row.id));
+  const [extras, sales] = await Promise.all([getListingExtras(rows.map((row) => row.id)), getActiveSales()]);
 
-  return rows.map((row) => ({
+  return rows.map((row) => {
+    const sale = applySales(row.price, row.id, sales);
+    return {
     id: row.id,
     slug: row.slug,
     name: row.name,
     category: row.categorySlug,
     categoryId: row.categoryId,
     type: row.type,
-    price: row.price,
-    compareAtPrice: row.compareAtPrice,
+    price: sale?.price ?? row.price,
+    compareAtPrice: sale ? sale.originalPrice : row.compareAtPrice,
+    saleEndsAt: sale?.sale.endsAt.toISOString(),
+    saleName: sale?.sale.name,
     color: row.color,
     badge: row.badge ?? "",
     sku: row.sku,
@@ -172,7 +207,8 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     variants: [],
     images: [],
     altImageUrl: extras.get(row.id)?.altImageUrl,
-  }));
+    };
+  });
 }
 
 export async function getProductBySlug(slug: string): Promise<CatalogProduct | null> {
@@ -234,20 +270,25 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
       .orderBy(desc(productImages.isPrimary), asc(productImages.sortOrder), asc(productImages.createdAt)),
   ]);
 
-  const variants: CatalogVariant[] = variantRows.map((v) => ({
-    id: v.id,
-    name: v.name,
-    sku: v.sku,
-    color: v.color,
-    size: v.size ?? undefined,
-    fabric: v.fabric ?? undefined,
-    price: v.price,
-    compareAtPrice: v.compareAtPrice,
-    stock: v.stock,
-    reserved: v.reserved,
-    available: Math.max(0, v.stock - v.reserved),
-    isDefault: v.isDefault,
-  }));
+  const sales = await getActiveSales();
+  const variants: CatalogVariant[] = variantRows.map((v) => {
+    const sale = applySales(v.price, row.id, sales);
+    return {
+      id: v.id,
+      name: v.name,
+      sku: v.sku,
+      color: v.color,
+      size: v.size ?? undefined,
+      fabric: v.fabric ?? undefined,
+      price: sale?.price ?? v.price,
+      compareAtPrice: sale ? sale.originalPrice : v.compareAtPrice,
+      saleEndsAt: sale?.sale.endsAt.toISOString(),
+      stock: v.stock,
+      reserved: v.reserved,
+      available: Math.max(0, v.stock - v.reserved),
+      isDefault: v.isDefault,
+    };
+  });
   const images: CatalogImage[] = imageRows.map((img) => ({
     id: img.id,
     url: imageUrlFor(img.key, img.widths),
@@ -268,6 +309,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     type: row.type,
     price: defaultVariant?.price ?? 0,
     compareAtPrice: defaultVariant?.compareAtPrice,
+    saleEndsAt: defaultVariant?.saleEndsAt,
     color: defaultVariant?.color ?? "",
     badge: row.badge ?? "",
     sku: defaultVariant?.sku ?? "",
@@ -375,11 +417,11 @@ export async function getCollectionBySlug(
     .innerJoin(categories, eq(categories.id, products.categoryId))
     .innerJoin(productCollections, eq(productCollections.productId, products.id))
     .innerJoin(productVariants, and(eq(productVariants.productId, products.id), eq(productVariants.isDefault, true)))
-    .leftJoin(productImages, and(eq(productImages.productId, products.id), eq(productImages.isPrimary, true)))
+    .leftJoin(productImages, and(eq(productImages.productId, products.id), eq(productImages.isPrimary, true), eq(productImages.status, "active")))
     .where(and(eq(productCollections.collectionId, collection.id), eq(products.status, "published")))
     .orderBy(desc(products.publishedAt));
 
-  const extras = await getListingExtras(rows.map((row) => row.id));
+  const [extras, collectionSales] = await Promise.all([getListingExtras(rows.map((row) => row.id)), getActiveSales()]);
 
   return {
     name: collection.name,
@@ -391,7 +433,9 @@ export async function getCollectionBySlug(
       category: row.categorySlug,
       categoryId: row.categoryId,
       type: row.type,
-      price: row.price,
+      price: collectionSales ? (applySales(row.price, row.id, collectionSales)?.price ?? row.price) : row.price,
+      compareAtPrice: collectionSales ? applySales(row.price, row.id, collectionSales)?.originalPrice : undefined,
+      saleEndsAt: collectionSales ? applySales(row.price, row.id, collectionSales)?.sale.endsAt.toISOString() : undefined,
       color: row.color,
       badge: row.badge ?? "",
       sku: row.sku,

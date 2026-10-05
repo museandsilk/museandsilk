@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runInBackground } from "@/lib/background";
 import { syncProductSearch } from "@/lib/search/algolia";
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "@/db";
@@ -166,7 +167,7 @@ export async function POST(request: Request) {
         occasion: data.occasion || null,
         style: data.style || null,
         countryOfOrigin: data.countryOfOrigin || null,
-        gender: data.gender ?? "female",
+        gender: data.gender ?? "male",
         googleProductCategory: data.googleProductCategory || null,
         publishedAt: data.status === "published" ? new Date() : null,
       })
@@ -183,7 +184,7 @@ export async function POST(request: Request) {
 
   await auditLogEntry({ actorEmail: admin.email, action: "product.create", entityType: "product", entityId: row.id, detail: { name: data.name, slug } });
 
-  await syncProductSearch(row.id);
+  runInBackground(syncProductSearch(row.id), "syncProductSearch");
 
   return Response.json({ product: row }, { status: 201 });
 }

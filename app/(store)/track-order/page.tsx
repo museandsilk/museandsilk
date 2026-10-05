@@ -2,6 +2,8 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { hasCustomerPushToken, pushSupport, registerCustomerPush } from "@/lib/customer-push";
+import { useLockedAction } from "@/lib/use-locked-action";
 
 type Tracked = {
   courier: { name: string; trackingNumber: string; status: string } | null;
@@ -24,23 +26,37 @@ function TrackOrderForm() {
   const params = useSearchParams();
   const [result, setResult] = useState<Tracked | null>(null);
   const [error, setError] = useState("");
+  const [phone, setPhone] = useState("");
+  const [pushNote, setPushNote] = useState("");
+  const [pushOn, setPushOn] = useState(false);
+  const lookup = useLockedAction();
+  const pushAction = useLockedAction();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
-    const body = Object.fromEntries(new FormData(event.currentTarget));
-    const response = await fetch("/api/orders/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+    const body = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
+    await lookup.run(async () => {
+      setError("");
+      try {
+        const response = await fetch("/api/orders/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setResult(data as Tracked);
+          setPhone(body.phone ?? "");
+          setPushOn(hasCustomerPushToken());
+        } else {
+          setResult(null);
+          setError(data.error ?? "No matching order was found.");
+        }
+      } catch {
+        setResult(null);
+        setError("Could not reach the server. Check your connection and try again.");
+      }
     });
-    const data = await response.json();
-    if (response.ok) {
-      setResult(data as Tracked);
-    } else {
-      setResult(null);
-      setError(data.error ?? "No matching order was found.");
-    }
   }
 
   return (
@@ -58,7 +74,15 @@ function TrackOrderForm() {
             <span>Phone / WhatsApp</span>
             <input required name="phone" placeholder="+923001234567" />
           </label>
-          <button className="button button-dark">Find my order</button>
+          <button className="button button-dark" disabled={lookup.pending} aria-busy={lookup.pending}>
+            {lookup.pending ? (
+              <span className="busy-label">
+                <span className="spinner spinner-light" aria-hidden="true" /> Looking…
+              </span>
+            ) : (
+              "Find my order"
+            )}
+          </button>
         </form>
         {error && <p className="checkout-error">{error}</p>}
       </div>
@@ -67,7 +91,36 @@ function TrackOrderForm() {
           <header>
             <p className="eyebrow">{result.order.orderNumber}</p>
             <h2>{result.order.orderStatus.replaceAll("_", " ")}</h2>
-            <span>PKR {result.order.total.toLocaleString("en-PK")}</span>
+            <span>
+              PKR {result.order.total.toLocaleString("en-PK")} · {result.order.paymentStatus === "paid" ? "Paid" : "Payment pending"}
+            </span>
+            {pushSupport() === "available" && !pushOn && (
+              <p>
+                <button
+                  type="button"
+                  className="text-link"
+                  disabled={pushAction.pending}
+                  aria-busy={pushAction.pending}
+                  onClick={() =>
+                    pushAction.run(async () => {
+                      const outcome = await registerCustomerPush({ orderNumber: result.order.orderNumber, phone });
+                      if (outcome.ok) {
+                        setPushOn(true);
+                        setPushNote("");
+                      } else setPushNote(outcome.error);
+                    })
+                  }
+                >
+                  {pushAction.pending ? "Enabling…" : "Get updates on this device"}
+                </button>
+                {pushNote && <small> {pushNote}</small>}
+              </p>
+            )}
+            {pushOn && (
+              <p>
+                <small>Updates on: you&apos;ll be notified here when this order changes.</small>
+              </p>
+            )}
             {result.courier && (
               <p>
                 <small>

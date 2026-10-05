@@ -241,56 +241,80 @@ async function seedProducts(categoryIds: Record<string, string>) {
   for (const [position, item] of ITEMS.entries()) {
     const slug = slugify(item.name);
     const [existing] = await db.select().from(products).where(eq(products.slug, slug)).limit(1);
-    if (existing) continue;
 
-    const [product] = await db
-      .insert(products)
-      .values({
-        categoryId: categoryIds[item.category],
-        name: item.name,
-        slug,
-        typeLabel: item.typeLabel,
-        shortDescription: `${item.typeLabel} in ${item.color.toLowerCase()}.`,
-        description: item.description,
-        status: item.draft ? "draft" : "published",
-        featured: item.featured ?? false,
-        badge: item.badge ?? null,
-        primaryColour: item.color,
-        gender: "male",
-        countryOfOrigin: "Pakistan",
-        // Staggered so the storefront (newest first) lists products in the order of ITEMS above.
-        publishedAt: new Date(seededAt - position * 60_000),
-      })
-      .returning({ id: products.id });
+    // A previous run that died half-way leaves a product row without variants / photos. Treat that as
+    // "not seeded yet": finish the missing parts instead of skipping the product forever.
+    let productId = existing?.id;
+    let needsVariants = !existing;
+    let needsImages = !existing;
+    if (existing) {
+      const [variantRow] = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, existing.id)).limit(1);
+      const [imageRow] = await db.select({ id: productImages.id }).from(productImages).where(eq(productImages.productId, existing.id)).limit(1);
+      needsVariants = !variantRow;
+      needsImages = !imageRow;
+      if (!needsVariants && !needsImages) continue;
+      console.log(`Repairing partially seeded product: ${item.name}`);
+    }
 
-    await db.insert(productVariants).values(
-      item.sizes.map((size, index) => ({
-        productId: product.id,
-        name: item.sizes.length > 1 ? `${item.color} / ${size}` : item.color,
-        sku: `NA-${item.code}-${size.replace(/\s+/g, "").toUpperCase()}`,
-        color: item.color,
-        size,
-        price: item.price,
-        stockQuantity: 20,
-        isDefault: index === 0,
-        status: "active",
-      })),
-    );
+    // Upload photos first so a failed upload never leaves a published product behind.
+    const stored = needsImages
+      ? await Promise.all(item.images.map((image, index) => uploadImage(image.file, `products/seed-${slug}-${index + 1}.jpg`)))
+      : [];
+
+    if (!productId) {
+      const [product] = await db
+        .insert(products)
+        .values({
+          categoryId: categoryIds[item.category],
+          name: item.name,
+          slug,
+          typeLabel: item.typeLabel,
+          shortDescription: `${item.typeLabel} in ${item.color.toLowerCase()}.`,
+          description: item.description,
+          status: item.draft ? "draft" : "published",
+          featured: item.featured ?? false,
+          badge: item.badge ?? null,
+          primaryColour: item.color,
+          gender: "male",
+          countryOfOrigin: "Pakistan",
+          // Staggered so the storefront (newest first) lists products in the order of ITEMS above.
+          publishedAt: new Date(seededAt - position * 60_000),
+        })
+        .returning({ id: products.id });
+      productId = product.id;
+    }
+
+    if (needsVariants) {
+      await db.insert(productVariants).values(
+        item.sizes.map((size, index) => ({
+          productId: productId as string,
+          name: item.sizes.length > 1 ? `${item.color} / ${size}` : item.color,
+          sku: `NA-${item.code}-${size.replace(/\s+/g, "").toUpperCase()}`,
+          color: item.color,
+          size,
+          price: item.price,
+          stockQuantity: 20,
+          isDefault: index === 0,
+          status: "active",
+        })),
+      );
+    }
 
     for (const [index, image] of item.images.entries()) {
-      const stored = await uploadImage(image.file, `products/seed-${slug}-${index + 1}.jpg`);
+      const file = stored[index];
+      if (!file) continue;
       await db.insert(productImages).values({
-        productId: product.id,
-        r2Key: stored.key,
+        productId: productId as string,
+        r2Key: file.key,
         altText: image.alt,
-        contentType: stored.contentType,
-        byteSize: stored.byteSize,
-        width: stored.width,
-        height: stored.height,
+        contentType: file.contentType,
+        byteSize: file.byteSize,
+        width: file.width,
+        height: file.height,
         sortOrder: index,
         isPrimary: index === 0,
-        blurDataUrl: stored.blurDataUrl,
-        variantWidths: stored.variantWidths,
+        blurDataUrl: file.blurDataUrl,
+        variantWidths: file.variantWidths,
       });
     }
     console.log(`Seeded product: ${item.name}`);

@@ -2,6 +2,7 @@ import { getPublicSettings } from "@/lib/commerce";
 import { CurrencyProvider, CurrencySwitcher } from "./_components/currency";
 import { WhatsAppIcon } from "./_components/icons";
 import { StoreHeader } from "./_components/store-header";
+import { ServiceWorkerRegistrar } from "./_components/sw-register";
 
 /** Shell shared by every storefront page: display-currency context, the floating WhatsApp
  * shortcut (bottom-left) and the currency switcher (bottom-right), as on the benchmark site. */
@@ -22,6 +23,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
         <WhatsAppIcon size={26} />
       </a>
       <CurrencySwitcher />
+      <ServiceWorkerRegistrar />
     </CurrencyProvider>
   );
 }

@@ -34,7 +34,7 @@ export async function generateSeoFields(input: SeoFieldsInput): Promise<SeoField
     .filter(Boolean)
     .join(", ");
 
-  const prompt = `Write SEO metadata for a luxury accessories e-commerce product page.
+  const prompt = `Write SEO metadata for a men's wear e-commerce product page.
 Product name: "${input.name}"${details ? `\nKnown details: ${details}` : ""}
 Brand: Nure Asmir, a Pakistani men's wear label (shalwar kameez, shirts, pants, leather accessories) with the tagline "Tradition in a modern form", nationwide delivery in Pakistan.
 Return strict JSON only, no other text, no markdown code fences: {"seoTitle": "...", "seoDescription": "..."}

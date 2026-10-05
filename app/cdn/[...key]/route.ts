@@ -22,10 +22,17 @@ export async function GET(_request: Request, context: { params: Promise<{ key: s
     return new Response("Not found", { status: 404 });
   }
 
-  const origin = await fetch(`${publicBucketOrigin()}/${objectKey}`, {
-    // `cf` is a Cloudflare Workers extension to RequestInit.
-    cf: { cacheEverything: true, cacheTtl: ONE_YEAR, cacheTtlByStatus: { "200-299": ONE_YEAR, "404": 60, "500-599": 0 } },
-  } as RequestInit);
+  let origin: Response;
+  try {
+    origin = await fetch(`${publicBucketOrigin()}/${objectKey}`, {
+      // `cf` is a Cloudflare Workers extension to RequestInit.
+      cf: { cacheEverything: true, cacheTtl: ONE_YEAR, cacheTtlByStatus: { "200-299": ONE_YEAR, "404": 60, "500-599": 0 } },
+      signal: AbortSignal.timeout(8000),
+    } as RequestInit);
+  } catch (error) {
+    console.error("CDN origin fetch failed", error);
+    return new Response("Image temporarily unavailable", { status: 502, headers: { "Cache-Control": "no-store" } });
+  }
 
   if (!origin.ok || !origin.body) return new Response("Not found", { status: origin.status === 404 ? 404 : 502 });
 

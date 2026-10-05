@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { StoreFooter } from "../_components/store-footer";
 import { ShopGrid } from "./shop-grid";
-import { getActiveCategories, getCatalogProducts } from "@/lib/commerce";
+import { getActiveCategories, getCatalogProducts, toCard } from "@/lib/commerce";
 
-export const revalidate = 300;
+// Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
+// always priced on the server regardless of what a cached page displays.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Shop all — new arrivals",
@@ -18,7 +20,7 @@ export default async function ShopPage() {
       <header className="listing-head">
         <h1 className="page-title">New arrivals</h1>
       </header>
-      <ShopGrid products={products} categories={categories.map((category) => ({ slug: category.slug, name: category.name }))} />
+      <ShopGrid products={products.map(toCard)} categories={categories.map((category) => ({ slug: category.slug, name: category.name }))} />
       <StoreFooter />
     </main>
   );

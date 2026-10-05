@@ -52,8 +52,18 @@ export function publicBucketOrigin(): string {
   return `${endpoint()}/${bucketName("public")}`;
 }
 
+const EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
+  "image/gif": "gif",
+  "application/pdf": "pdf",
+};
+
 export function newObjectKey(prefix: string, contentType: string): string {
-  const ext = contentType.split("/")[1] === "jpeg" ? "jpg" : contentType.split("/")[1];
+  // Map known types explicitly – never derive the extension from user-controlled header text.
+  const ext = EXTENSIONS[contentType.split(";")[0].trim().toLowerCase()] ?? "bin";
   return `${prefix}/${crypto.randomUUID()}.${ext}`;
 }
 

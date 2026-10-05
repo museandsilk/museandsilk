@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Jost } from "next/font/google";
 import "./globals.css";
 import "./storefront.css";
@@ -20,6 +20,14 @@ const sans = Jost({
   weight: ["300", "400", "500", "600"],
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Draw edge to edge on notched phones; floating widgets add the safe-area insets themselves.
+  viewportFit: "cover",
+  themeColor: "#ffffff",
+};
 
 export function generateMetadata(): Metadata {
   const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
@@ -87,7 +95,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   };
 
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${display.variable} ${sans.variable}`}>
       <head>
         <script type="application/ld+json" nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </head>

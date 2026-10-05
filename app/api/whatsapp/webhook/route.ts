@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { announceOrderEvent } from "@/lib/order-events";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, orderStatusHistory } from "@/db/schema";
@@ -113,6 +114,7 @@ async function handleButtonReply(repliedToMessageId: string, buttonPayload: stri
   if (toStatus === "cancelled") {
     await releaseOrderReservation(order.id, "Order cancelled by customer via WhatsApp", "customer");
   }
+  announceOrderEvent(order.id, toStatus === "confirmed" ? "confirmed" : "cancelled", "customer");
 
   await auditLogEntry({
     actorEmail: "customer",
