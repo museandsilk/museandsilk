@@ -76,6 +76,11 @@ jobs:
             echo "ADMIN_CONFIG=wrangler.admin.deploy.jsonc" >> "$GITHUB_ENV"
           fi
 
+      # Old address records on these names make Cloudflare refuse the custom domains (error 523 for visitors). Remove just those.
+      - name: Free the website's domain names
+        continue-on-error: true
+        run: node scripts/free-domains.mjs nureasmir.com www.nureasmir.com
+
       - name: Build storefront
         run: npm run cf:build:store
 
