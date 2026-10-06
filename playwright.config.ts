@@ -75,12 +75,12 @@ const serverEnv = {
 };
 // Expose to the test processes too.
 // Test-process access to lib/* modules that import the db client (always the e2e branch).
-process.env.DATABASE_URL = testEnv.DATABASE_URL;
+if (testEnv.DATABASE_URL) process.env.DATABASE_URL = testEnv.DATABASE_URL; // (CI's unit run keeps its own value; it never queries)
 process.env.E2E_BASE_URL = `http://localhost:${APP_PORT}`;
 process.env.E2E_PROD_URL = `http://localhost:${PROD_PORT}`;
 process.env.E2E_MOCK_FCM = `http://127.0.0.1:${MOCK_PORT}`;
 process.env.E2E_MOCK_TCS = `http://127.0.0.1:${TCS_PORT}`;
-process.env.E2E_DATABASE_URL = testEnv.DATABASE_URL;
+if (testEnv.DATABASE_URL) process.env.E2E_DATABASE_URL = testEnv.DATABASE_URL;
 process.env.E2E_S3_ENDPOINT = testEnv.AWS_ENDPOINT_URL_S3;
 process.env.E2E_CRON_SECRET = serverEnv.CRON_SECRET;
 process.env.E2E_ADMIN_EMAIL = testEnv.ADMIN_EMAIL || "admin@nureasmir.com";
