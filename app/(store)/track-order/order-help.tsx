@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { CUSTOMER_CANCEL_REASONS, PAYOUT_METHODS, REFUND_REASONS, refundReasonLabel } from "@/lib/order-rules";
 import { useLockedAction } from "@/lib/use-locked-action";
+import { ThemedSelect, type SelectOption } from "../_components/themed-select";
 
 export type TrackActions = { canCancel: boolean; cancelBlockedReason: string | null; canRequestRefund: boolean; refundBlockedReason: string | null };
 export type TrackRefund = { status: string; amount: number; reason: string; needsPayoutDetails: boolean; adminNote: string | null; refundedAt: string | null; reference: string | null };
@@ -15,6 +16,12 @@ const REFUND_TEXT: Record<string, string> = {
 };
 
 /** "Cancel my order" and "Ask for a refund" for shoppers (no account – the order number + phone already proved who they are). */
+/** A themed dropdown that keeps its own choice and still submits with the form under `name`. */
+function FieldSelect({ name, label, options, initial = "", placeholder }: { name: string; label: string; options: SelectOption[]; initial?: string; placeholder?: string }) {
+  const [value, setValue] = useState(initial);
+  return <ThemedSelect name={name} required label={label} value={value} onChange={setValue} options={options} placeholder={placeholder} />;
+}
+
 export function OrderHelp({ orderNumber, orderStatus, phone, actions, refund, total, onChanged }: { orderNumber: string; orderStatus: string; phone: string; actions: TrackActions; refund: TrackRefund | null; total: number; onChanged: () => void }) {
   const [panel, setPanel] = useState<"cancel" | "refund" | "payout" | null>(null);
   const [error, setError] = useState("");
@@ -71,16 +78,7 @@ export function OrderHelp({ orderNumber, orderStatus, phone, actions, refund, to
     <>
       <label>
         <span>Where should we send your money?</span>
-        <select name="payoutMethod" required defaultValue="">
-          <option value="" disabled>
-            Choose one
-          </option>
-          {PAYOUT_METHODS.map((method) => (
-            <option key={method.value} value={method.value}>
-              {method.label}
-            </option>
-          ))}
-        </select>
+        <FieldSelect name="payoutMethod" label="Where should we send your money?" placeholder="Choose one" options={PAYOUT_METHODS.map((method) => ({ value: method.value, label: method.label }))} />
       </label>
       <label>
         <span>Account or mobile wallet number</span>
@@ -141,13 +139,7 @@ export function OrderHelp({ orderNumber, orderStatus, phone, actions, refund, to
           <h3>Cancel order {orderNumber}</h3>
           <label>
             <span>Why are you cancelling?</span>
-            <select name="reason" required defaultValue={CUSTOMER_CANCEL_REASONS[0].value}>
-              {CUSTOMER_CANCEL_REASONS.map((reason) => (
-                <option key={reason.value} value={reason.value}>
-                  {reason.label}
-                </option>
-              ))}
-            </select>
+            <FieldSelect name="reason" label="Why are you cancelling?" initial={CUSTOMER_CANCEL_REASONS[0].value} options={CUSTOMER_CANCEL_REASONS.map((reason) => ({ value: reason.value, label: reason.label }))} />
           </label>
           <label>
             <span>Anything else we should know? (optional)</span>
@@ -171,16 +163,7 @@ export function OrderHelp({ orderNumber, orderStatus, phone, actions, refund, to
               <p className="order-help-muted">Refund amount: PKR {total.toLocaleString("en-PK")}</p>
               <label>
                 <span>What went wrong?</span>
-                <select name="reason" required defaultValue="">
-                  <option value="" disabled>
-                    Choose a reason
-                  </option>
-                  {REFUND_REASONS.filter((reason) => reason.value !== "order_cancelled").map((reason) => (
-                    <option key={reason.value} value={reason.value}>
-                      {reason.label}
-                    </option>
-                  ))}
-                </select>
+                <FieldSelect name="reason" label="What went wrong?" placeholder="Choose a reason" options={REFUND_REASONS.filter((reason) => reason.value !== "order_cancelled").map((reason) => ({ value: reason.value, label: reason.label }))} />
               </label>
               <label>
                 <span>Tell us more (optional)</span>

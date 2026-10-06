@@ -9,6 +9,11 @@ export const revalidate = 300;
 const FREE_DELIVERY_PLACEHOLDER = "__FREE_DELIVERY_THRESHOLD__";
 const COD_HOURS_PLACEHOLDER = "__COD_RESERVATION_HOURS__";
 const BANK_HOURS_PLACEHOLDER = "__BANK_RESERVATION_HOURS__";
+// Wording that depends on whether the owner has switched bank transfer on (Admin → Settings → Delivery, payment and refunds).
+const BANK_ORDERS_PLACEHOLDER = "__BANK_ORDERS_SENTENCE__";
+const PAYMENT_METHODS_PLACEHOLDER = "__PAYMENT_METHODS__";
+const PAYMENT_TERMS_PLACEHOLDER = "__PAYMENT_TERMS__";
+const ACCEPTED_PLACEHOLDER = "__ORDER_ACCEPTED__";
 
 type Policy = {
   title: string;
@@ -23,7 +28,7 @@ const policies: Record<string, Policy> = {
     sections: [
       [
         "Order confirmation",
-        `Cash-on-delivery orders reserve your stock for ${COD_HOURS_PLACEHOLDER} hours while we confirm the order. Bank-deposit orders reserve stock for ${BANK_HOURS_PLACEHOLDER} hours while your payment is verified. If confirmation or payment is not completed within that window, the reservation may expire and the stock is released.`,
+        `Cash-on-delivery orders reserve your stock for ${COD_HOURS_PLACEHOLDER} hours while we confirm the order. ${BANK_ORDERS_PLACEHOLDER}If confirmation or payment is not completed within that window, the reservation may expire and the stock is released.`,
       ],
       [
         "Delivery charges",
@@ -35,7 +40,7 @@ const policies: Record<string, Policy> = {
       ],
       [
         "Payment methods",
-        "We currently accept Cash on Delivery and Bank Deposit only. Online card payment is not yet available. Choose the method that suits you at checkout — both are confirmed using the reservation windows described above.",
+        PAYMENT_METHODS_PLACEHOLDER,
       ],
       [
         "Receiving your order",
@@ -109,11 +114,11 @@ const policies: Record<string, Policy> = {
       ],
       [
         "Placing an order",
-        "An order is accepted once it has been confirmed for cash-on-delivery orders, or once payment has been verified for bank-deposit orders. We may decline or cancel an order affected by a pricing error, unavailable stock, suspected fraud, or where the customer cannot be reached.",
+        `An order is accepted once it has been confirmed${ACCEPTED_PLACEHOLDER}. We may decline or cancel an order affected by a pricing error, unavailable stock, suspected fraud, or where the customer cannot be reached.`,
       ],
       [
         "Payments and reservations",
-        `We accept Cash on Delivery and Bank Deposit only; online card payment is not currently supported. Cash-on-delivery orders reserve stock for ${COD_HOURS_PLACEHOLDER} hours pending confirmation; bank-deposit orders reserve stock for ${BANK_HOURS_PLACEHOLDER} hours pending payment verification. Reservations not confirmed or paid within these windows may expire automatically and the stock is released for other customers.`,
+        PAYMENT_TERMS_PLACEHOLDER,
       ],
       [
         "Returns and cancellations",
@@ -148,6 +153,17 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
 
   const settings = await getPublicSettings();
   const threshold = settings.freeDeliveryThreshold.toLocaleString("en-PK");
+  const bank = settings.bankDepositEnabled;
+  const wording = {
+    [BANK_ORDERS_PLACEHOLDER]: bank ? `Bank-deposit orders reserve stock for ${settings.bankReservationHours} hours while your payment is verified. ` : "",
+    [PAYMENT_METHODS_PLACEHOLDER]: bank
+      ? "We currently accept Cash on Delivery and Bank Deposit only. Online card payment is not yet available. Choose the method that suits you at checkout — both are confirmed using the reservation windows described above."
+      : "We currently accept Cash on Delivery all over Pakistan. You pay the rider when your parcel arrives. Online card payment and bank transfer are not available yet.",
+    [PAYMENT_TERMS_PLACEHOLDER]: bank
+      ? `We accept Cash on Delivery and Bank Deposit only; online card payment is not currently supported. Cash-on-delivery orders reserve stock for ${settings.codReservationHours} hours pending confirmation; bank-deposit orders reserve stock for ${settings.bankReservationHours} hours pending payment verification. Reservations not confirmed or paid within these windows may expire automatically and the stock is released for other customers.`
+      : `We accept Cash on Delivery only; online card payment and bank transfer are not currently supported. Cash-on-delivery orders reserve stock for ${settings.codReservationHours} hours pending confirmation. Reservations not confirmed within this window may expire automatically and the stock is released for other customers.`,
+    [ACCEPTED_PLACEHOLDER]: bank ? " for cash-on-delivery orders, or once payment has been verified for bank-deposit orders" : " with the customer",
+  };
   const sections = policy.sections.map(
     ([title, body]) =>
       [
@@ -155,7 +171,8 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
         body
           .replaceAll(FREE_DELIVERY_PLACEHOLDER, threshold)
           .replaceAll(COD_HOURS_PLACEHOLDER, String(settings.codReservationHours))
-          .replaceAll(BANK_HOURS_PLACEHOLDER, String(settings.bankReservationHours)),
+          .replaceAll(BANK_HOURS_PLACEHOLDER, String(settings.bankReservationHours))
+          .replace(/__[A-Z_]+__/g, (token) => (token in wording ? wording[token as keyof typeof wording] : token)),
       ] as [string, string],
   );
 

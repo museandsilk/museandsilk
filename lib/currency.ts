@@ -67,3 +67,20 @@ export function formatPrice(amountPkr: number, currency: CurrencyCode, rates: Ra
     maximumFractionDigits: useCurrency.digits,
   }).format(value);
 }
+
+/* ---- flags + "start on the shopper's own currency" ---- */
+
+const EUROZONE = new Set(["AT", "BE", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PT", "SK", "SI", "ES"]);
+
+/** The currency to start on for a visitor from `country` (ISO code). Pakistan → PKR; countries we have a currency for get theirs; anywhere else → USD. */
+export function currencyForCountry(country: string | null | undefined): CurrencyCode {
+  const code = (country ?? "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code) || code === "PK") return BASE_CURRENCY;
+  if (EUROZONE.has(code)) return "EUR";
+  const direct: Record<string, CurrencyCode> = { US: "USD", GB: "GBP", AE: "AED", SA: "SAR", CA: "CAD", AU: "AUD" };
+  return direct[code] ?? "USD";
+}
+
+/** Two-letter flag code for each currency, for the flag pictures (Windows cannot draw flag emoji, so pictures are used). */
+export const FLAG_OF: Record<CurrencyCode, string> = { PKR: "pk", USD: "us", GBP: "gb", EUR: "eu", AED: "ae", SAR: "sa", CAD: "ca", AUD: "au" };
+export const flagSrc = (code: CurrencyCode, width: 20 | 40 = 20) => `https://flagcdn.com/w${width}/${FLAG_OF[code]}.png`;

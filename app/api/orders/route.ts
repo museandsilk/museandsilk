@@ -1,3 +1,5 @@
+import { insidePakistan } from "@/lib/geo";
+import { computeDeliveryCharge, isDeliveryMode, isPaymentAllowed } from "@/lib/shop-rules";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -147,6 +149,10 @@ export async function POST(request: Request) {
   const zoneId = String(body.zoneId ?? "").trim();
   const paymentMethod = body.paymentMethod === "bank_deposit" ? "bank_deposit" : body.paymentMethod === "cod" ? "cod" : null;
   const notes = String(body.notes ?? "").trim() || null;
+  // Optional pin from GPS / the map; a pin outside Pakistan (or junk) is simply ignored.
+  const lat = Number(body.latitude);
+  const lon = Number(body.longitude);
+  const pin = body.latitude != null && body.longitude != null && insidePakistan(lat, lon) ? { lat: Math.round(lat * 1e6) / 1e6, lon: Math.round(lon * 1e6) / 1e6 } : null;
   const couponCode = String(body.couponCode ?? "").trim().toUpperCase() || null;
   const items: CheckoutItem[] = Array.isArray(body.items) ? (body.items as CheckoutItem[]) : [];
 
@@ -247,8 +253,17 @@ export async function POST(request: Request) {
     .slice(0, 10);
 
   const settings = await loadSettings();
-  const freeThreshold = settings?.freeDeliveryThreshold ?? 4000;
-  const deliveryCharge = subtotal >= freeThreshold ? 0 : zone.deliveryCharge;
+  // Bank transfer is only accepted while the owner has switched it on – a stale page or a hand-made request cannot sneak it in.
+  if (!isPaymentAllowed(paymentMethod, settings?.bankDepositEnabled ?? false)) {
+    return Response.json({ error: "Bank transfer is not available right now. Please choose cash on delivery." }, { status: 400 });
+  }
+  const deliveryCharge = computeDeliveryCharge({
+    mode: isDeliveryMode(settings?.deliveryMode) ? settings.deliveryMode : "zones",
+    subtotal,
+    freeAbove: settings?.freeDeliveryThreshold ?? 10000,
+    zoneCharge: zone.deliveryCharge,
+    flatCharge: settings?.flatDeliveryCharge ?? 250,
+  });
 
   let discount = 0;
   let appliedCouponId: string | null = null;
@@ -374,6 +389,8 @@ export async function POST(request: Request) {
       city,
       province,
       address,
+      deliveryLatitude: pin?.lat ?? null,
+      deliveryLongitude: pin?.lon ?? null,
       subtotal,
       deliveryCharge,
       discount,

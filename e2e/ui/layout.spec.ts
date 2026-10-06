@@ -61,7 +61,7 @@ test("product page: size chips, Add to bag and Buy now are thumb-sized and reach
 test("floating WhatsApp and currency widgets never overlap each other or leave the screen", async ({ page }) => {
   await page.goto("/");
   const wa = (await page.locator(".float-whatsapp").boundingBox())!;
-  const cur = (await page.locator(".currency-switcher > button").boundingBox())!;
+  const cur = (await page.locator(".currency-switcher .currency-main").boundingBox())!;
   const vp = page.viewportSize()!;
   for (const box of [wa, cur]) {
     expect(box.x).toBeGreaterThanOrEqual(0);

@@ -38,7 +38,8 @@ test.describe("track order: cancel", () => {
     await lookup(page, number);
     await noHorizontalOverflow(page, "track order");
     await page.getByRole("button", { name: "Cancel my order" }).click();
-    await page.getByLabel("Why are you cancelling?").selectOption("ordered_by_mistake");
+    await page.getByRole("combobox", { name: "Why are you cancelling?" }).click();
+    await page.getByRole("option", { name: /by mistake/i }).click();
     const confirm = page.getByRole("button", { name: "Yes, cancel my order" });
     let posts = 0;
     await page.route("**/api/orders/cancel", async (route) => {
@@ -96,9 +97,11 @@ test.describe("track order: refund", () => {
     await send.click(); // empty form → browser validation stops it
     await expect(page.getByText("Your refund request has been sent")).toHaveCount(0);
 
-    await page.getByLabel("What went wrong?").selectOption("wrong_size");
+    await page.getByRole("combobox", { name: "What went wrong?" }).click();
+    await page.getByRole("option", { name: "The size does not fit" }).click();
     await page.getByLabel("Tell us more (optional)").fill("Medium is too small for me.");
-    await page.getByLabel("Where should we send your money?").selectOption("easypaisa");
+    await page.getByRole("combobox", { name: "Where should we send your money?" }).click();
+    await page.getByRole("option", { name: /easypaisa/i }).click();
     await page.getByLabel("Account or mobile wallet number").fill("03451234567");
     await page.getByLabel("Name on that account").fill("Test Shopper");
     await send.dblclick();

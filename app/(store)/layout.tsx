@@ -1,5 +1,6 @@
 import { getPublicSettings } from "@/lib/commerce";
 import { CurrencyProvider, CurrencySwitcher } from "./_components/currency";
+import { WhatsAppFloat } from "./_components/floating-widgets";
 import { WhatsAppIcon } from "./_components/icons";
 import { StoreHeader } from "./_components/store-header";
 import { ServiceWorkerRegistrar } from "./_components/sw-register";
@@ -14,15 +15,9 @@ export default async function StoreLayout({ children }: { children: React.ReactN
     <CurrencyProvider>
       <StoreHeader />
       {children}
-      <a
-        className="float-whatsapp"
-        href={chat || "/contact"}
-        target={chat ? "_blank" : undefined}
-        rel="noreferrer"
-        aria-label="Chat with us on WhatsApp"
-      >
+      <WhatsAppFloat href={chat || "/contact"} external={Boolean(chat)}>
         <WhatsAppIcon size={26} />
-      </a>
+      </WhatsAppFloat>
       <CurrencySwitcher />
       <ServiceWorkerRegistrar />
     </CurrencyProvider>

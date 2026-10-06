@@ -162,6 +162,20 @@
       "when": 1791299685918,
       "tag": "0022_naive_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791311968219,
+      "tag": "0023_rainy_rocket_raccoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791312536418,
+      "tag": "0024_short_ben_grimm",
+      "breakpoints": true
     }
   ]
 }

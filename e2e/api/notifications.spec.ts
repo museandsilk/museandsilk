@@ -15,6 +15,7 @@ import {
   sql,
   variantBySku,
   warmUp,
+  setBankDeposit,
 } from "../support/helpers";
 
 const SKU = "NA-TE-SAS-M";
@@ -41,6 +42,7 @@ async function setStatus(request: APIRequestContext, orderNumber: string, toStat
 }
 
 test.beforeAll(async ({ request }) => {
+  await setBankDeposit(true);
   await warmUp(request, ["/api/push/customer", "/api/admin/push", "/api/cron/sales"]);
 });
 test.beforeEach(async () => {
@@ -50,6 +52,7 @@ test.beforeEach(async () => {
   await mockFcm.reset();
 });
 test.afterAll(async () => {
+  await setBankDeposit(false);
   await cleanOrders();
   await clearPushDevices();
   await clearSales();

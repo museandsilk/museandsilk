@@ -1,9 +1,13 @@
 "use client";
 
+import { HIDE_KEYS, hideFor, useWidgetHidden } from "./floating-widgets";
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   BASE_CURRENCY,
   CURRENCIES,
+  currencyForCountry,
+  flagSrc,
   formatPrice,
   isCurrencyCode,
   type CurrencyCode,
@@ -13,6 +17,7 @@ import {
 
 const CURRENCY_KEY = "na-currency";
 const RATES_KEY = "na-rates";
+const AUTO_KEY = "na-currency-auto";
 const RATES_TTL_MS = 6 * 60 * 60 * 1000;
 
 type CurrencyContextValue = {
@@ -57,6 +62,22 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     // localStorage is only readable after mount (SSR renders PKR), so this one-time sync is intentional.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isCurrencyCode(saved)) setCurrencyState(saved);
+  }, []);
+
+  // First visit and no choice yet: start on the currency of the shopper's own country (once; their own choice always wins afterwards).
+  useEffect(() => {
+    if (readStored<string>(CURRENCY_KEY) || readStored<boolean>(AUTO_KEY)) return;
+    writeStored(AUTO_KEY, true);
+    fetch("/api/geo/country")
+      .then((response) => (response.ok ? (response.json() as Promise<{ country: string | null }>) : null))
+      .then((data) => {
+        if (!data?.country || readStored<string>(CURRENCY_KEY)) return;
+        const guess = currencyForCountry(data.country);
+        if (guess !== BASE_CURRENCY) setCurrencyState(guess);
+      })
+      .catch(() => {
+        // no country: stay on PKR
+      });
   }, []);
 
   useEffect(() => {
@@ -111,6 +132,7 @@ export function CurrencySwitcher() {
   const { currency, setCurrency, rates } = useCurrency();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [hidden] = useWidgetHidden(HIDE_KEYS.currency);
 
   useEffect(() => {
     if (!open) return;
@@ -129,11 +151,19 @@ export function CurrencySwitcher() {
     };
   }, [open]);
 
+  if (hidden) return null;
   return (
     <div className="currency-switcher" ref={ref}>
-      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {currency} <span aria-hidden="true">▾</span>
-      </button>
+      <div className="currency-bar">
+        <button type="button" className="currency-main" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={flagSrc(currency)} width={20} height={15} alt="" />
+          {currency} <span aria-hidden="true">▾</span>
+        </button>
+        <button type="button" className="currency-close" aria-label="Hide the currency selector" title="Hide" onClick={() => { setOpen(false); hideFor(HIDE_KEYS.currency); }}>
+          ✕
+        </button>
+      </div>
       {open && (
         <ul role="listbox" aria-label="Currency">
           {CURRENCIES.map((item) => (
@@ -148,6 +178,8 @@ export function CurrencySwitcher() {
                   setOpen(false);
                 }}
               >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={flagSrc(item.code)} width={20} height={15} alt="" loading="lazy" />
                 <b>{item.code}</b>
                 <span>{item.name}</span>
               </button>

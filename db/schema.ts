@@ -246,6 +246,9 @@ export const orders = pgTable("orders", {
   city: text("city").notNull(),
   province: text("province").notNull(),
   address: text("address").notNull(),
+  // Where the shopper dropped the pin / their GPS said (optional; shown to the owner as a map link).
+  deliveryLatitude: doublePrecision("delivery_latitude"),
+  deliveryLongitude: doublePrecision("delivery_longitude"),
   deliveryNotes: text("delivery_notes"),
   subtotal: integer("subtotal").notNull(),
   deliveryCharge: integer("delivery_charge").notNull().default(0),
@@ -437,6 +440,16 @@ export const siteSettings = pgTable("site_settings", {
   // Advanced: hide a product from the shop once everything in it has been sold out for this many days. 0 = keep forever.
   soldoutHideDays: integer("soldout_hide_days").notNull().default(90),
   // Advanced: the codes Google Search Console and Bing Webmaster Tools give to prove the shop owns the website.
+  // The strip at the very top of every page. "auto" builds it from the shop's real rules (cash on delivery, free delivery above X);
+  // "custom" shows only the owner's own lines; "off" hides it. The owner's extra lines (one per line) are added in "auto" mode.
+  announcementMode: text("announcement_mode").notNull().default("auto"),
+  announcementLines: text("announcement_lines").notNull().default(""),
+  // Customers can pay by bank transfer only when this is switched on (cash on delivery is always offered).
+  bankDepositEnabled: boolean("bank_deposit_enabled").notNull().default(false),
+  // How the delivery charge is worked out: "zones" (a price per area), "flat" (one price everywhere) or "tcs" (TCS tariff by city,
+  // falling back to the area prices until TCS rates are available). Free above freeDeliveryThreshold in every mode.
+  deliveryMode: text("delivery_mode").notNull().default("zones"),
+  flatDeliveryCharge: integer("flat_delivery_charge").notNull().default(250),
   googleSiteVerification: text("google_site_verification").notNull().default(""),
   bingSiteVerification: text("bing_site_verification").notNull().default(""),
   bankName: text("bank_name").notNull().default(""),
@@ -569,3 +582,17 @@ export const serviceStats = pgTable("service_stats", {
   value: jsonb("value").$type<Record<string, unknown>>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** The questions and answers on the FAQ page, edited by the owner. {{codHours}}, {{freeAbove}} and {{refundDays}} are filled in from the live settings. */
+export const faqs = pgTable(
+  "faqs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    question: text("question").notNull(),
+    answer: text("answer").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => [index("faqs_order_idx").on(table.sortOrder)],
+);

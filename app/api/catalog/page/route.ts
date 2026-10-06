@@ -1,3 +1,4 @@
+import { parseFilters } from "@/lib/catalog-filters";
 import { CATALOG_PAGE_SIZE, countCatalogProducts, getCatalogProducts, toCard, type CatalogQuery } from "@/lib/commerce";
 
 const MAX_PAGE = 200;
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   const sortParam = params.get("sort") ?? "newest";
   const page = Math.min(MAX_PAGE, Math.max(1, Number(params.get("page")) || 1));
 
-  const scope: CatalogQuery = { categorySlug: /^[a-z0-9-]{1,80}$/.test(cat) && cat !== "all" ? cat : undefined };
+  const scope: CatalogQuery = { categorySlug: /^[a-z0-9-]{1,80}$/.test(cat) && cat !== "all" ? cat : undefined, filters: parseFilters(params) };
   const sort = (SORTS.has(sortParam) ? sortParam : "newest") as CatalogQuery["sort"];
 
   const [items, total] = await Promise.all([

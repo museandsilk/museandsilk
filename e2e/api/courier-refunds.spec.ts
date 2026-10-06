@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { BASE, adminCookie, cleanOrders, mockFcm, mockTcs, orderIdOf, placeOrder, setStock, sql, variantBySku, warmUp } from "../support/helpers";
+import { BASE, adminCookie, cleanOrders, mockFcm, mockTcs, orderIdOf, placeOrder, setStock, sql, variantBySku, warmUp, setBankDeposit } from "../support/helpers";
 
 const SKU = "NA-TE-SAS-M";
 const PHONE = "+923001234567";
@@ -29,6 +29,7 @@ async function row(id: string) {
 }
 
 test.beforeAll(async ({ request }) => {
+  await setBankDeposit(true);
   await warmUp(request, ["/api/orders/cancel", "/api/orders/refund", "/api/orders/track", "/api/admin/orders/bulk", "/api/admin/search"]);
 });
 test.beforeEach(async ({ request }) => {
@@ -38,6 +39,7 @@ test.beforeEach(async ({ request }) => {
   await adminCookie(request);
 });
 test.afterAll(async () => {
+  await setBankDeposit(false);
   await cleanOrders();
 });
 
