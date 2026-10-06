@@ -1,4 +1,5 @@
 import { cleanQuery, MIN_QUERY, parseSuggestions } from "@/lib/geo";
+import { trackedFetch } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
   url.searchParams.set("apiKey", key);
 
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const response = await trackedFetch("geoapify", url, { signal: AbortSignal.timeout(4000) });
     if (!response.ok) return Response.json({ suggestions: [], unavailable: true }, { headers: { "Cache-Control": "no-store" } });
     const suggestions = parseSuggestions(await response.json());
     return Response.json({ suggestions }, { headers: { "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800" } });

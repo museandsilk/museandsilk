@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import { expect, test, type Page } from "@playwright/test";
 import { BASE, cleanOrders, clearSales, mockTcs, orderIdOf, placeOrder, setStock, sql, variantBySku, warmUp } from "../support/helpers";
 import { makePng, watchErrors } from "../support/ui";
+import { hashPassword } from "../../lib/auth/password";
 
 /** Small screens: the admin is laptop-only, so every phone/tablet project must see the friendly notice instead. */
 test.describe("laptop-only gate", () => {
@@ -465,6 +466,57 @@ test.describe("admin (desktop Chromium)", () => {
       const [main] = ((await mains.json()) as { locations: Array<{ id: string; isMain: boolean }> }).locations.filter((l) => l.isMain);
       const refused = await page.request.delete(`${BASE}/api/admin/locations/${main.id}`);
       expect(refused.status()).toBe(409);
+    });
+
+    test("advanced settings: tucked away, and the sold-out time can be changed and set to 'forever'", async ({ page }) => {
+      await login(page);
+      await page.goto("/admin/settings");
+      const advanced = page.locator("details#advanced");
+      await expect(advanced).not.toHaveAttribute("open", "");
+      await advanced.locator("summary").click();
+      await expect(advanced.getByLabel(/Hide sold-out products after/)).toHaveValue("90");
+      await advanced.getByLabel(/Hide sold-out products after/).fill("0");
+      await expect(advanced.getByText("Sold-out products stay on your website forever.")).toBeVisible();
+      await page.getByRole("button", { name: "Save settings" }).click();
+      await expect(toast(page).first()).toContainText(/saved/i, { timeout: 15_000 });
+      expect(((await sql`select soldout_hide_days as d from site_settings where id = 'store'`) as Array<{ d: number }>)[0].d).toBe(0);
+      await advanced.getByLabel(/Hide sold-out products after/).fill("90");
+      await page.getByRole("button", { name: "Save settings" }).click();
+      await expect(toast(page).last()).toContainText(/saved/i, { timeout: 15_000 });
+    });
+
+    test("developer login: sees only the technical page, owners cannot open it", async ({ page, browser }) => {
+      const email = "e2e-dev@nureasmir.com";
+      const password = "E2e-dev-Passw0rd-9";
+      await sql`delete from admin_owners where email = ${email}`;
+      await sql`insert into admin_owners (email, display_name, password_hash, role) values (${email}, 'Developer', ${await hashPassword(password)}, 'developer')`;
+      // the owner gets a 404 for the developer page
+      await login(page);
+      await page.goto("/admin/developer");
+      await expect(page.getByText(/could not be found|not found|404/i).first()).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("heading", { name: "Services and keys" })).toHaveCount(0);
+      await expect(page.getByText("Neon Storage")).toHaveCount(0);
+      expect((await page.request.post(`${BASE}/api/developer/storage`)).status(), "the developer API refuses owners too").toBe(403);
+      // the developer lands on it and sees only that link
+      const other = await browser.newContext();
+      const devPage = await other.newPage();
+      await devPage.goto(`${BASE}/admin/login`);
+      await devPage.waitForLoadState("networkidle");
+      await devPage.getByLabel("Email").fill(email);
+      await devPage.getByLabel("Password").fill(password);
+      await devPage.getByRole("button", { name: /sign in/i }).click();
+      await expect(devPage).toHaveURL(/\/admin\/developer$/, { timeout: 20_000 });
+      await expect(devPage.getByRole("heading", { name: "Storage" })).toBeVisible();
+      await expect(devPage.getByRole("heading", { name: "Services and keys" })).toBeVisible();
+      await expect(devPage.getByRole("heading", { name: "Errors", exact: true })).toBeVisible();
+      await expect(devPage.getByText("Neon Storage").first()).toBeVisible();
+      await expect(devPage.getByText("Cloudflare R2").first()).toBeVisible();
+      await expect(devPage.getByRole("link", { name: "Orders" })).toHaveCount(0);
+      // secrets are never printed: no value of a configured key appears on the page
+      const secret = process.env.GEOAPIFY_API_KEY;
+      if (secret) expect(await devPage.content()).not.toContain(secret);
+      await other.close();
+      await sql`delete from admin_owners where email = ${email}`;
     });
 
     test("stock: category buttons show only that category, one list row per product", async ({ page }) => {

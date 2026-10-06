@@ -1,3 +1,4 @@
+import { trackedFetch } from "@/lib/usage";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
 
@@ -42,7 +43,7 @@ Return strict JSON only, no other text, no markdown code fences: {"seoTitle": ".
 - seoDescription: under 155 characters, one or two plain sentences describing the product and mentioning nationwide delivery in Pakistan, confident and understated tone, no exclamation marks, no clichés.`;
 
   try {
-    const response = await fetch(GROQ_URL, {
+    const response = await trackedFetch("groq", GROQ_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({

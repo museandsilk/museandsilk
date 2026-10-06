@@ -65,7 +65,7 @@ jobs:
 
       - name: Prepare the ISR cache bucket (R2)
         run: |
-          if npx wrangler r2 bucket info nure-asmir-cache >/dev/null 2>&1 || npx wrangler r2 bucket create nure-asmir-cache; then
+          if { npx wrangler r2 bucket info nure-asmir-cache >/dev/null 2>&1 || npx wrangler r2 bucket create nure-asmir-cache; } && { npx wrangler r2 bucket info nure-asmir-media-r2 >/dev/null 2>&1 || npx wrangler r2 bucket create nure-asmir-media-r2; }; then
             echo "STORE_CONFIG=wrangler.jsonc" >> "$GITHUB_ENV"
             echo "ADMIN_CONFIG=wrangler.admin.jsonc" >> "$GITHUB_ENV"
           else

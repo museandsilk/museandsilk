@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { count, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { adminPushDevices, campaignSlides, deliveryZones, orders, products, siteSettings } from "@/db/schema";
@@ -39,6 +40,7 @@ async function setupChecklist() {
 
 export default async function AdminHomePage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const user = await requireAdminUser("/admin");
+  if (user.role === "developer") redirect("/admin/developer");
   const rangeParam = (await searchParams).range;
   const rangeKey = isRangeKey(rangeParam) ? rangeParam : "7d";
 

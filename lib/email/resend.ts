@@ -4,11 +4,12 @@ import { bankDepositInstructionsEmail } from "./templates/bank-deposit-instructi
 import { reservationReminderEmail, type ReservationReminderPayload } from "./templates/reservation-reminder";
 import { checkoutOtpEmail } from "./templates/checkout-otp";
 import { ORDER_EVENT_COPY, orderStatusEmail, type OrderStatusEmailPayload } from "./templates/order-status";
+import { counted } from "@/lib/usage";
 
 function client(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return null;
-  return new Resend(apiKey);
+  return counted("resend", new Resend(apiKey));
 }
 
 function fromAddress(): string {

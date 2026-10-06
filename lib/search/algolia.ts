@@ -1,6 +1,7 @@
 import { algoliasearch } from "algoliasearch";
 import { buildSearchDocs } from "./docs";
 import type { SearchDoc } from "./types";
+import { counted } from "@/lib/usage";
 
 /**
  * Server-side Algolia indexing. The storefront's search box queries the index directly with a
@@ -18,7 +19,7 @@ function adminClient() {
   const appId = process.env.ALGOLIA_APP_ID || process.env.NEXT_PUBLIC_ALGOLIA_APP_ID;
   const key = process.env.ALGOLIA_ADMIN_KEY;
   if (!appId || !key) return null;
-  return algoliasearch(appId, key);
+  return counted("algolia", algoliasearch(appId, key));
 }
 
 export async function configureIndex(): Promise<void> {

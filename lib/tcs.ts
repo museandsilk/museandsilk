@@ -1,3 +1,4 @@
+import { trackedFetch } from "@/lib/usage";
 // TCS (Pakistani courier) E-COM API client — see "TCS API User Guide v1.0" (envio.tcscourier.com).
 //
 // Everything here is server-only: the account credentials never reach the browser. Like the other optional
@@ -38,7 +39,7 @@ async function rawFetch(path: string, init: RequestInit & { token?: string } = {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const { token, ...rest } = init;
-    return await fetch(`${tcsBaseUrl()}${path}`, {
+    return await trackedFetch("tcs", `${tcsBaseUrl()}${path}`, {
       ...rest,
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(rest.headers ?? {}) },
       signal: controller.signal,

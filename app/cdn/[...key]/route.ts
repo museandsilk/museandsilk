@@ -1,4 +1,7 @@
-import { publicBucketOrigin } from "@/lib/storage";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { backendOf, publicBucketOrigin, r2Bucket } from "@/lib/storage";
+import { recordApiCall } from "@/lib/usage";
+import { runInBackground } from "@/lib/background";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +16,50 @@ const ONE_YEAR = 31536000;
  * For maximum speed, point NEXT_PUBLIC_CDN_URL at a Cloudflare-proxied hostname (e.g.
  * cdn.<domain>) whose origin rule targets the bucket — that skips the Worker entirely.
  */
-export async function GET(_request: Request, context: { params: Promise<{ key: string[] }> }) {
+export async function GET(request: Request, context: { params: Promise<{ key: string[] }> }) {
   const { key } = await context.params;
   const objectKey = key.map(encodeURIComponent).join("/");
 
   // Only the media prefixes are public; never expose anything else that might live in the bucket.
-  if (!/^(products|categories|campaign)\//.test(key.join("/"))) {
+  if (!/^(r2\/)?(products|categories|campaign)\//.test(key.join("/"))) {
     return new Response("Not found", { status: 404 });
+  }
+
+  // Pictures kept in Cloudflare R2 (keys start with r2/): read through the Worker binding, with the edge cache in front so a
+  // picture is read from R2 once per region, not once per visitor.
+  if (backendOf(key.join("/")) === "r2") {
+    const bucket = r2Bucket();
+    if (!bucket) return new Response("Not found", { status: 404 });
+    const cache = (globalThis as unknown as { caches?: { default?: Cache } }).caches?.default;
+    const cacheKey = new Request(new URL(request.url).origin + new URL(request.url).pathname);
+    const hit = await cache?.match(cacheKey);
+    if (hit) return hit;
+    try {
+      const object = await bucket.get(key.join("/"));
+      runInBackground(recordApiCall("r2-storage", true), "usage:r2-storage");
+      if (!object) return new Response("Not found", { status: 404, headers: { "Cache-Control": "public, max-age=60" } });
+      const headers = new Headers({
+        "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+        "Content-Length": String(object.size),
+        "Cache-Control": `public, max-age=${ONE_YEAR}, immutable`,
+        "Access-Control-Allow-Origin": "*",
+        "X-Content-Type-Options": "nosniff",
+      });
+      if (object.httpEtag) headers.set("ETag", object.httpEtag);
+      const response = new Response(object.body, { status: 200, headers });
+      if (cache) {
+        const copy = response.clone();
+        try {
+          getCloudflareContext().ctx.waitUntil(cache.put(cacheKey, copy));
+        } catch {
+          // no execution context: skip caching
+        }
+      }
+      return response;
+    } catch (error) {
+      runInBackground(recordApiCall("r2-storage", false, error instanceof Error ? error.message : String(error)), "usage:r2-storage");
+      return new Response("Image temporarily unavailable", { status: 502, headers: { "Cache-Control": "no-store" } });
+    }
   }
 
   let origin: Response;
@@ -34,6 +74,7 @@ export async function GET(_request: Request, context: { params: Promise<{ key: s
     return new Response("Image temporarily unavailable", { status: 502, headers: { "Cache-Control": "no-store" } });
   }
 
+  runInBackground(recordApiCall("neon-storage", origin.ok || origin.status === 404, origin.ok ? "" : `origin ${origin.status}`), "usage:neon-storage");
   if (!origin.ok || !origin.body) return new Response("Not found", { status: origin.status === 404 ? 404 : 502 });
 
   const headers = new Headers();

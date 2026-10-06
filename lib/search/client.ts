@@ -37,6 +37,15 @@ function switchToLocalFor(ms: number) {
   }
 }
 
+/** Tells the server one browser search was sent to Algolia (for the developer page's allowance counter). Fire-and-forget. */
+function countAlgoliaSearch(ok: boolean) {
+  try {
+    navigator.sendBeacon("/api/usage/ping", new Blob([JSON.stringify({ service: "algolia", ok })], { type: "application/json" }));
+  } catch {
+    // counting is optional
+  }
+}
+
 type LocalEngine = { search: (query: string, limit: number) => { hits: SearchHit[]; total: number } };
 let localEngine: Promise<LocalEngine> | null = null;
 
@@ -72,6 +81,7 @@ export async function searchProducts(term: string, limit = 8): Promise<SearchRes
           },
         ],
       });
+      countAlgoliaSearch(true);
       const result = response.results[0] as { hits: AlgoliaHit[]; nbHits?: number };
       return {
         engine: "algolia",
@@ -79,6 +89,7 @@ export async function searchProducts(term: string, limit = 8): Promise<SearchRes
         hits: result.hits.map((hit) => ({ objectID: hit.objectID, name: hit.name, slug: hit.slug, price: hit.price, imageUrl: hit.imageUrl, category: hit.category, highlight: hit._highlightResult?.name?.value })),
       };
     } catch (error) {
+      countAlgoliaSearch(false);
       switchToLocalFor(isQuotaError(error) ? QUOTA_MS : HICCUP_MS);
     }
   }

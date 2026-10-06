@@ -5,6 +5,7 @@ import { algoliasearch } from "algoliasearch";
 import type MiniSearch from "minisearch";
 import { isQuotaError } from "./quota";
 import type { SearchDoc } from "./types";
+import { counted } from "@/lib/usage";
 
 let localCache: { at: number; index: MiniSearch<SearchDoc>; search: typeof import("./local").searchLocal } | null = null;
 const LOCAL_TTL_MS = 5 * 60 * 1000;
@@ -22,7 +23,7 @@ export async function searchProductIds(query: string, limit = 48): Promise<{ ids
   const key = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY;
   if (appId && key && process.env.NEXT_PUBLIC_SEARCH_ENGINE !== "local") {
     try {
-      const client = algoliasearch(appId, key);
+      const client = counted("algolia", algoliasearch(appId, key));
       const { hits } = await client.searchSingleIndex<{ objectID: string }>({
         indexName: process.env.NEXT_PUBLIC_ALGOLIA_INDEX_NAME || "nure_asmir_products",
         searchParams: { query, hitsPerPage: limit, attributesToRetrieve: ["objectID"] },

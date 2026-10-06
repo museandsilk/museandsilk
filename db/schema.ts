@@ -186,6 +186,8 @@ export const productImages = pgTable("product_images", {
   // uploaded before this pipeline existed, or if processing failed and only the original was kept.
   blurDataUrl: text("blur_data_url"),
   variantWidths: jsonb("variant_widths").$type<number[]>(),
+  // Set once the photo has been squeezed harder (sold-out items kept for the record) – see lib/photo-compaction.ts.
+  compactedAt: timestamp("compacted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("images_product_idx").on(table.productId)]);
 
@@ -432,6 +434,8 @@ export const siteSettings = pgTable("site_settings", {
   tcsShipperPhone: text("tcs_shipper_phone").notNull().default(""),
   // How many days after delivery a shopper may ask for a refund.
   refundWindowDays: integer("refund_window_days").notNull().default(7),
+  // Advanced: hide a product from the shop once everything in it has been sold out for this many days. 0 = keep forever.
+  soldoutHideDays: integer("soldout_hide_days").notNull().default(90),
   bankName: text("bank_name").notNull().default(""),
   bankAccountTitle: text("bank_account_title").notNull().default(""),
   bankAccountNumber: text("bank_account_number").notNull().default(""),
@@ -521,5 +525,44 @@ export const siteImages = pgTable("site_images", {
   height: integer("height"),
   blurDataUrl: text("blur_data_url"),
   variantWidths: jsonb("variant_widths").$type<number[]>(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Server errors seen by the website, newest first on the developer page. Identical errors on the same day are counted, not repeated. */
+export const errorLog = pgTable(
+  "error_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fingerprint: text("fingerprint").notNull(),
+    source: text("source").notNull(),
+    message: text("message").notNull(),
+    path: text("path").notNull().default(""),
+    stack: text("stack").notNull().default(""),
+    count: integer("count").notNull().default(1),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    day: date("day").notNull(),
+  },
+  (table) => [uniqueIndex("error_log_fp_day").on(table.fingerprint, table.day), index("error_log_last_idx").on(table.lastSeenAt)],
+);
+
+/** How many requests each outside service (Algolia, Groq, Resend, Geoapify, storage…) was asked for, per day (Pakistan time). */
+export const apiUsage = pgTable(
+  "api_usage",
+  {
+    service: text("service").notNull(),
+    day: date("day").notNull(),
+    calls: integer("calls").notNull().default(0),
+    errors: integer("errors").notNull().default(0),
+    lastError: text("last_error").notNull().default(""),
+    lastAt: timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.service, table.day] })],
+);
+
+/** Small cached readings (storage used per bucket, limits reported by a service's own headers). */
+export const serviceStats = pgTable("service_stats", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

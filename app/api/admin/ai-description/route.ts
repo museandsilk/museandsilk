@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getAdminUser } from "@/lib/auth/admin-auth";
+import { trackedFetch } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
 
   let response: Response;
   try {
-    response = await fetch(GROQ_URL, {
+    response = await trackedFetch("groq", GROQ_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({

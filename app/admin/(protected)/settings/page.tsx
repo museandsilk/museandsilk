@@ -34,6 +34,7 @@ export default async function SettingsPage() {
     codReservationHours: row?.codReservationHours ?? 6,
     bankReservationHours: row?.bankReservationHours ?? 6,
     refundWindowDays: row?.refundWindowDays ?? 7,
+    soldoutHideDays: row?.soldoutHideDays ?? 90,
     metaPixelId: row?.metaPixelId ?? "",
     gaMeasurementId: row?.gaMeasurementId ?? "",
   };

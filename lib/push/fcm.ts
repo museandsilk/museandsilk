@@ -1,3 +1,4 @@
+import { trackedFetch } from "@/lib/usage";
 /**
  * Firebase Cloud Messaging (HTTP v1) sender for Cloudflare Workers.
  *
@@ -54,7 +55,7 @@ async function signJwt(account: ServiceAccount): Promise<string> {
 
 async function accessToken(account: ServiceAccount): Promise<string> {
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
-  const response = await fetch(process.env.GOOGLE_OAUTH_TOKEN_URL || "https://oauth2.googleapis.com/token", {
+  const response = await trackedFetch("fcm", process.env.GOOGLE_OAUTH_TOKEN_URL || "https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: await signJwt(account) }),
@@ -105,7 +106,7 @@ export async function sendPush(deviceToken: string, payload: PushPayload): Promi
   const account = loadServiceAccount();
   if (!account) return "error";
   try {
-    const response = await fetch(`${process.env.FCM_BASE_URL || "https://fcm.googleapis.com"}/v1/projects/${account.project_id}/messages:send`, {
+    const response = await trackedFetch("fcm", `${process.env.FCM_BASE_URL || "https://fcm.googleapis.com"}/v1/projects/${account.project_id}/messages:send`, {
       method: "POST",
       headers: { Authorization: `Bearer ${await accessToken(account)}`, "Content-Type": "application/json" },
       body: JSON.stringify({
