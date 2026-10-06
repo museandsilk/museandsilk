@@ -9,6 +9,7 @@ import { Icon } from "../_ui/icons";
 import { ToastProvider } from "../_ui/client";
 import { NavLinks } from "../_ui/nav";
 import { SearchPalette } from "../_ui/palette";
+import { SideToggle } from "../_ui/side-toggle";
 import { ThemeMenu } from "../_ui/theme-menu";
 import { LogoutButton } from "./logout-button";
 import { PushToggle } from "./push-toggle";
@@ -37,11 +38,12 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
   const themeCookie = jar.get("adm-theme")?.value;
   const theme = themeCookie === "light" || themeCookie === "night" ? themeCookie : "auto";
   const text = jar.get("adm-text")?.value === "large" ? "large" : "normal";
+  const side = jar.get("adm-side")?.value === "collapsed" ? "collapsed" : "open";
   const storeUrl = process.env.NEXT_PUBLIC_STORE_URL || "/";
 
   return (
     <ToastProvider>
-      <div className="adm-shell">
+      <div className="adm-shell" data-side={side}>
         <aside className="adm-side">
           <div className="adm-brand">
             <Image src="/logo.png" alt="" width={38} height={38} priority />
@@ -67,6 +69,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
         </aside>
         <div className="adm-main">
           <div className="adm-top">
+            <SideToggle initialCollapsed={side === "collapsed"} />
             <SearchPalette />
             <div className="adm-top-right">
               <a className="a-btn a-btn-sm" href={storeUrl} target="_blank" rel="noopener noreferrer" title="Open your shop the way customers see it">

@@ -563,6 +563,38 @@ test.describe("admin (desktop Chromium)", () => {
       await expect(lessons.nth(0)).toContainText("✓");
     });
 
+    test("the menu can be folded away to use the whole width, it is remembered, and the lessons have a wide and a full-screen view", async ({ page }) => {
+      await login(page);
+      await page.goto("/admin/training");
+      await page.waitForLoadState("networkidle");
+      const side = page.locator(".adm-side");
+      await expect(side).toBeVisible();
+      await page.getByRole("button", { name: "Hide the menu" }).click();
+      await expect(side).toBeHidden();
+      await page.reload();
+      await expect(page.locator(".adm-shell")).toHaveAttribute("data-side", "collapsed");
+      await expect(side).toBeHidden();
+
+      // wide view: the lesson list steps aside and the pretend screen gets bigger
+      const stage = page.locator(".tour-stage");
+      const small = (await stage.boundingBox())!.height;
+      await page.getByRole("button", { name: "Wide view" }).click();
+      await expect(page.locator("nav[aria-label='Lessons']")).toBeHidden();
+      await expect.poll(async () => (await stage.boundingBox())!.height).toBeGreaterThan(small);
+      await page.getByRole("button", { name: "▶ Play" }).click();
+      await expect(page.locator(".tour-step")).toHaveText(/Step [2-9] of/, { timeout: 40_000 });
+      await page.getByRole("button", { name: "❚❚ Pause" }).click();
+
+      // full screen (falls back to the wide view where a browser refuses)
+      await page.getByRole("button", { name: "Full screen" }).click();
+      await expect.poll(async () => page.evaluate(() => Boolean(document.fullscreenElement) || document.querySelector(".tour")?.classList.contains("is-wide") === true)).toBe(true);
+      await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
+
+      await page.getByRole("button", { name: "Show the menu" }).click();
+      await expect(side).toBeVisible();
+      await page.evaluate(() => (document.cookie = "adm-side=open; Path=/"));
+    });
+
     test("advanced settings: tucked away, and the sold-out time can be changed and set to 'forever'", async ({ page }) => {
       await sql`update site_settings set soldout_hide_days = 90 where id = 'store'`;
       await login(page);

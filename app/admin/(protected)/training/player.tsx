@@ -34,6 +34,9 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
   const [replay, setReplay] = useState(0);
   const [missing, setMissing] = useState("");
   const stage = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const [wide, setWide] = useState(false);
 
   const lesson = lessons[lessonIndex];
   const step = lesson.steps[stepIndex];
@@ -149,6 +152,27 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
     return () => window.removeEventListener("resize", onResize);
   }, [step, place]);
 
+  useEffect(() => {
+    const onChange = () => setFull(document.fullscreenElement === root.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  // The pretend screen is re-measured after the layout changes size, so the cursor stays on its target.
+  useEffect(() => {
+    const id = window.setTimeout(() => place(lastTarget(step)), 250);
+    return () => window.clearTimeout(id);
+  }, [full, wide, step, place]);
+
+  async function toggleFull() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await root.current?.requestFullscreen();
+    } catch {
+      setWide((value) => !value); // this browser refuses full screen: the wide view is the next best thing
+    }
+  }
+
   function choose(index: number) {
     setLessonIndex(index);
     setStepIndex(0);
@@ -165,12 +189,28 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
     setPlaying((value) => !value);
   }
 
+  useEffect(() => {
+    if (!full && !wide) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
+      if (event.key === " " && target?.tagName !== "BUTTON") {
+        event.preventDefault();
+        setPlaying((value) => !value);
+      } else if (event.key === "ArrowRight") goNext();
+      else if (event.key === "ArrowLeft") setStepIndex((index) => Math.max(0, index - 1));
+      else if (event.key.toLowerCase() === "f") void toggleFull();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const state: TourState = { ...base, ...live };
   const progress = ((stepIndex + (finished ? 1 : 0)) / lesson.steps.length) * 100;
   const nextLesson = lessons[lessonIndex + 1];
 
   return (
-    <div className="tour">
+    <div className={`tour${full ? " is-full" : ""}${wide ? " is-wide" : ""}`} ref={root}>
       <nav className="tour-list" aria-label="Lessons">
         <p className="a-muted" style={{ margin: "0 0 8px", fontSize: 13 }}>
           {done.filter((id) => lessons.some((l) => l.id === id)).length} of {lessons.length} watched
@@ -191,6 +231,14 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
           <div>
             <h2>{lesson.title}</h2>
             <p className="a-muted">{lesson.blurb}</p>
+          </div>
+          <div className="a-row" style={{ flex: "none" }}>
+            <button type="button" className="a-btn a-btn-sm" onClick={() => setWide((value) => !value)} aria-pressed={wide} title="Hide the lesson list and make the screen bigger">
+              {wide ? "Show lesson list" : "Wide view"}
+            </button>
+            <button type="button" className="a-btn a-btn-sm" onClick={toggleFull} aria-pressed={full} title="Use the whole screen (press Esc to leave)">
+              <Icon name="expand" size={15} /> {full ? "Leave full screen" : "Full screen"}
+            </button>
           </div>
         </header>
 

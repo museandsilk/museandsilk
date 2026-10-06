@@ -634,3 +634,20 @@
 .m-photo { width: 52px; height: 66px; border-radius: 7px; background: linear-gradient(160deg, #cdbfa8, #6b5b4a); border: 1px solid var(--line); }
 .m-photo.navy { background: linear-gradient(160deg, #6b86b8, #1d2c52); }
 @media (max-width: 1280px) { .tour { grid-template-columns: 1fr; } .tour-list { position: static; max-height: none; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); } }
+
+/* Folded menu + the bigger lesson views */
+.adm-shell[data-side="collapsed"] { grid-template-columns: 0 minmax(0, 1fr); }
+.adm-shell[data-side="collapsed"] .adm-side { display: none; }
+.adm-shell[data-side="collapsed"] .adm-page { max-width: none; }
+.tour-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.tour-screen { position: absolute; left: 0; top: 0; transform: scale(var(--k, 1)); transform-origin: 0 0; width: calc(100% / var(--k, 1)); height: calc(100% / var(--k, 1)); }
+.tour.is-wide { grid-template-columns: minmax(0, 1fr); }
+.tour.is-wide .tour-list { display: none; }
+.tour.is-wide .tour-stage { --k: 1.25; height: clamp(520px, 74vh, 860px); }
+.tour.is-wide .tour-caption p { font-size: 19px; }
+.tour.is-full { grid-template-columns: minmax(0, 1fr); background: var(--bg); padding: 22px clamp(20px, 4vw, 60px); overflow: auto; align-content: start; }
+.tour.is-full .tour-list { display: none; }
+.tour.is-full .tour-stage { --k: 1.5; height: calc(100vh - 290px); min-height: 420px; }
+.tour.is-full .tour-caption p { font-size: 22px; }
+.tour.is-full .tour-caption { min-height: 84px; }
+.tour:fullscreen { color: var(--text); }
