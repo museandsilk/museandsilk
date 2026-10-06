@@ -141,6 +141,27 @@
       "when": 1791221383966,
       "tag": "0019_drop_legacy_postex_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791285635418,
+      "tag": "0020_tidy_bloodscream",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791286678545,
+      "tag": "0021_acoustic_lake",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791299685918,
+      "tag": "0022_naive_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

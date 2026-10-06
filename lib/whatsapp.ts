@@ -1,3 +1,4 @@
+import { trackedFetch } from "@/lib/usage";
 const GRAPH_VERSION = "v21.0";
 
 /** Normalizes a Pakistani number to the digits-only international format WhatsApp's API requires
@@ -36,7 +37,7 @@ export async function sendOrderConfirmationWhatsApp(params: {
   if (!accessToken || !phoneNumberId) return null;
 
   try {
-    const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
+    const response = await trackedFetch("whatsapp", `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -86,7 +87,7 @@ export async function sendWhatsAppText(toPhone: string, text: string): Promise<{
   if (!accessToken || !phoneNumberId) return { ok: false, error: "WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set" };
 
   try {
-    const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
+    const response = await trackedFetch("whatsapp", `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({

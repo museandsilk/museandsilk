@@ -45,9 +45,11 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           status: product.status as "draft" | "published" | "archived",
           featured: product.featured,
           badge: product.badge ?? "",
+          seoTitle: product.seoTitle,
+          seoDescription: product.seoDescription,
         }}
-        variants={variants.filter((v) => v.status === "active").map((v) => ({ id: v.id, size: v.size ?? "", sku: v.sku, price: v.price, compareAtPrice: v.compareAtPrice, stockQuantity: v.stockQuantity, reservedQuantity: v.reservedQuantity, lowStockThreshold: v.lowStockThreshold }))}
-        images={images.filter((i) => i.status === "active").map((i) => ({ id: i.id, r2Key: i.r2Key, variantWidths: i.variantWidths, isPrimary: i.isPrimary, sortOrder: i.sortOrder, altText: i.altText }))}
+        variants={variants.filter((v) => v.status === "active").map((v) => ({ id: v.id, color: v.color, size: v.size ?? "", sku: v.sku, price: v.price, compareAtPrice: v.compareAtPrice, stockQuantity: v.stockQuantity, reservedQuantity: v.reservedQuantity, lowStockThreshold: v.lowStockThreshold }))}
+        images={images.filter((i) => i.status === "active").map((i) => ({ id: i.id, variantId: i.variantId, r2Key: i.r2Key, variantWidths: i.variantWidths, isPrimary: i.isPrimary, sortOrder: i.sortOrder, altText: i.altText }))}
       />
     </>
   );

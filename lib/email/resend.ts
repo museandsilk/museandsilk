@@ -1,15 +1,9 @@
-import { Resend } from "resend";
 import { orderConfirmationEmail } from "./templates/order-confirmation";
 import { bankDepositInstructionsEmail } from "./templates/bank-deposit-instructions";
 import { reservationReminderEmail, type ReservationReminderPayload } from "./templates/reservation-reminder";
 import { checkoutOtpEmail } from "./templates/checkout-otp";
 import { ORDER_EVENT_COPY, orderStatusEmail, type OrderStatusEmailPayload } from "./templates/order-status";
-
-function client(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
-  return new Resend(apiKey);
-}
+import { sendMail, type Mail } from "./transport";
 
 function fromAddress(): string {
   const name = process.env.RESEND_FROM_NAME || "Nure Asmir";
@@ -17,24 +11,10 @@ function fromAddress(): string {
   return email ? `${name} <${email}>` : "Nure Asmir <onboarding@resend.dev>";
 }
 
-// The Resend SDK does NOT throw on API-level failures (invalid recipient, quota exceeded, bad
-// domain, etc.) — send() resolves with { data: null, error: {...} } instead. A bare `await
-// resend.emails.send(...)` with only a try/catch around it silently treats every one of those
-// failures as a successful send. This helper is what actually surfaces them.
-async function send(payload: Parameters<Resend["emails"]["send"]>[0]): Promise<boolean> {
-  const resend = client();
-  if (!resend) return false;
-  try {
-    const result = await resend.emails.send(payload);
-    if (result.error) {
-      console.error("Resend email rejected", result.error);
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.error("Resend email send failed", error);
-    return false;
-  }
+// Sending goes through lib/email/transport.ts: the provider with the most room left today is used, and if it is full or down the next
+// one takes over – always from the same address, with a plain-text copy, a Reply-To and the "important" headers.
+async function send(mail: Mail): Promise<boolean> {
+  return sendMail(mail);
 }
 
 export type OrderEmailPayload = {

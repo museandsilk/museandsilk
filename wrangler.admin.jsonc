@@ -11,7 +11,9 @@
     "binding": "ASSETS"
   },
   "r2_buckets": [
-    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "nure-asmir-cache" }
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "nure-asmir-cache" },
+    // Second picture store (10 GB free) used next to Neon Storage – see lib/storage.ts. Created by the deploy workflow.
+    { "binding": "MEDIA_R2", "bucket_name": "nure-asmir-media-r2" }
   ],
   "vars": { "APP_TARGET": "admin" },
   "observability": { "enabled": true },

@@ -1,3 +1,4 @@
+import { trackedFetch } from "@/lib/usage";
 const VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 /**
@@ -13,7 +14,7 @@ export async function verifyTurnstileToken(token: string | null | undefined, ip:
 
   try {
     const body = new URLSearchParams({ secret, response: token, remoteip: ip });
-    const response = await fetch(VERIFY_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+    const response = await trackedFetch("turnstile", VERIFY_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
     if (!response.ok) return false;
     const data = (await response.json().catch(() => null)) as { success?: boolean } | null;
     return Boolean(data?.success);

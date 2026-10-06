@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import { expect, test, type Page } from "@playwright/test";
 import { BASE, cleanOrders, clearSales, mockTcs, orderIdOf, placeOrder, setStock, sql, variantBySku, warmUp } from "../support/helpers";
 import { makePng, watchErrors } from "../support/ui";
+import { hashPassword } from "../../lib/auth/password";
 
 /** Small screens: the admin is laptop-only, so every phone/tablet project must see the friendly notice instead. */
 test.describe("laptop-only gate", () => {
@@ -53,6 +54,7 @@ test.describe("admin (desktop Chromium)", () => {
     await cleanOrders();
     await sql`delete from products where name like 'E2E %'`;
     await sql`delete from categories where name like 'E2E %'`;
+    await sql`delete from store_locations where name like 'E2E %'`;
     await sql`delete from site_images`;
     await sql`update site_settings set support_phone = '+923116111963' where id = 'store'`;
   });
@@ -345,7 +347,9 @@ test.describe("admin (desktop Chromium)", () => {
     test("stock screen: change a number, Save appears only for that row, and sold-out shows", async ({ page }) => {
       await login(page);
       await page.goto("/admin/stock?q=E2E%20Linen");
-      const rows = page.locator("tbody tr");
+      // one list row per product (searching opens it); its sizes are the editable rows inside
+      await expect(page.locator(".a-stock > tbody")).toHaveCount(1);
+      const rows = page.locator(".a-stock-sizes tbody tr");
       await expect(rows).toHaveCount(5);
       const first = rows.first();
       await expect(first.getByRole("button", { name: "Save" })).toHaveCount(0);
@@ -360,6 +364,295 @@ test.describe("admin (desktop Chromium)", () => {
       await first.getByLabel(/^Stock for/).fill("0");
       await first.getByRole("button", { name: "Save" }).click();
       await expect(first).toContainText("Sold out", { timeout: 15_000 });
+    });
+
+    test("same shirt in another colour: sizes and prices are copied, photos stay with their colour, the shop shows both", async ({ page }) => {
+      await sql`delete from products where name = 'E2E Denim Shirt'`;
+      await login(page);
+      await page.goto("/admin/products/new");
+      await page.getByLabel("Product name").fill("E2E Denim Shirt");
+      await page.getByLabel("What is it?").fill("Shirt");
+      await page.getByLabel("Colour", { exact: true }).fill("Indigo");
+      await page.locator('input[type="file"]').first().setInputFiles({ name: "indigo.png", mimeType: "image/png", buffer: makePng() });
+      await page.getByRole("button", { name: "S M L XL XXL" }).click();
+      await page.getByLabel("Price", { exact: true }).first().fill("3900");
+      await page.getByRole("button", { name: "Use the first price for every size" }).click();
+      await page.getByLabel("In stock", { exact: true }).first().fill("5");
+
+      // the second colour starts from the first one's sizes and prices, with no stock
+      await page.getByRole("button", { name: "Add another colour" }).click();
+      await page.getByLabel("New colour").fill("Charcoal");
+      await page.getByRole("button", { name: "Add colour", exact: true }).click();
+      await expect(page.getByLabel("Size", { exact: true })).toHaveCount(5);
+      await expect(page.getByLabel("Price", { exact: true }).first()).toHaveValue("3900");
+      await expect(page.getByLabel("In stock", { exact: true }).first()).toHaveValue("0");
+      await expect(page.getByLabel("Colour", { exact: true })).toHaveValue("Charcoal");
+      await page.locator('input[type="file"]').first().setInputFiles({ name: "charcoal.png", mimeType: "image/png", buffer: makePng() });
+      await expect(page.locator(".a-photo")).toHaveCount(1); // only this colour's photos are shown
+      await page.getByLabel("In stock", { exact: true }).first().fill("4");
+
+      await page.getByRole("button", { name: "Add product" }).click();
+      await expect(page).toHaveURL(/\/admin\/products\/[0-9a-f-]{36}$/, { timeout: 60_000 });
+
+      const [product] = (await sql`select id, slug from products where name = 'E2E Denim Shirt'`) as Array<{ id: string; slug: string }>;
+      const variants = (await sql`select color, sku, stock_quantity as stock from product_variants where product_id = ${product.id}`) as Array<{ color: string; sku: string; stock: number }>;
+      expect(variants).toHaveLength(10);
+      expect(new Set(variants.map((v) => v.color))).toEqual(new Set(["Indigo", "Charcoal"]));
+      expect(new Set(variants.map((v) => v.sku)).size, "every size of every colour has its own code").toBe(10);
+      const photos = (await sql`select i.is_primary as main, v.color from product_images i left join product_variants v on v.id = i.variant_id where i.product_id = ${product.id}`) as Array<{ main: boolean; color: string | null }>;
+      expect(photos.map((p) => p.color).sort(), "each photo is linked to its colour").toEqual(["Charcoal", "Indigo"]);
+      expect(photos.filter((p) => p.main)).toHaveLength(1);
+
+      // reopening shows both colours with their own data
+      await page.reload();
+      await expect(page.getByRole("button", { name: /^Indigo/ })).toBeVisible();
+      await page.getByRole("button", { name: /^Charcoal/ }).click();
+      await expect(page.getByLabel("In stock", { exact: true }).first()).toHaveValue("4");
+      await expect(page.locator(".a-photo")).toHaveCount(1);
+
+      // the customer sees both colours on one product page
+      const page1 = await page.request.get(`${BASE}/products/${product.slug}`);
+      const html = await page1.text();
+      expect(html).toContain("Indigo");
+      expect(html).toContain("Charcoal");
+
+      // stock: one line for the product with the total, sizes per colour inside
+      await page.goto("/admin/stock?q=E2E%20Denim");
+      await expect(page.locator(".a-stock > tbody")).toHaveCount(1);
+      await expect(page.locator(".a-stock > tbody").first()).toContainText("E2E Denim Shirt");
+      await expect(page.locator(".a-stock > tbody > tr").first().locator("td").nth(1)).toHaveText("2");
+      await expect(page.locator(".a-stock > tbody > tr").first().locator("td").nth(2)).toHaveText("9");
+      await expect(page.getByRole("region", { name: "Indigo sizes" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Charcoal sizes" })).toBeVisible();
+    });
+
+    test("preview: the unsaved draft shows as a phone page and a laptop page, colours and sizes can be tapped", async ({ page }) => {
+      await login(page);
+      await page.goto("/admin/products/new");
+      await page.getByLabel("Product name").fill("E2E Preview Kurta");
+      await page.getByLabel("Colour", { exact: true }).fill("Ivory");
+      await page.getByRole("button", { name: "S M L XL XXL" }).click();
+      await page.getByLabel("Price", { exact: true }).first().fill("6500");
+      await page.getByRole("button", { name: "Add another colour" }).click();
+      await page.getByLabel("New colour").fill("Black");
+      await page.getByRole("button", { name: "Add colour", exact: true }).click();
+      await page.getByRole("button", { name: "Preview", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: /preview/i });
+      await expect(dialog.getByRole("heading", { name: "E2E Preview Kurta" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Ivory" })).toBeVisible();
+      await dialog.getByRole("button", { name: "Black" }).click();
+      await expect(dialog.getByText("Colour: Black")).toBeVisible();
+      await dialog.getByRole("button", { name: "Laptop" }).click();
+      await expect(dialog.getByRole("button", { name: "Laptop" })).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      expect((await sql`select 1 from products where name = 'E2E Preview Kurta'`).length, "previewing never saves").toBe(0);
+    });
+
+    test("shop locations: add one, it is listed, the main shop cannot be removed", async ({ page }) => {
+      await sql`delete from store_locations where name like 'E2E %'`;
+      await login(page);
+      await page.goto("/admin/locations");
+      await expect(page.getByText("Main shop").first()).toBeVisible();
+      await page.getByRole("button", { name: "Add a shop" }).click();
+      await page.getByLabel("Shop name").fill("E2E Gulberg Outlet");
+      await page.getByLabel("Full address").fill("12 Main Boulevard, Gulberg III");
+      await page.getByLabel("City").fill("Lahore");
+      await page.getByRole("button", { name: "Save shop" }).click();
+      await expect(page.getByText("E2E Gulberg Outlet")).toBeVisible({ timeout: 15_000 });
+      const rows = (await sql`select name, is_main as main from store_locations order by sort_order`) as Array<{ name: string; main: boolean }>;
+      expect(rows.filter((r) => r.main)).toHaveLength(1);
+      const mains = await page.request.get(`${BASE}/api/admin/locations`);
+      const [main] = ((await mains.json()) as { locations: Array<{ id: string; isMain: boolean }> }).locations.filter((l) => l.isMain);
+      const refused = await page.request.delete(`${BASE}/api/admin/locations/${main.id}`);
+      expect(refused.status()).toBe(409);
+    });
+
+    test("pictures: JPG, PNG, WebP, AVIF and GIF all become five sharp, small WebP sizes that the shop serves", async ({ page }) => {
+      await sql`delete from products where name = 'E2E Formats Kurta'`;
+      await login(page);
+      await page.goto("/admin/products/new");
+      await page.getByLabel("Product name").fill("E2E Formats Kurta");
+      await page.getByLabel("What is it?").fill("Kurta");
+      await page.getByLabel("Colour", { exact: true }).fill("Ivory");
+      await page.getByRole("button", { name: "One size only" }).click();
+      await page.getByLabel("Price", { exact: true }).first().fill("4900");
+
+      // Make large pictures in the browser itself (a gradient with fine detail, 2400 px wide) in each of the five formats.
+      const files = await page.evaluate(async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 2400;
+        canvas.height = 3200;
+        const ctx = canvas.getContext("2d")!;
+        const gradient = ctx.createLinearGradient(0, 0, 2400, 3200);
+        gradient.addColorStop(0, "#c9b79c");
+        gradient.addColorStop(1, "#3b2f2f");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 2400, 3200);
+        for (let i = 0; i < 400; i++) {
+          ctx.fillStyle = `rgba(${(i * 7) % 255},${(i * 13) % 255},${(i * 29) % 255},.35)`;
+          ctx.fillRect((i * 97) % 2300, (i * 193) % 3100, 120, 18);
+        }
+        const toBase64 = async (type: string, quality?: number) => {
+          const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+          if (!blob || blob.type !== type) return null; // this browser cannot write that format
+          const buffer = new Uint8Array(await blob.arrayBuffer());
+          let binary = "";
+          for (const byte of buffer) binary += String.fromCharCode(byte);
+          return { type, data: btoa(binary) };
+        };
+        return [await toBase64("image/jpeg", 0.95), await toBase64("image/png"), await toBase64("image/webp", 0.95), await toBase64("image/avif"), await toBase64("image/gif")];
+      });
+      const usable = files.filter((file): file is { type: string; data: string } => Boolean(file));
+      expect(usable.length, "the browser can write at least JPG, PNG and WebP").toBeGreaterThanOrEqual(3);
+      const names = usable.map((file) => ({ name: `shot.${file.type.split("/")[1]}`, mimeType: file.type, buffer: Buffer.from(file.data, "base64") }));
+      await page.locator('input[type="file"]').first().setInputFiles(names);
+      await expect(page.locator(".a-photo")).toHaveCount(names.length);
+      await page.getByRole("button", { name: "Add product" }).click();
+      await expect(page).toHaveURL(/\/admin\/products\/[0-9a-f-]{36}$/, { timeout: 90_000 });
+
+      const rows = (await sql`select i.r2_key as key, i.variant_widths as widths, i.content_type as type, i.byte_size as bytes, i.width from product_images i join products p on p.id = i.product_id where p.name = 'E2E Formats Kurta'`) as Array<{ key: string; widths: number[]; type: string; bytes: number; width: number }>;
+      expect(rows).toHaveLength(names.length);
+      for (const row of rows) {
+        expect(row.type).toBe("image/webp");
+        expect(row.widths, "five sizes for a large picture").toEqual([320, 640, 960, 1280, 1600]);
+        expect(row.bytes, "the stored picture is far smaller than the 2400 px original").toBeLessThan(400 * 1024);
+        const largest = await page.request.get(`${BASE}/cdn/${row.key.replace(/\.[^.]+$/, "")}-w1600.webp`);
+        expect(largest.status()).toBe(200);
+        expect(largest.headers()["content-type"]).toContain("image/webp");
+        expect(largest.headers()["cache-control"]).toContain("immutable");
+        const small = await page.request.get(`${BASE}/cdn/${row.key.replace(/\.[^.]+$/, "")}-w320.webp`);
+        expect(Number(small.headers()["content-length"] ?? (await small.body()).length)).toBeLessThan(largest.headers()["content-length"] ? Number(largest.headers()["content-length"]) : Infinity);
+      }
+    });
+
+    test("training: every lesson steps through with the cursor always finding its target, and Play really types and clicks", async ({ page }) => {
+      test.setTimeout(300_000); // two lessons are played in real time
+      await login(page);
+      await page.goto("/admin/training");
+      await page.waitForLoadState("networkidle");
+      const lessons = page.locator("nav[aria-label='Lessons'] button");
+      const count = await lessons.count();
+      expect(count).toBeGreaterThanOrEqual(10);
+      const stage = page.locator(".tour-stage");
+      for (let i = 0; i < count; i++) {
+        await lessons.nth(i).click();
+        const caption = page.locator(".tour-step");
+        const total = Number(/of (\d+)/.exec((await caption.textContent()) ?? "")?.[1]);
+        expect(total).toBeGreaterThanOrEqual(3);
+        for (let step = 1; step <= total; step++) {
+          await expect(caption).toHaveText(`Step ${step} of ${total}`);
+          // allow the cursor to settle on this step's last target, then it must not be reported missing
+          await page.waitForTimeout(120);
+          await expect(stage, `lesson ${i + 1}, step ${step}: the cursor has nothing to point at`).not.toHaveAttribute("data-missing", /.+/);
+          if (step < total) await page.getByRole("button", { name: "Next →" }).click();
+        }
+      }
+      // Play lesson 1 at double speed: the search box gets typed into by itself and the player moves on.
+      await lessons.nth(0).click();
+      await page.getByRole("button", { name: "2×" }).click();
+      await page.getByRole("button", { name: "▶ Play" }).click();
+      await expect(stage).toContainText("0301 234", { timeout: 40_000 });
+      await expect(page.getByRole("button", { name: "❚❚ Pause" })).toBeVisible();
+      await page.getByRole("button", { name: "❚❚ Pause" }).click();
+      // the finished lesson is remembered as watched
+      await lessons.nth(0).click();
+      await page.getByRole("button", { name: "2×" }).click();
+      await page.getByRole("button", { name: "▶ Play" }).click();
+      await expect(page.getByText(/You finished/)).toBeVisible({ timeout: 120_000 });
+      await expect(lessons.nth(0)).toContainText("✓");
+    });
+
+    test("advanced settings: tucked away, and the sold-out time can be changed and set to 'forever'", async ({ page }) => {
+      await sql`update site_settings set soldout_hide_days = 90 where id = 'store'`;
+      await login(page);
+      await page.goto("/admin/settings");
+      const advanced = page.locator("details#advanced");
+      await expect(advanced).not.toHaveAttribute("open", "");
+      await advanced.locator("summary").click();
+      await expect(advanced.getByLabel(/Hide sold-out products after/)).toHaveValue("90");
+      await advanced.getByLabel(/Hide sold-out products after/).fill("0");
+      await expect(advanced.getByText("Sold-out products stay on your website forever.")).toBeVisible();
+      await page.getByRole("button", { name: "Save settings" }).click();
+      await expect(toast(page).first()).toContainText(/saved/i, { timeout: 15_000 });
+      expect(((await sql`select soldout_hide_days as d from site_settings where id = 'store'`) as Array<{ d: number }>)[0].d).toBe(0);
+      await advanced.getByLabel(/Hide sold-out products after/).fill("90");
+      await page.getByRole("button", { name: "Save settings" }).click();
+      await expect(toast(page).last()).toContainText(/saved/i, { timeout: 15_000 });
+    });
+
+    test("developer login: sees only the technical page, owners cannot open it", async ({ page, browser }) => {
+      const email = "e2e-dev@nureasmir.com";
+      const password = "E2e-dev-Passw0rd-9";
+      await sql`delete from admin_owners where email = ${email}`;
+      await sql`insert into admin_owners (email, display_name, password_hash, role) values (${email}, 'Developer', ${await hashPassword(password)}, 'developer')`;
+      // the owner gets a 404 for the developer page
+      await login(page);
+      await page.goto("/admin/developer");
+      await expect(page.getByText(/could not be found|not found|404/i).first()).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("heading", { name: "Services and keys" })).toHaveCount(0);
+      await expect(page.getByText("Neon Storage")).toHaveCount(0);
+      expect((await page.request.post(`${BASE}/api/developer/storage`)).status(), "the developer API refuses owners too").toBe(403);
+      // the developer lands on it and sees only that link
+      const other = await browser.newContext();
+      const devPage = await other.newPage();
+      await devPage.goto(`${BASE}/admin/login`);
+      await devPage.waitForLoadState("networkidle");
+      await devPage.getByLabel("Email").fill(email);
+      await devPage.getByLabel("Password").fill(password);
+      await devPage.getByRole("button", { name: /sign in/i }).click();
+      await expect(devPage).toHaveURL(/\/admin\/developer$/, { timeout: 20_000 });
+      await expect(devPage.getByRole("heading", { name: "Storage" })).toBeVisible();
+      await expect(devPage.getByRole("heading", { name: "Services and keys" })).toBeVisible();
+      await expect(devPage.getByRole("heading", { name: "Errors", exact: true })).toBeVisible();
+      await expect(devPage.getByText("Neon Storage").first()).toBeVisible();
+      await expect(devPage.getByText("Cloudflare R2").first()).toBeVisible();
+      await expect(devPage.getByRole("link", { name: "Orders" })).toHaveCount(0);
+      // secrets are never printed: no value of a configured key appears on the page
+      const secret = process.env.GEOAPIFY_API_KEY;
+      if (secret) expect(await devPage.content()).not.toContain(secret);
+      await other.close();
+      await sql`delete from admin_owners where email = ${email}`;
+    });
+
+    test("stock: category buttons show only that category, one list row per product", async ({ page }) => {
+      await sql`delete from products where name = 'E2E Chino'`;
+      await sql`delete from categories where name = 'E2E Trousers'`;
+      const [cat] = (await sql`insert into categories (name, slug) values ('E2E Trousers', 'e2e-trousers') returning id`) as Array<{ id: string }>;
+      const [prod] = (await sql`insert into products (category_id, name, slug, type_label, status) values (${cat.id}, 'E2E Chino', 'e2e-chino', 'Pants', 'published') returning id`) as Array<{ id: string }>;
+      await sql`insert into product_variants (product_id, name, sku, color, size, price, stock_quantity, is_default) values (${prod.id}, 'Khaki / 32', 'E2E-CATTEST-32', 'Khaki', '32', 3000, 2, true), (${prod.id}, 'Khaki / 34', 'E2E-CATTEST-34', 'Khaki', '34', 3000, 3, false)`;
+      await login(page);
+      await page.goto("/admin/stock");
+      await expect(page.getByRole("link", { name: /^All categories/ })).toBeVisible();
+      await page.getByRole("link", { name: /^E2E Trousers/ }).click();
+      await expect(page).toHaveURL(/cat=/);
+      await expect(page.locator(".a-stock > tbody")).toHaveCount(1);
+      await expect(page.locator(".a-stock")).toContainText("E2E Chino");
+      await expect(page.locator(".a-stock")).not.toContainText("E2E Linen");
+      // two sizes, one list row: the total is 5 and the sizes appear when it is opened
+      await expect(page.locator(".a-stock > tbody > tr").first().locator("td").nth(2)).toHaveText("5");
+      await page.getByRole("button", { name: /Sizes/ }).click();
+      await expect(page.getByLabel("Stock for E2E Chino Khaki 32")).toHaveValue("2");
+      await expect(page.getByLabel("Stock for E2E Chino Khaki 34")).toHaveValue("3");
+    });
+
+    test("home: changing the period updates the numbers in place — no reload, the page does not jump", async ({ page }) => {
+      await login(page);
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+      await page.evaluate(() => {
+        (window as unknown as { __kept: number }).__kept = 1;
+        window.scrollTo(0, 500);
+      });
+      const before = await page.evaluate(() => window.scrollY);
+      expect(before).toBeGreaterThan(0);
+      const answered = page.waitForResponse((response) => response.url().includes("/api/admin/analytics?range=90d") && response.ok());
+      await page.getByRole("button", { name: "90 days" }).click();
+      await answered;
+      await expect(page.getByRole("button", { name: "90 days" })).toHaveAttribute("aria-pressed", "true");
+      expect(await page.evaluate(() => (window as unknown as { __kept?: number }).__kept), "the page was not reloaded").toBe(1);
+      expect(await page.evaluate(() => window.scrollY), "still scrolled where it was").toBeGreaterThan(0);
+      await expect(page).toHaveURL(/range=90d/);
     });
 
     test("Excel: download the sheet, fill it in, upload it, add photos, and the products appear (and a bad row is explained)", async ({ page }) => {
@@ -468,7 +761,7 @@ test.describe("admin (desktop Chromium)", () => {
     await page.getByRole("button", { name: "Use this crop" }).click();
     await expect(toast(page).first()).toContainText("Picture changed", { timeout: 40_000 });
     const about = await (await page.request.get(`${BASE}/about`)).text();
-    expect(about).toMatch(/\/cdn\/site\//);
+    expect(about).toMatch(/\/cdn\/(r2\/)?site\//);
     await card.getByRole("button", { name: /standard picture again/ }).click();
     await expect(toast(page).last()).toContainText(/standard picture/, { timeout: 15_000 });
     expect(await sql`select 1 from site_images`).toHaveLength(0);

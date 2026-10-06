@@ -6,6 +6,7 @@ import { useLockedAction } from "@/lib/use-locked-action";
 import { callApi, Hint, useToast } from "../../_ui/client";
 import { Icon } from "../../_ui/icons";
 import { Badge } from "../../_ui/ui";
+import { PhotoShrinker } from "./photo-shrinker";
 
 export type SettingsValues = {
   brandName: string;
@@ -29,6 +30,9 @@ export type SettingsValues = {
   codReservationHours: number;
   bankReservationHours: number;
   refundWindowDays: number;
+  soldoutHideDays: number;
+  googleSiteVerification: string;
+  bingSiteVerification: string;
   metaPixelId: string;
   gaMeasurementId: string;
 };
@@ -202,6 +206,24 @@ export function SettingsForm({ initial, status }: { initial: SettingsValues; sta
         {text("metaPixelId", "Facebook / Instagram Pixel ID", { hint: "Lets Facebook show your ads to the right people and count sales." })}
         {text("gaMeasurementId", "Google Analytics ID", { placeholder: "G-XXXXXXXXXX", hint: "Counts visitors to your website." })}
       </Section>
+
+      <details className="a-card" id="advanced" style={{ scrollMarginTop: 84 }}>
+        <summary className="a-card-head" style={{ cursor: "pointer" }}>
+          <div>
+            <h2>Advanced</h2>
+            <small>Most shops never need to change these. The normal choices are already set.</small>
+          </div>
+        </summary>
+        <div className="a-card-pad a-form-grid">
+          {text("soldoutHideDays", "Hide sold-out products after (days)", {
+            hint: "When every size of a product has been sold out, and nobody has bought or changed it for this many days, it is hidden from your website. Nothing is deleted – you can show it again whenever you restock. Put 0 to keep sold-out products on your website forever.",
+            help: form.soldoutHideDays === 0 ? "Sold-out products stay on your website forever." : `Products sold out for ${form.soldoutHideDays} days or more are hidden automatically.`,
+          })}
+          {text("googleSiteVerification", "Google Search Console code", { wide: true, placeholder: "Paste the code (or the whole meta tag) from Google", hint: "Search Console is Google's free tool that shows how your website appears in Google and lets you send it your sitemap. It asks you to prove the website is yours – paste its code here and press Save, then press Verify in Search Console.", help: "Never add anything by hand to the website – this box does it for you." })}
+          {text("bingSiteVerification", "Bing Webmaster code", { wide: true, placeholder: "Paste the code from Bing Webmaster Tools", hint: "The same idea for Bing, which also powers other search tools and some AI assistants." })}
+          <PhotoShrinker />
+        </div>
+      </details>
 
       <div className="a-savebar">
         <span className="a-muted">{dirty ? "You have changes that are not saved yet." : "Everything is saved."}</span>

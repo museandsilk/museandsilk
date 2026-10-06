@@ -347,7 +347,7 @@ export function CollectionManager({ products }: { products: Product[] }) {
                                   )}
                                 </span>
                                 <small>New card (3:4)</small>
-                                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => pickPhoto("card", event.target.files?.[0] ?? null)} />
+                                <input type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" onChange={(event) => pickPhoto("card", event.target.files?.[0] ?? null)} />
                               </div>
                               <div className="category-photo-slot">
                                 <span className="category-photo-preview category-photo-preview-hero">
@@ -358,7 +358,7 @@ export function CollectionManager({ products }: { products: Product[] }) {
                                   )}
                                 </span>
                                 <small>New hero (wide)</small>
-                                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => pickPhoto("hero", event.target.files?.[0] ?? null)} />
+                                <input type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" onChange={(event) => pickPhoto("hero", event.target.files?.[0] ?? null)} />
                               </div>
                               <button
                                 type="button"

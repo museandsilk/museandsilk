@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { StoreFooter } from "../_components/store-footer";
 import { getPublicSettings } from "@/lib/commerce";
+import { mapsLink } from "@/lib/geo";
+import { getStoreLocations } from "@/lib/locations";
+import { StoreJsonLd } from "../_components/store-jsonld";
 
 export const revalidate = 300;
 
@@ -12,11 +15,12 @@ export const metadata: Metadata = {
 };
 
 export default async function ContactPage() {
-  const settings = await getPublicSettings();
+  const [settings, locations] = await Promise.all([getPublicSettings(), getStoreLocations()]);
   const whatsapp = String(settings.whatsappNumber ?? "").replace(/\D/g, "");
 
   return (
     <main>
+      <StoreJsonLd />
       <section className="contact-page">
         <div>
           <p className="eyebrow">Customer care</p>
@@ -28,6 +32,22 @@ export default async function ContactPage() {
           </p>
         </div>
         <aside>
+          {locations.map((shop) => (
+            <article key={shop.id}>
+              <span>{locations.length > 1 ? shop.name : "Visit our shop"}</span>
+              <p>
+                {shop.address}
+                {shop.city ? `, ${shop.city}` : ""}
+              </p>
+              {shop.hours && <p>{shop.hours}</p>}
+              {shop.phone && <a href={`tel:${shop.phone.replace(/\s/g, "")}`}>{shop.phone}</a>}
+              {shop.latitude != null && shop.longitude != null && (
+                <a href={mapsLink(shop.latitude, shop.longitude)} target="_blank" rel="noreferrer noopener">
+                  Open in maps ↗︎
+                </a>
+              )}
+            </article>
+          ))}
           <article>
             <span>WhatsApp Business</span>
             {settings.whatsappChatUrl || whatsapp ? (

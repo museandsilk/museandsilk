@@ -31,19 +31,24 @@ export const NAV: NavGroup[] = [
     label: "Your website",
     items: [
       { href: "/admin/pictures", label: "Website pictures", icon: "image" },
+      { href: "/admin/locations", label: "Shop locations", icon: "pin" },
       { href: "/admin/delivery", label: "Delivery charges", icon: "truck" },
       { href: "/admin/settings", label: "Settings", icon: "settings" },
+      { href: "/admin/training", label: "Training", icon: "info" },
     ],
   },
 ];
 
+/** What a developer login sees: only the technical page. */
+const DEV_NAV: NavGroup[] = [{ items: [{ href: "/admin/developer", label: "Developer", icon: "settings", exact: true }] }];
+
 export const ALL_PAGES = NAV.flatMap((group) => group.items);
 
-export function NavLinks({ counts }: { counts: Partial<Record<"orders" | "refunds" | "stock", number>> }) {
+export function NavLinks({ counts, role }: { counts: Partial<Record<"orders" | "refunds" | "stock", number>>; role?: string }) {
   const pathname = usePathname() || "";
   return (
     <nav className="adm-nav" aria-label="Main">
-      {NAV.map((group, index) => (
+      {(role === "developer" ? DEV_NAV : NAV).map((group, index) => (
         <div key={group.label ?? index} style={{ display: "grid", gap: 2 }}>
           {group.label && <p className="adm-nav-label">{group.label}</p>}
           {group.items.map((item) => {

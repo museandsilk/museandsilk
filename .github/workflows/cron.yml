@@ -43,3 +43,10 @@ jobs:
         continue-on-error: true
         run: |
           curl -sf -X GET "$SITE_URL/api/cron/sales"             -H "Authorization: Bearer $CRON_SECRET"
+
+      # Once a day (the route skips repeat calls): measures the picture stores and hides products sold out for the
+      # owner's chosen number of days. Non-blocking.
+      - name: Daily housekeeping
+        continue-on-error: true
+        run: |
+          curl -sf -X GET "$SITE_URL/api/cron/maintenance" -H "Authorization: Bearer $CRON_SECRET"

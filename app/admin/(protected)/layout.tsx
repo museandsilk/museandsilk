@@ -50,7 +50,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
               <span>Shop manager</span>
             </div>
           </div>
-          <NavLinks counts={counts} />
+          <NavLinks counts={counts} role={user.role} />
           <div className="adm-side-foot">
             <div className="adm-push">
               <PushToggle />
@@ -59,7 +59,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
               <span>{(user.displayName ?? user.email).slice(0, 1).toUpperCase()}</span>
               <div>
                 <strong>{user.displayName ?? user.email}</strong>
-                <small>{user.role === "owner" ? "Owner" : user.role}</small>
+                <small>{user.role === "owner" ? "Owner" : user.role === "developer" ? "Developer" : user.role}</small>
               </div>
             </div>
             <LogoutButton />

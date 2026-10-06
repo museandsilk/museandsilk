@@ -4,14 +4,17 @@ import { ProductCard, ProductRail } from "./_components/store-components";
 import { StoreFooter } from "./_components/store-footer";
 import { CampaignCarousel } from "./_components/campaign-carousel";
 import { getActiveCategories, getCampaignSlides, getCatalogProducts, toCard } from "@/lib/commerce";
+import { StoreJsonLd } from "./_components/store-jsonld";
 
 // Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
 // always priced on the server regardless of what a cached page displays.
 export const revalidate = 60;
 
 export default async function Home() {
-  const [products, campaignSlides, categories] = await Promise.all([
-    getCatalogProducts(),
+  // Only what this page shows is read: the newest dozen and the owner's featured picks, never the whole catalogue.
+  const [products, featuredProducts, campaignSlides, categories] = await Promise.all([
+    getCatalogProducts({ limit: 12 }),
+    getCatalogProducts({ featuredOnly: true, limit: 8 }),
     getCampaignSlides(),
     getActiveCategories(),
   ]);
@@ -20,11 +23,12 @@ export default async function Home() {
   // owner has ticked "Featured on homepage" in the admin panel (hidden if nothing is featured, so
   // the page never repeats the same products twice in a row).
   const newArrivals = products.slice(0, 12).map(toCard);
-  const featured = products.filter((product) => product.featured).slice(0, 8).map(toCard);
+  const featured = featuredProducts.map(toCard);
   const showFeatured = featured.length >= 4 && featured.some((product) => !newArrivals.slice(0, 5).some((entry) => entry.id === product.id));
 
   return (
     <main className="page-fade-in">
+      <StoreJsonLd />
       <CampaignCarousel slides={campaignSlides} />
 
       <section className="service-strip" aria-label="Store benefits">

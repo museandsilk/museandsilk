@@ -65,7 +65,7 @@ jobs:
 
       - name: Prepare the ISR cache bucket (R2)
         run: |
-          if npx wrangler r2 bucket info nure-asmir-cache >/dev/null 2>&1 || npx wrangler r2 bucket create nure-asmir-cache; then
+          if { npx wrangler r2 bucket info nure-asmir-cache >/dev/null 2>&1 || npx wrangler r2 bucket create nure-asmir-cache; } && { npx wrangler r2 bucket info nure-asmir-media-r2 >/dev/null 2>&1 || npx wrangler r2 bucket create nure-asmir-media-r2; }; then
             echo "STORE_CONFIG=wrangler.jsonc" >> "$GITHUB_ENV"
             echo "ADMIN_CONFIG=wrangler.admin.jsonc" >> "$GITHUB_ENV"
           else
@@ -75,6 +75,11 @@ jobs:
             echo "STORE_CONFIG=wrangler.deploy.jsonc" >> "$GITHUB_ENV"
             echo "ADMIN_CONFIG=wrangler.admin.deploy.jsonc" >> "$GITHUB_ENV"
           fi
+
+      # Old address records on these names make Cloudflare refuse the custom domains (error 523 for visitors). Remove just those.
+      - name: Free the website's domain names
+        continue-on-error: true
+        run: node scripts/free-domains.mjs nureasmir.com www.nureasmir.com
 
       - name: Build storefront
         run: npm run cf:build:store
@@ -129,6 +134,12 @@ jobs:
           WHATSAPP_DEFAULT_NUMBER: ${{ secrets.WHATSAPP_DEFAULT_NUMBER }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_API_KEY_2: ${{ secrets.GROQ_API_KEY_2 }}
+          GROQ_API_KEY_3: ${{ secrets.GROQ_API_KEY_3 }}
+          RESEND_API_KEY_2: ${{ secrets.RESEND_API_KEY_2 }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          EMAIL_REPLY_TO: ${{ secrets.EMAIL_REPLY_TO }}
+          GEOAPIFY_API_KEY: ${{ secrets.GEOAPIFY_API_KEY }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           CSP_NONCE: ${{ secrets.CSP_NONCE }}
           WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
@@ -148,7 +159,7 @@ jobs:
           for config in wrangler.jsonc wrangler.admin.jsonc; do
             for name in DATABASE_URL SESSION_SECRET ADMIN_EMAIL ADMIN_INITIAL_PASSWORD AWS_ENDPOINT_URL_S3 AWS_ACCESS_KEY_ID \
               AWS_SECRET_ACCESS_KEY AWS_REGION ALGOLIA_APP_ID ALGOLIA_ADMIN_KEY FIREBASE_SERVICE_ACCOUNT RESEND_API_KEY \
-              RESEND_FROM_EMAIL RESEND_FROM_NAME WHATSAPP_DEFAULT_NUMBER CRON_SECRET GROQ_API_KEY TURNSTILE_SECRET_KEY \
+              RESEND_FROM_EMAIL RESEND_FROM_NAME WHATSAPP_DEFAULT_NUMBER CRON_SECRET GROQ_API_KEY GROQ_API_KEY_2 GROQ_API_KEY_3 RESEND_API_KEY_2 BREVO_API_KEY EMAIL_REPLY_TO GEOAPIFY_API_KEY TURNSTILE_SECRET_KEY \
               CSP_NONCE WHATSAPP_ACCESS_TOKEN WHATSAPP_PHONE_NUMBER_ID WHATSAPP_APP_SECRET WHATSAPP_TEMPLATE_NAME \
               WHATSAPP_WEBHOOK_VERIFY_TOKEN TCS_USERNAME TCS_PASSWORD TCS_ACCOUNT_NO TCS_COST_CENTER_CODE TCS_ENV TCS_SERVICE_CODE; do
               value="${!name:-}"

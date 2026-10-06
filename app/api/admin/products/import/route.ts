@@ -19,7 +19,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type ImageJob = { file: string; isPrimary: boolean; order: number; alt: string };
+type ImageJob = { file: string; isPrimary: boolean; order: number; alt: string; variantId?: string };
 
 type ImportResult = {
   index: number;
@@ -103,10 +103,13 @@ async function importOne(item: ProductImport, index: number): Promise<ImportResu
 
   const variantErrors: string[] = [];
   const images: ImageJob[] = [];
+  // A product sold in several colours keeps each colour's photos with that colour (the shop shows them when the colour is picked).
+  const multiColour = new Set(item.variants.map((variant) => variant.color.trim().toLowerCase())).size > 1;
   for (let variantIndex = 0; variantIndex < item.variants.length; variantIndex++) {
     const variant = item.variants[variantIndex];
+    let variantId: string | undefined;
     try {
-      await db.insert(productVariants).values({
+      const [inserted] = await db.insert(productVariants).values({
         productId: productRow.id,
         name: variant.name || item.name,
         sku: variant.sku,
@@ -120,7 +123,8 @@ async function importOne(item: ProductImport, index: number): Promise<ImportResu
         lowStockThreshold: variant.lowStockThreshold ?? 3,
         isDefault: variant.isDefault ?? variantIndex === 0,
         status: "active",
-      });
+      }).returning({ id: productVariants.id });
+      variantId = inserted?.id;
     } catch (error) {
       if (isUniqueViolation(error)) {
         variantErrors.push(`SKU "${variant.sku}" is already in use.`);
@@ -140,6 +144,7 @@ async function importOne(item: ProductImport, index: number): Promise<ImportResu
         isPrimary: Boolean(image.isPrimary),
         order: variantIndex * 100 + (image.order ?? 0),
         alt: image.alt || `${item.name} — ${variant.color}`,
+        variantId: multiColour ? variantId : undefined,
       });
     }
   }

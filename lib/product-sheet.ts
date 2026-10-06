@@ -1,8 +1,8 @@
 // Reading a product sheet (Excel or Google Sheets exported as .xlsx / .csv) into products. Pure functions only
 // – no Excel library, no network – so it runs in the browser, in the e2e unit tests and in the server alike.
 //
-// The sheet has ONE ROW PER SIZE. Rows that share the same product name and colour become one product with
-// several sizes. Every complaint is phrased for a shop owner and names the row number as Excel shows it.
+// The sheet has ONE ROW PER SIZE. Rows that share the same product name and colour become one colour with
+// several sizes; the importer then joins colours that share a product name into one product. Every complaint is phrased for a shop owner and names the row number as Excel shows it.
 
 import { suggestSku } from "./sku";
 
@@ -12,7 +12,7 @@ export const SHEET_COLUMNS: SheetColumn[] = [
   { key: "name", label: "Product name*", required: true, width: 30, help: "The name customers see, e.g. Olive Cargo Pants. Use the same name on every size row.", aliases: ["product name", "name", "title", "item", "item name"] },
   { key: "category", label: "Category*", required: true, width: 20, help: "Pick from the list, e.g. Shirts. A new name creates a new category.", aliases: ["category", "collection", "group"] },
   { key: "type", label: "What is it?*", required: true, width: 18, help: "Pick or type: Shirt, Pants, Shalwar Kameez, Wallet…", aliases: ["what is it", "type", "product type", "kind"] },
-  { key: "colour", label: "Colour*", required: true, width: 14, help: "One colour per product. Another colour = another product.", aliases: ["colour", "color"] },
+  { key: "colour", label: "Colour*", required: true, width: 14, help: "One colour on each row. The same shirt in another colour? Use the same product name and a different colour — we put them together on one page.", aliases: ["colour", "color"] },
   { key: "size", label: "Size", width: 12, help: "S, M, L, XL, 32, 34… or One size. Leave empty if it has no sizes.", aliases: ["size", "sizes"] },
   { key: "price", label: "Price (PKR)*", required: true, width: 14, help: "Selling price in rupees, numbers only, e.g. 5500.", aliases: ["price", "price pkr", "selling price", "sale price", "rs"] },
   { key: "oldPrice", label: "Old price (optional)", width: 18, help: "Only if this item is on discount. Must be higher than the price.", aliases: ["old price", "compare at price", "compare price", "was price", "mrp", "cut price"] },

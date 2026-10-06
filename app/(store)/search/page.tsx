@@ -20,17 +20,21 @@ async function searchProducts(query: string, catalog: CatalogProduct[]): Promise
   return catalog.filter((product) => `${product.name} ${product.type} ${product.color} ${product.description ?? ""} ${product.shortDescription ?? ""} ${product.sku}`.toLowerCase().includes(needle));
 }
 
+const SEARCH_LIMIT = 48;
+
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const query = String((await searchParams).q ?? "").trim().slice(0, 100);
   const catalog = await getCatalogProducts();
-  const results = query ? await searchProducts(query, catalog) : [];
+  const found = query ? await searchProducts(query, catalog) : [];
+  // Never paint hundreds of cards at once: the first 48 best matches, and a hint to narrow the search.
+  const results = found.slice(0, SEARCH_LIMIT);
 
   return (
     <main className="page-fade-in">
       <section className="search-page">
         <header>
           <h1 className="page-title">{query ? `Results for “${query}”` : "Search"}</h1>
-          <p className="result-count">{query ? `${results.length} ${results.length === 1 ? "product" : "products"}` : "Use the search icon above to find a product."}</p>
+          <p className="result-count">{query ? (found.length > results.length ? `Showing the first ${results.length} of ${found.length} products – try a more specific word` : `${found.length} ${found.length === 1 ? "product" : "products"}`) : "Use the search icon above to find a product."}</p>
         </header>
         {results.length > 0 && (
           <div className="product-grid">
