@@ -3,8 +3,12 @@ import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
   const origin = siteOrigin();
+  const open = ["/", "/cdn/", "/api/media/", "/api/campaign-media/", "/api/feeds/"];
+  const closed = ["/admin", "/admin/", "/cart", "/checkout", "/wishlist", "/api", "/api/", "/preview", "/preview/"];
   return {
     rules: [
+      // AI assistants and answer engines are welcome on the public pages (so they can describe and recommend the shop) – never on private ones.
+      { userAgent: ["GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-SearchBot", "PerplexityBot", "Google-Extended", "Applebot-Extended"], allow: open, disallow: closed },
       {
         userAgent: "*",
         allow: ["/", "/cdn/", "/api/media/", "/api/campaign-media/", "/api/feeds/"],

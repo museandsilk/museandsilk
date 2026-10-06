@@ -4,6 +4,7 @@ import { ProductCard, ProductRail } from "./_components/store-components";
 import { StoreFooter } from "./_components/store-footer";
 import { CampaignCarousel } from "./_components/campaign-carousel";
 import { getActiveCategories, getCampaignSlides, getCatalogProducts, toCard } from "@/lib/commerce";
+import { StoreJsonLd } from "./_components/store-jsonld";
 
 // Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
 // always priced on the server regardless of what a cached page displays.
@@ -27,6 +28,7 @@ export default async function Home() {
 
   return (
     <main className="page-fade-in">
+      <StoreJsonLd />
       <CampaignCarousel slides={campaignSlides} />
 
       <section className="service-strip" aria-label="Store benefits">

@@ -31,6 +31,8 @@ export type SettingsValues = {
   bankReservationHours: number;
   refundWindowDays: number;
   soldoutHideDays: number;
+  googleSiteVerification: string;
+  bingSiteVerification: string;
   metaPixelId: string;
   gaMeasurementId: string;
 };
@@ -217,6 +219,8 @@ export function SettingsForm({ initial, status }: { initial: SettingsValues; sta
             hint: "When every size of a product has been sold out, and nobody has bought or changed it for this many days, it is hidden from your website. Nothing is deleted – you can show it again whenever you restock. Put 0 to keep sold-out products on your website forever.",
             help: form.soldoutHideDays === 0 ? "Sold-out products stay on your website forever." : `Products sold out for ${form.soldoutHideDays} days or more are hidden automatically.`,
           })}
+          {text("googleSiteVerification", "Google Search Console code", { wide: true, placeholder: "Paste the code (or the whole meta tag) from Google", hint: "Search Console is Google's free tool that shows how your website appears in Google and lets you send it your sitemap. It asks you to prove the website is yours – paste its code here and press Save, then press Verify in Search Console.", help: "Never add anything by hand to the website – this box does it for you." })}
+          {text("bingSiteVerification", "Bing Webmaster code", { wide: true, placeholder: "Paste the code from Bing Webmaster Tools", hint: "The same idea for Bing, which also powers other search tools and some AI assistants." })}
           <PhotoShrinker />
         </div>
       </details>

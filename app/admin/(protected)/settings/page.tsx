@@ -1,3 +1,4 @@
+import { groqKeys } from "@/lib/groq";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { siteSettings } from "@/db/schema";
@@ -35,6 +36,8 @@ export default async function SettingsPage() {
     bankReservationHours: row?.bankReservationHours ?? 6,
     refundWindowDays: row?.refundWindowDays ?? 7,
     soldoutHideDays: row?.soldoutHideDays ?? 90,
+    googleSiteVerification: row?.googleSiteVerification ?? "",
+    bingSiteVerification: row?.bingSiteVerification ?? "",
     metaPixelId: row?.metaPixelId ?? "",
     gaMeasurementId: row?.gaMeasurementId ?? "",
   };
@@ -45,7 +48,7 @@ export default async function SettingsPage() {
     search: Boolean(process.env.ALGOLIA_ADMIN_KEY),
     email: Boolean(process.env.RESEND_API_KEY),
     whatsapp: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
-    writer: Boolean(process.env.GROQ_API_KEY),
+    writer: groqKeys().length > 0,
     spamShield: Boolean(process.env.TURNSTILE_SECRET_KEY),
   };
   return (

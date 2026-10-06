@@ -633,6 +633,8 @@ export async function getFeedProducts(): Promise<FeedProduct[]> {
 }
 
 export type PublicSettings = {
+  googleSiteVerification: string;
+  bingSiteVerification: string;
   whatsappNumber: string;
   supportPhone: string;
   supportEmail: string;
@@ -665,5 +667,7 @@ export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
     brandName: row?.brandName ?? "Nure Asmir",
     codReservationHours: row?.codReservationHours ?? 6,
     bankReservationHours: row?.bankReservationHours ?? 6,
+    googleSiteVerification: row?.googleSiteVerification ?? "",
+    bingSiteVerification: row?.bingSiteVerification ?? "",
   };
 });

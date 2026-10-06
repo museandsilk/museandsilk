@@ -341,7 +341,7 @@ function AddProducts({ categoryNames }: { categoryNames: string[] }) {
                   >
                     <Icon name="camera" />
                     <strong>Drag all your pictures here, or click to choose</strong>
-                    <span>JPG, PNG or WebP</span>
+                    <span>JPG, PNG, WebP, AVIF or GIF</span>
                   </div>
                   <input ref={photoInput} type="file" accept={ACCEPTED_PICTURES} multiple hidden onChange={(event) => { if (event.target.files) addPictures(event.target.files); event.target.value = ""; }} />
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6, maxHeight: 260, overflowY: "auto" }}>

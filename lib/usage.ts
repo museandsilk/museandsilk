@@ -7,7 +7,7 @@ import { runInBackground } from "@/lib/background";
  * can show "used today / this month" next to each free allowance. Counting never slows or breaks the real request: the write is
  * done in the background and its own failure is ignored.
  */
-export type ServiceName = "algolia" | "groq" | "resend" | "geoapify" | "tcs" | "fcm" | "whatsapp" | "turnstile" | "neon-storage" | "r2-storage";
+export type ServiceName = "algolia" | "groq" | "groq-2" | "groq-3" | "resend" | "resend-2" | "brevo" | "geoapify" | "tcs" | "fcm" | "whatsapp" | "turnstile" | "neon-storage" | "r2-storage";
 
 /** Today's date in Pakistan (always UTC+5) as YYYY-MM-DD. */
 export function pktDay(now = new Date()): string {

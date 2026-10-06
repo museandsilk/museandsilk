@@ -9,10 +9,13 @@ import { processImageClientSide } from "./client-image-processing";
 export type UploadOutcome = { ok: true; image: { id: string; r2Key: string; variantWidths: number[] | null; isPrimary: boolean } } | { ok: false; error: string };
 
 export const MAX_PICTURE_MB = 25;
-export const ACCEPTED_PICTURES = "image/jpeg,image/png,image/webp";
+/** The five picture types the shop owner can upload. Each is turned into five WebP sizes in the browser before it is sent. */
+export const ACCEPTED_PICTURES = "image/jpeg,image/png,image/webp,image/avif,image/gif";
+const ACCEPTED_LIST = ACCEPTED_PICTURES.split(",");
 
 export function checkPictureFile(file: File): string | null {
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return `“${file.name}” is not a JPG, PNG or WebP picture.`;
+  if (/.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type)) return `“${file.name}” is an iPhone HEIC picture. On the iPhone choose Settings → Camera → Formats → Most Compatible, or share the photo as JPG, then add it again.`;
+  if (!ACCEPTED_LIST.includes(file.type)) return `“${file.name}” is not a JPG, PNG, WebP, AVIF or GIF picture.`;
   if (file.size > MAX_PICTURE_MB * 1024 * 1024) return `“${file.name}” is bigger than ${MAX_PICTURE_MB} MB.`;
   return null;
 }

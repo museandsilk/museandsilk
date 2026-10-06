@@ -37,6 +37,8 @@ const updateSchema = z.object({
   tcsShipperPhone: z.string().max(30).optional(),
   refundWindowDays: z.coerce.number().int().min(0).max(60).optional(),
   soldoutHideDays: z.coerce.number().int().min(0).max(3650).optional(),
+  googleSiteVerification: z.string().trim().max(120).optional(),
+  bingSiteVerification: z.string().trim().max(120).optional(),
   bankName: z.string().optional(),
   bankAccountTitle: z.string().optional(),
   bankAccountNumber: z.string().optional(),
@@ -48,6 +50,12 @@ const updateSchema = z.object({
   bankReservationHours: z.coerce.number().int().min(1).optional(),
   taxEnabled: z.boolean().optional(),
 });
+
+/** Accepts the bare code or the whole <meta …> tag the search engine shows, and keeps only the code. */
+function cleanVerification(value: string): string {
+  const fromTag = /content\s*=\s*["']([^"']+)["']/i.exec(value)?.[1];
+  return (fromTag ?? value).trim().replace(/[^A-Za-z0-9_\-.]/g, "").slice(0, 120);
+}
 
 export async function GET() {
   const admin = await getAdminUser();
@@ -81,6 +89,8 @@ export async function PATCH(request: Request) {
     ...(data.tcsShipperPhone !== undefined ? { tcsShipperPhone: cleanPhone(data.tcsShipperPhone) } : {}),
     ...(data.refundWindowDays !== undefined ? { refundWindowDays: data.refundWindowDays } : {}),
     ...(data.soldoutHideDays !== undefined ? { soldoutHideDays: data.soldoutHideDays } : {}),
+    ...(data.googleSiteVerification !== undefined ? { googleSiteVerification: cleanVerification(data.googleSiteVerification) } : {}),
+    ...(data.bingSiteVerification !== undefined ? { bingSiteVerification: cleanVerification(data.bingSiteVerification) } : {}),
     ...(data.bankName !== undefined ? { bankName: data.bankName } : {}),
     ...(data.bankAccountTitle !== undefined ? { bankAccountTitle: data.bankAccountTitle } : {}),
     ...(data.bankAccountNumber !== undefined ? { bankAccountNumber: data.bankAccountNumber } : {}),

@@ -11,6 +11,7 @@ import { callApi, Dialog, Hint, useToast } from "../../_ui/client";
 import { Icon } from "../../_ui/icons";
 import { pkr } from "../../_ui/ui";
 import { ProductPreview, type PreviewData } from "./product-preview";
+import { SeoPanel } from "./seo-panel";
 
 export type EditorCategory = { id: string; name: string };
 export type EditorProduct = {
@@ -26,6 +27,9 @@ export type EditorProduct = {
   status: "draft" | "published" | "archived";
   featured: boolean;
   badge: string;
+  /** Drafted automatically when the product is saved; shown only in the Google preview. */
+  seoTitle?: string | null;
+  seoDescription?: string | null;
 };
 export type EditorVariantRow = { id: string; color: string; size: string; sku: string; price: number; compareAtPrice: number | null; stockQuantity: number; reservedQuantity: number; lowStockThreshold: number };
 export type EditorImageRow = { id: string; variantId: string | null; r2Key: string; variantWidths: number[] | null; isPrimary: boolean; sortOrder: number; altText: string };
@@ -573,7 +577,7 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
           >
             <Icon name="camera" />
             <strong>Drag photos here, or click to choose</strong>
-            <span>You can pick many at once. JPG, PNG or WebP. We make them small and fast for you automatically.</span>
+            <span>You can pick many at once. JPG, PNG, WebP, AVIF or GIF. We make five small, fast WebP sizes for you automatically.</span>
           </div>
           <input ref={fileInput} type="file" accept={ACCEPTED_PICTURES} multiple hidden onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} />
           {photos.length > 0 && (
@@ -734,6 +738,22 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
           </div>
         </div>
       </section>
+
+      <SeoPanel
+        input={{
+          name: form.name,
+          type: form.typeLabel,
+          category: categories.find((c) => c.id === form.categoryId)?.name,
+          colors: colors.map((c) => c.name),
+          material: form.material,
+          shortDescription: form.shortDescription,
+          description: form.description,
+          photoCounts: colors.map((c) => c.photos.length),
+          hasPrice: colors.some((c) => c.variants.some((v) => Number(v.price) > 0)),
+        }}
+        seoTitle={product?.seoTitle}
+        seoDescription={product?.seoDescription}
+      />
 
       <div className="a-savebar">
         <div>

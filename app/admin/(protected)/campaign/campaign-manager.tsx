@@ -329,7 +329,7 @@ export function CampaignManager() {
                         )}
                         <input
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
                           onChange={(event) => pickEditFile("desktop", event.target.files?.[0] ?? null)}
                         />
                         {editDesktopSlot.file && !editDesktopSlot.crop && (
@@ -347,7 +347,7 @@ export function CampaignManager() {
                         )}
                         <input
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
                           onChange={(event) => pickEditFile("mobile", event.target.files?.[0] ?? null)}
                         />
                       </div>
@@ -396,7 +396,7 @@ export function CampaignManager() {
               )}
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
                 onChange={(event) => pickFile("desktop", event.target.files?.[0] ?? null)}
               />
               {desktopSlot.file && !desktopSlot.crop && (
@@ -414,7 +414,7 @@ export function CampaignManager() {
               )}
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
                 onChange={(event) => pickFile("mobile", event.target.files?.[0] ?? null)}
               />
             </div>

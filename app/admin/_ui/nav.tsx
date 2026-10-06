@@ -34,6 +34,7 @@ export const NAV: NavGroup[] = [
       { href: "/admin/locations", label: "Shop locations", icon: "pin" },
       { href: "/admin/delivery", label: "Delivery charges", icon: "truck" },
       { href: "/admin/settings", label: "Settings", icon: "settings" },
+      { href: "/admin/training", label: "Training", icon: "info" },
     ],
   },
 ];

@@ -436,7 +436,7 @@ test.describe("admin (desktop Chromium)", () => {
       await page.getByRole("button", { name: "Add another colour" }).click();
       await page.getByLabel("New colour").fill("Black");
       await page.getByRole("button", { name: "Add colour", exact: true }).click();
-      await page.getByRole("button", { name: "Preview" }).click();
+      await page.getByRole("button", { name: "Preview", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: /preview/i });
       await expect(dialog.getByRole("heading", { name: "E2E Preview Kurta" })).toBeVisible();
       await expect(dialog.getByRole("button", { name: "Ivory" })).toBeVisible();
@@ -468,7 +468,103 @@ test.describe("admin (desktop Chromium)", () => {
       expect(refused.status()).toBe(409);
     });
 
+    test("pictures: JPG, PNG, WebP, AVIF and GIF all become five sharp, small WebP sizes that the shop serves", async ({ page }) => {
+      await sql`delete from products where name = 'E2E Formats Kurta'`;
+      await login(page);
+      await page.goto("/admin/products/new");
+      await page.getByLabel("Product name").fill("E2E Formats Kurta");
+      await page.getByLabel("What is it?").fill("Kurta");
+      await page.getByLabel("Colour", { exact: true }).fill("Ivory");
+      await page.getByRole("button", { name: "One size only" }).click();
+      await page.getByLabel("Price", { exact: true }).first().fill("4900");
+
+      // Make large pictures in the browser itself (a gradient with fine detail, 2400 px wide) in each of the five formats.
+      const files = await page.evaluate(async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 2400;
+        canvas.height = 3200;
+        const ctx = canvas.getContext("2d")!;
+        const gradient = ctx.createLinearGradient(0, 0, 2400, 3200);
+        gradient.addColorStop(0, "#c9b79c");
+        gradient.addColorStop(1, "#3b2f2f");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 2400, 3200);
+        for (let i = 0; i < 400; i++) {
+          ctx.fillStyle = `rgba(${(i * 7) % 255},${(i * 13) % 255},${(i * 29) % 255},.35)`;
+          ctx.fillRect((i * 97) % 2300, (i * 193) % 3100, 120, 18);
+        }
+        const toBase64 = async (type: string, quality?: number) => {
+          const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+          if (!blob || blob.type !== type) return null; // this browser cannot write that format
+          const buffer = new Uint8Array(await blob.arrayBuffer());
+          let binary = "";
+          for (const byte of buffer) binary += String.fromCharCode(byte);
+          return { type, data: btoa(binary) };
+        };
+        return [await toBase64("image/jpeg", 0.95), await toBase64("image/png"), await toBase64("image/webp", 0.95), await toBase64("image/avif"), await toBase64("image/gif")];
+      });
+      const usable = files.filter((file): file is { type: string; data: string } => Boolean(file));
+      expect(usable.length, "the browser can write at least JPG, PNG and WebP").toBeGreaterThanOrEqual(3);
+      const names = usable.map((file) => ({ name: `shot.${file.type.split("/")[1]}`, mimeType: file.type, buffer: Buffer.from(file.data, "base64") }));
+      await page.locator('input[type="file"]').first().setInputFiles(names);
+      await expect(page.locator(".a-photo")).toHaveCount(names.length);
+      await page.getByRole("button", { name: "Add product" }).click();
+      await expect(page).toHaveURL(/\/admin\/products\/[0-9a-f-]{36}$/, { timeout: 90_000 });
+
+      const rows = (await sql`select i.r2_key as key, i.variant_widths as widths, i.content_type as type, i.byte_size as bytes, i.width from product_images i join products p on p.id = i.product_id where p.name = 'E2E Formats Kurta'`) as Array<{ key: string; widths: number[]; type: string; bytes: number; width: number }>;
+      expect(rows).toHaveLength(names.length);
+      for (const row of rows) {
+        expect(row.type).toBe("image/webp");
+        expect(row.widths, "five sizes for a large picture").toEqual([320, 640, 960, 1280, 1600]);
+        expect(row.bytes, "the stored picture is far smaller than the 2400 px original").toBeLessThan(400 * 1024);
+        const largest = await page.request.get(`${BASE}/cdn/${row.key.replace(/\.[^.]+$/, "")}-w1600.webp`);
+        expect(largest.status()).toBe(200);
+        expect(largest.headers()["content-type"]).toContain("image/webp");
+        expect(largest.headers()["cache-control"]).toContain("immutable");
+        const small = await page.request.get(`${BASE}/cdn/${row.key.replace(/\.[^.]+$/, "")}-w320.webp`);
+        expect(Number(small.headers()["content-length"] ?? (await small.body()).length)).toBeLessThan(largest.headers()["content-length"] ? Number(largest.headers()["content-length"]) : Infinity);
+      }
+    });
+
+    test("training: every lesson steps through with the cursor always finding its target, and Play really types and clicks", async ({ page }) => {
+      test.setTimeout(300_000); // two lessons are played in real time
+      await login(page);
+      await page.goto("/admin/training");
+      await page.waitForLoadState("networkidle");
+      const lessons = page.locator("nav[aria-label='Lessons'] button");
+      const count = await lessons.count();
+      expect(count).toBeGreaterThanOrEqual(10);
+      const stage = page.locator(".tour-stage");
+      for (let i = 0; i < count; i++) {
+        await lessons.nth(i).click();
+        const caption = page.locator(".tour-step");
+        const total = Number(/of (\d+)/.exec((await caption.textContent()) ?? "")?.[1]);
+        expect(total).toBeGreaterThanOrEqual(3);
+        for (let step = 1; step <= total; step++) {
+          await expect(caption).toHaveText(`Step ${step} of ${total}`);
+          // allow the cursor to settle on this step's last target, then it must not be reported missing
+          await page.waitForTimeout(120);
+          await expect(stage, `lesson ${i + 1}, step ${step}: the cursor has nothing to point at`).not.toHaveAttribute("data-missing", /.+/);
+          if (step < total) await page.getByRole("button", { name: "Next →" }).click();
+        }
+      }
+      // Play lesson 1 at double speed: the search box gets typed into by itself and the player moves on.
+      await lessons.nth(0).click();
+      await page.getByRole("button", { name: "2×" }).click();
+      await page.getByRole("button", { name: "▶ Play" }).click();
+      await expect(stage).toContainText("0301 234", { timeout: 40_000 });
+      await expect(page.getByRole("button", { name: "❚❚ Pause" })).toBeVisible();
+      await page.getByRole("button", { name: "❚❚ Pause" }).click();
+      // the finished lesson is remembered as watched
+      await lessons.nth(0).click();
+      await page.getByRole("button", { name: "2×" }).click();
+      await page.getByRole("button", { name: "▶ Play" }).click();
+      await expect(page.getByText(/You finished/)).toBeVisible({ timeout: 120_000 });
+      await expect(lessons.nth(0)).toContainText("✓");
+    });
+
     test("advanced settings: tucked away, and the sold-out time can be changed and set to 'forever'", async ({ page }) => {
+      await sql`update site_settings set soldout_hide_days = 90 where id = 'store'`;
       await login(page);
       await page.goto("/admin/settings");
       const advanced = page.locator("details#advanced");
@@ -524,7 +620,7 @@ test.describe("admin (desktop Chromium)", () => {
       await sql`delete from categories where name = 'E2E Trousers'`;
       const [cat] = (await sql`insert into categories (name, slug) values ('E2E Trousers', 'e2e-trousers') returning id`) as Array<{ id: string }>;
       const [prod] = (await sql`insert into products (category_id, name, slug, type_label, status) values (${cat.id}, 'E2E Chino', 'e2e-chino', 'Pants', 'published') returning id`) as Array<{ id: string }>;
-      await sql`insert into product_variants (product_id, name, sku, color, size, price, stock_quantity, is_default) values (${prod.id}, 'Khaki / 32', 'E2E-CHINO-32', 'Khaki', '32', 3000, 2, true), (${prod.id}, 'Khaki / 34', 'E2E-CHINO-34', 'Khaki', '34', 3000, 3, false)`;
+      await sql`insert into product_variants (product_id, name, sku, color, size, price, stock_quantity, is_default) values (${prod.id}, 'Khaki / 32', 'E2E-CATTEST-32', 'Khaki', '32', 3000, 2, true), (${prod.id}, 'Khaki / 34', 'E2E-CATTEST-34', 'Khaki', '34', 3000, 3, false)`;
       await login(page);
       await page.goto("/admin/stock");
       await expect(page.getByRole("link", { name: /^All categories/ })).toBeVisible();
@@ -665,7 +761,7 @@ test.describe("admin (desktop Chromium)", () => {
     await page.getByRole("button", { name: "Use this crop" }).click();
     await expect(toast(page).first()).toContainText("Picture changed", { timeout: 40_000 });
     const about = await (await page.request.get(`${BASE}/about`)).text();
-    expect(about).toMatch(/\/cdn\/site\//);
+    expect(about).toMatch(/\/cdn\/(r2\/)?site\//);
     await card.getByRole("button", { name: /standard picture again/ }).click();
     await expect(toast(page).last()).toContainText(/standard picture/, { timeout: 15_000 });
     expect(await sql`select 1 from site_images`).toHaveLength(0);

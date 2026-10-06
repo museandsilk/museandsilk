@@ -34,6 +34,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000");
   const share = (await getSiteImages()).share_image;
   const shareUrl = share ? (/^https?:\/\//.test(share.url) ? share.url.split("?")[0] : `${origin}${share.url.split("?")[0]}`) : `${origin}/og.jpg`;
+  const settings = await getPublicSettings();
   const title = `${BRAND.name} — ${BRAND.descriptor}`;
   return {
     metadataBase: new URL(origin),
@@ -63,6 +64,9 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [shareUrl],
     },
     robots: { index: true, follow: true },
+    ...(settings.googleSiteVerification || settings.bingSiteVerification
+      ? { verification: { ...(settings.googleSiteVerification ? { google: settings.googleSiteVerification } : {}), ...(settings.bingSiteVerification ? { other: { "msvalidate.01": settings.bingSiteVerification } } : {}) } }
+      : {}),
   };
 }
 
@@ -79,6 +83,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         name: BRAND.name,
         url: origin,
         logo: `${origin}/logo.png`,
+        description: BRAND.description,
+        areaServed: { "@type": "Country", name: "Pakistan" },
+        ...(settings.supportEmail ? { email: settings.supportEmail } : {}),
         ...(settings.supportPhone ? { telephone: settings.supportPhone } : {}),
         sameAs: [settings.instagramUrl, settings.facebookUrl, settings.tiktokUrl].filter(Boolean),
       },

@@ -57,6 +57,11 @@ const serverEnv = {
   ALGOLIA_ADMIN_KEY: "",
   NEXT_PUBLIC_ALGOLIA_SEARCH_KEY: "",
   RESEND_API_KEY: "",
+  RESEND_API_KEY_2: "",
+  BREVO_API_KEY: "",
+  GROQ_API_KEY: "",
+  GROQ_API_KEY_2: "",
+  GROQ_API_KEY_3: "",
   WHATSAPP_ACCESS_TOKEN: "",
   // TCS talks to the local mock below (never to the real courier).
   TCS_USERNAME: "tcs-user",

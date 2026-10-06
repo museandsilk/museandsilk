@@ -61,6 +61,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   });
   const description = product.seoDescription || product.shortDescription || product.description;
   const sizeVaries = product.variants.some((variant) => variant.size);
+  // Each colour is described with its own photo (photos are linked to a colour through one of its sizes).
+  const photoFor = (color: string): string => {
+    const sameColour = new Set(product.variants.filter((variant) => variant.color === color).map((variant) => variant.id));
+    const own = product.images.find((image) => image.variantId && sameColour.has(image.variantId));
+    return own ? absolute(own.url) : primaryImage;
+  };
   const jsonLd =
     product.variants.length >= 2
       ? {
@@ -77,7 +83,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             sku: variant.sku,
             color: variant.color,
             ...(variant.size ? { size: variant.size } : {}),
-            image: [primaryImage],
+            image: [photoFor(variant.color)],
             offers: offer(variant.price, variant.available),
           })),
         }

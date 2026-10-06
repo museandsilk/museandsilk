@@ -436,6 +436,9 @@ export const siteSettings = pgTable("site_settings", {
   refundWindowDays: integer("refund_window_days").notNull().default(7),
   // Advanced: hide a product from the shop once everything in it has been sold out for this many days. 0 = keep forever.
   soldoutHideDays: integer("soldout_hide_days").notNull().default(90),
+  // Advanced: the codes Google Search Console and Bing Webmaster Tools give to prove the shop owns the website.
+  googleSiteVerification: text("google_site_verification").notNull().default(""),
+  bingSiteVerification: text("bing_site_verification").notNull().default(""),
   bankName: text("bank_name").notNull().default(""),
   bankAccountTitle: text("bank_account_title").notNull().default(""),
   bankAccountNumber: text("bank_account_number").notNull().default(""),

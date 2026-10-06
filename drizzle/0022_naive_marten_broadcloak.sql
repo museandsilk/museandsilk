@@ -1,0 +1,2 @@
+ALTER TABLE "site_settings" ADD COLUMN "google_site_verification" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "site_settings" ADD COLUMN "bing_site_verification" text DEFAULT '' NOT NULL;

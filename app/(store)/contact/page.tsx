@@ -4,6 +4,7 @@ import { StoreFooter } from "../_components/store-footer";
 import { getPublicSettings } from "@/lib/commerce";
 import { mapsLink } from "@/lib/geo";
 import { getStoreLocations } from "@/lib/locations";
+import { StoreJsonLd } from "../_components/store-jsonld";
 
 export const revalidate = 300;
 
@@ -19,6 +20,7 @@ export default async function ContactPage() {
 
   return (
     <main>
+      <StoreJsonLd />
       <section className="contact-page">
         <div>
           <p className="eyebrow">Customer care</p>

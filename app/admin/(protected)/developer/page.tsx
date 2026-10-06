@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { requireAdminUser } from "@/lib/auth/admin-auth";
+import { describeAction, predict, type Measured } from "@/lib/capacity";
 import { DB_LIMIT_BYTES, formatBytes, OTHER_KEYS, SERVICES } from "@/lib/dev-limits";
+import { DEFAULT_SOLDOUT_DAYS, getSoldoutDays, idleSoldOutProducts } from "@/lib/soldout-cleanup";
 import { r2Bucket, STORAGE_LIMITS } from "@/lib/storage";
 import { pktDay, type ServiceName } from "@/lib/usage";
 import { Badge, EmptyState, PageHeader, when } from "../../_ui/ui";
@@ -37,7 +39,8 @@ export default async function DeveloperPage() {
   const today = pktDay();
   const monthStart = `${today.slice(0, 7)}-01`;
 
-  const [usageResult, errorResult, errorTotals, statsResult, dbSize, imageTotals] = await Promise.all([
+  const soldoutDays = (await getSoldoutDays()) || DEFAULT_SOLDOUT_DAYS;
+  const [usageResult, errorResult, errorTotals, statsResult, dbSize, imageTotals, countsResult, shrinkResult] = await Promise.all([
     db.execute(sql`
       select service,
              coalesce(sum(calls) filter (where day = ${today}::date), 0)::int as "today",
@@ -52,6 +55,8 @@ export default async function DeveloperPage() {
     db.execute(sql`select key, value, updated_at as "at" from service_stats where key like 'storage:%' or key like 'limits:%'`),
     db.execute(sql`select pg_database_size(current_database())::bigint as bytes`),
     db.execute(sql`select count(*)::int as n, coalesce(sum(byte_size), 0)::bigint as bytes, count(*) filter (where compacted_at is not null)::int as shrunk from product_images where status = 'active'`),
+    db.execute(sql`select (select count(*) from orders)::int as orders, (select count(*) from products)::int as products`),
+    db.execute(sql`select count(*)::int as n, coalesce(sum(i.byte_size), 0)::bigint as bytes from product_images i where i.status = 'active' and i.compacted_at is null and i.product_id in (select id from (${idleSoldOutProducts(soldoutDays)}) as idle)`),
   ]);
 
   const usage = new Map(rowsOf<{ service: ServiceName; today: number; errorsToday: number; month: number; errorsMonth: number; lastAt: string; lastError: string | null }>(usageResult).map((row) => [row.service, row]));
@@ -67,6 +72,25 @@ export default async function DeveloperPage() {
     const value = (row?.value ?? {}) as { bytes?: number; objects?: number };
     return { backend, label: backend === "neon" ? "Neon Storage" : "Cloudflare R2", bytes: Number(value.bytes ?? 0), objects: Number(value.objects ?? 0), limit: STORAGE_LIMITS[backend], at: row?.at, connected: backend === "neon" ? present("AWS_ENDPOINT_URL_S3") : Boolean(r2Bucket()) };
   });
+  const counts = rowsOf<{ orders: number; products: number }>(countsResult)[0] ?? { orders: 0, products: 0 };
+  const shrinkable = rowsOf<{ n: number; bytes: string | number }>(shrinkResult)[0] ?? { n: 0, bytes: 0 };
+  const emailsPerDay = (["resend", "resend-2", "brevo"] as const).reduce((sum, name) => sum + (SERVICES[name].keys.every((key) => present(key)) ? (SERVICES[name].limit ?? 0) : 0), 0);
+  const measured: Measured = {
+    neon: { used: stores[0].bytes, limit: stores[0].limit },
+    r2: { used: stores[1].bytes, limit: stores[1].limit },
+    photoCount: images.n,
+    photoBytes: Number(images.bytes),
+    storedBytes: stores[0].bytes + stores[1].bytes,
+    shrinkableCount: shrinkable.n,
+    shrinkableBytes: Number(shrinkable.bytes),
+    db: { used: dbBytes, limit: DB_LIMIT_BYTES },
+    orders: counts.orders,
+    products: counts.products,
+    emailsPerDay,
+    searchesPerMonth: SERVICES.algolia.limit ?? 10_000,
+    lookupsPerDay: present("GEOAPIFY_API_KEY") ? (SERVICES.geoapify.limit ?? 3000) : 0,
+  };
+  const forecast = predict(measured);
   const totalUsed = stores.reduce((sum, s) => sum + s.bytes, 0);
   const totalLimit = stores.reduce((sum, s) => sum + s.limit, 0);
 
@@ -80,6 +104,39 @@ export default async function DeveloperPage() {
         <section className="a-card a-card-pad"><small className="a-muted">Database</small><h2 style={{ fontSize: 28 }}>{formatBytes(dbBytes)}</h2><small className="a-muted">of {formatBytes(DB_LIMIT_BYTES)} on the free plan · {formatBytes(Math.max(0, DB_LIMIT_BYTES - dbBytes))} left</small></section>
         <section className="a-card a-card-pad"><small className="a-muted">Product photos</small><h2 style={{ fontSize: 28 }}>{images.n}</h2><small className="a-muted">{formatBytes(Number(images.bytes))} originals · {images.shrunk} shrunk</small></section>
       </div>
+
+      <section className="a-card" style={{ marginBottom: 18 }} aria-label="Capacity forecast">
+        <header className="a-card-head">
+          <div>
+            <h2>What we can still hold</h2>
+            <small>Estimates from today’s real numbers. The assumption behind each answer is shown, so you can judge it.</small>
+          </div>
+        </header>
+        {forecast.weakest && (
+          <div style={{ padding: "0 22px" }}>
+            <p className="a-note warn" style={{ margin: "0 0 12px" }}>
+              <strong>Runs out first: {forecast.weakest.label.toLowerCase()}</strong> – about {forecast.weakest.remaining.toLocaleString()} {forecast.weakest.unit} left. {describeAction(forecast.weakest)}
+            </p>
+          </div>
+        )}
+        <div className="a-table-wrap">
+          <table className="a-table">
+            <thead><tr><th>Room for</th><th className="num">About</th><th>How we worked it out</th></tr></thead>
+            <tbody>
+              {forecast.headroom.map((item) => (
+                <tr key={item.key}>
+                  <td><strong>{item.label}</strong></td>
+                  <td className="num a-strong">{item.remaining.toLocaleString()} <small>{item.unit}</small></td>
+                  <td><small className="a-muted">{item.basis}</small></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="a-help" style={{ padding: "0 22px 16px" }}>
+          Photos: about {forecast.photos.more.toLocaleString()} more fit today{shrinkable.n > 0 ? `, roughly ${forecast.photos.moreAfterShrinking.toLocaleString()} if the ${shrinkable.n} photos of long sold-out products are made smaller (Settings → Advanced)` : ""}. One photo takes about {Math.round(forecast.photos.perPhoto / 1024)} KB with all its sizes.
+        </p>
+      </section>
 
       <section className="a-card" style={{ marginBottom: 18 }}>
         <header className="a-card-head">

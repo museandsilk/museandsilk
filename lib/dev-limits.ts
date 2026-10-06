@@ -20,6 +20,10 @@ export type ServiceInfo = {
 export const SERVICES: Record<ServiceName, ServiceInfo> = {
   algolia: { label: "Algolia (search)", period: "month", limit: 10_000, unit: "requests", keys: ["ALGOLIA_APP_ID", "ALGOLIA_ADMIN_KEY", "NEXT_PUBLIC_ALGOLIA_SEARCH_KEY"], note: "When it runs out, the built-in search takes over by itself.", dashboard: "https://dashboard.algolia.com" },
   groq: { label: "Groq (“Write it for me”)", period: "day", limit: 14_400, unit: "requests", keys: ["GROQ_API_KEY"], note: "The real remaining number from Groq is shown below when it has reported one.", dashboard: "https://console.groq.com" },
+  "groq-2": { label: "Groq – key 2", period: "day", limit: 14_400, unit: "requests", keys: ["GROQ_API_KEY_2"], note: "Keys are used in turn so each one's allowance lasts.", dashboard: "https://console.groq.com" },
+  "groq-3": { label: "Groq – key 3", period: "day", limit: 14_400, unit: "requests", keys: ["GROQ_API_KEY_3"], note: "Keys are used in turn so each one's allowance lasts.", dashboard: "https://console.groq.com" },
+  "resend-2": { label: "Resend – second account", period: "day", limit: 100, unit: "emails", keys: ["RESEND_API_KEY_2"], note: "Used automatically when the first account's daily allowance is used up. Optional.", dashboard: "https://resend.com" },
+  brevo: { label: "Brevo (backup emails)", period: "day", limit: 300, unit: "emails", keys: ["BREVO_API_KEY"], note: "Free: 300 emails a day. Used when Resend is full or down. Optional.", dashboard: "https://app.brevo.com" },
   resend: { label: "Resend (emails)", period: "day", limit: 100, unit: "emails", keys: ["RESEND_API_KEY"], note: "Free plan: 100 a day and 3,000 a month.", dashboard: "https://resend.com" },
   geoapify: { label: "Geoapify (address search)", period: "day", limit: 3_000, unit: "lookups", keys: ["GEOAPIFY_API_KEY"], note: "Each address lookup is one request; answers are cached for a day.", dashboard: "https://myprojects.geoapify.com" },
   tcs: { label: "TCS (parcels)", period: "none", limit: null, unit: "requests", keys: ["TCS_USERNAME", "TCS_PASSWORD", "TCS_ACCOUNT_NO"], note: "No published limit.", dashboard: "https://www.tcsexpress.com" },
