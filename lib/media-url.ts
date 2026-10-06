@@ -12,7 +12,12 @@ import { variantKeyFor } from "./image-variants";
  * (e.g. `?vw=320.640.960`), so the next/image loader can pick the right file without a DB lookup.
  * Pure + dependency-free: safe to import from server and client components alike.
  */
-export const CDN_BASE = (process.env.NEXT_PUBLIC_CDN_URL || "/cdn").replace(/\/$/, "");
+/** Tolerates a value pasted as a markdown link, with quotes, spaces or a trailing slash; anything unusable means "/cdn". */
+function cleanCdnBase(raw: string | undefined): string {
+  const found = (raw ?? "").match(/https?:\/\/[a-z0-9.-]+(?::\d+)?/i);
+  return found ? found[0] : "/cdn";
+}
+export const CDN_BASE = cleanCdnBase(process.env.NEXT_PUBLIC_CDN_URL);
 
 export function mediaUrl(key: string, variantWidths?: number[] | null): string {
   return `${CDN_BASE}/${key}${variantWidths?.length ? `?vw=${variantWidths.join(".")}` : ""}`;

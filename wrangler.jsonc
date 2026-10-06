@@ -18,11 +18,10 @@
   "observability": {
     "enabled": true
   },
-  "workers_dev": true
-  // Attach the production domain once it is on this Cloudflare account, e.g.:
-  // "routes": [
-  //   { "pattern": "nureasmir.com", "custom_domain": true },
-  //   { "pattern": "www.nureasmir.com", "custom_domain": true },
-  //   { "pattern": "cdn.nureasmir.com", "custom_domain": true }   // optional dedicated CDN host
-  // ]
+  "workers_dev": true,
+  // The shop on the real domain (Cloudflare creates the DNS records and certificates).
+  "routes": [
+    { "pattern": "nureasmir.com", "custom_domain": true },
+    { "pattern": "www.nureasmir.com", "custom_domain": true }
+  ]
 }

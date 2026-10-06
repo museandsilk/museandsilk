@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { categories, products } from "@/db/schema";
 import { mediaUrl } from "@/lib/media-url";
 import { HelpBox } from "../../_ui/client";
+import { PrefetchExcel } from "../../_ui/prefetch-excel";
 import { Icon } from "../../_ui/icons";
 import { Badge, EmptyState, PageHeader, Pager, Tabs, Thumb, pkr, when } from "../../_ui/ui";
 
@@ -72,6 +73,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
+      <PrefetchExcel />
       <PageHeader
         title="Products"
         intro="Everything you sell. Click a product to change its photos, price or stock."

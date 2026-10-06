@@ -15,7 +15,6 @@
   ],
   "vars": { "APP_TARGET": "admin" },
   "observability": { "enabled": true },
-  "workers_dev": true
-  // Attach a hostname such as admin.<domain> once the domain is on this Cloudflare account:
-  // "routes": [{ "pattern": "admin.nureasmir.com", "custom_domain": true }]
+  "workers_dev": true,
+  "routes": [{ "pattern": "admin.nureasmir.com", "custom_domain": true }]
 }
