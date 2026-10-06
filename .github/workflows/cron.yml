@@ -29,14 +29,13 @@ jobs:
           curl -sf -X GET "$SITE_URL/api/cron/expire-reservations" \
             -H "Authorization: Bearer $CRON_SECRET"
 
-      # Books customer-confirmed orders with PostEx and syncs courier status back into the orders.
-      # Last and continue-on-error on purpose: a PostEx problem must never fail (or block) the
-      # reservation-expiry and DB keep-alive steps above, which real order handling depends on.
-      - name: PostEx auto-booking + status sync
+      # Asks TCS where each booked parcel is. When TCS has collected one the order moves to "With TCS" (and can
+      # no longer be cancelled); delivered / returned parcels update their orders too. Non-blocking on purpose:
+      # a TCS problem must never fail the reservation-expiry and DB keep-alive steps above.
+      - name: TCS status sync
         continue-on-error: true
         run: |
-          curl -sf -X GET "$SITE_URL/api/cron/postex-sync" \
-            -H "Authorization: Bearer $CRON_SECRET"
+          curl -sf -X GET "$SITE_URL/api/cron/courier-sync"             -H "Authorization: Bearer $CRON_SECRET"
 
       # Announces flash sales that just went live (push to opted-in shoppers) and repairs any
       # reserved-stock drift. Also non-blocking.

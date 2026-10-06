@@ -270,23 +270,26 @@ export const orders = pgTable("orders", {
   // than recomputed — the zone's estimate can change later, but the promise already made to this
   // specific customer at checkout shouldn't.
   estimatedDeliveryDate: date("estimated_delivery_date"),
-  // PostEx courier booking (see lib/postex.ts and app/api/admin/orders/[id]/postex). Null until an
-  // admin books the parcel. While a booking request is in flight this holds the sentinel "PENDING"
-  // (with postexBookedAt as the claim time) so a double-click can't book the same order twice; it's
-  // replaced by the real tracking number on success, or reset to null on failure.
-  postexTrackingNumber: text("postex_tracking_number"),
-  postexBookedAt: timestamp("postex_booked_at", { withTimezone: true }),
-  // PostEx's own last-known status name ("Unbooked" → "Booked" once a load sheet is generated, then
-  // "Picked By PostEx", "Out For Delivery", "Delivered", …). Refreshed by the scheduled sync
-  // (app/api/cron/postex-sync) and the admin "Sync" buttons, and read by the customer tracking page
-  // so it never has to call PostEx (or expose the token) on a customer's behalf.
-  postexStatus: text("postex_status"),
-  postexSyncedAt: timestamp("postex_synced_at", { withTimezone: true }),
-  // Automatic booking bookkeeping: attempts made so far (capped at 3, also set to 3 to opt an order
-  // out — e.g. when an admin cancels its booking, so the sweeper doesn't just re-book it) and the
-  // reason the last attempt failed, shown to the admin in the order drawer.
-  postexAutoAttempts: integer("postex_auto_attempts").notNull().default(0),
-  postexAutoError: text("postex_auto_error"),
+  // Courier booking (TCS — see lib/tcs.ts and lib/courier.ts). Null until the parcel is booked. While a
+  // booking request is in flight this holds the sentinel "PENDING" (with courierBookedAt as the claim
+  // time) so a double-click can't book the same order twice; it is replaced by the real consignment
+  // (CN) number on success, or reset to null on failure. An admin can also type in a CN booked by hand
+  // on the TCS portal.
+  courierName: text("courier_name").notNull().default("TCS"),
+  courierTrackingNumber: text("courier_tracking_number"),
+  courierBookedAt: timestamp("courier_booked_at", { withTimezone: true }),
+  // The courier's own last-known status text ("Shipment Picked Up", "Out For Delivery", "Delivered", …),
+  // refreshed by the scheduled sync and read by the customer tracking page so it never calls TCS itself.
+  courierStatus: text("courier_status"),
+  courierSyncedAt: timestamp("courier_synced_at", { withTimezone: true }),
+  courierAutoAttempts: integer("courier_auto_attempts").notNull().default(0),
+  courierAutoError: text("courier_auto_error"),
+  // The moment TCS physically took the parcel. From here on the order can no longer be cancelled
+  // (lib/order-rules.ts) — a refusal at the door comes back as a return instead.
+  handedOverAt: timestamp("handed_over_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancelReason: text("cancel_reason"),
+  cancelledBy: text("cancelled_by"),
   ...timestamps,
 }, (table) => [
   index("orders_phone_idx").on(table.customerPhone),
@@ -400,6 +403,18 @@ export const siteSettings = pgTable("site_settings", {
   supportPhone: text("support_phone").notNull().default(""),
   supportEmail: text("support_email").notNull().default(""),
   instagramUrl: text("instagram_url").notNull().default(""),
+  facebookUrl: text("facebook_url").notNull().default(""),
+  tiktokUrl: text("tiktok_url").notNull().default(""),
+  // A wa.me "message" link (opens a chat with the business) — preferred over building one from the number.
+  whatsappChatUrl: text("whatsapp_chat_url").notNull().default(""),
+  // TCS "from" details printed on every booking (credentials live in env, never here).
+  tcsShipperName: text("tcs_shipper_name").notNull().default("Nure Asmir"),
+  tcsShipperAddress: text("tcs_shipper_address").notNull().default(""),
+  tcsShipperCityName: text("tcs_shipper_city_name").notNull().default("Karachi"),
+  tcsShipperCityCode: text("tcs_shipper_city_code").notNull().default("KHI"),
+  tcsShipperPhone: text("tcs_shipper_phone").notNull().default(""),
+  // How many days after delivery a shopper may ask for a refund.
+  refundWindowDays: integer("refund_window_days").notNull().default(7),
   bankName: text("bank_name").notNull().default(""),
   bankAccountTitle: text("bank_account_title").notNull().default(""),
   bankAccountNumber: text("bank_account_number").notNull().default(""),
@@ -451,3 +466,43 @@ export const deliveryZones = pgTable("delivery_zones", {
   sortOrder: integer("sort_order").notNull().default(0),
   ...timestamps,
 }, (table) => [uniqueIndex("delivery_zones_name_idx").on(table.name)]);
+
+// A shopper's refund claim (or one the system opens when a prepaid order is cancelled). The owner reviews
+// it, optionally arranges a return pickup with TCS, and finally marks it refunded with the payment
+// reference. One per order.
+export const refundRequests = pgTable("refund_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id").notNull().unique().references(() => orders.id, { onDelete: "cascade" }),
+  source: text("source").notNull().default("customer"), // "customer" | "admin" | "system"
+  reason: text("reason").notNull(),
+  details: text("details"),
+  amount: integer("amount").notNull(),
+  payoutMethod: text("payout_method"), // "bank" | "jazzcash" | "easypaisa" | "nayapay" | "other"
+  payoutAccount: text("payout_account"),
+  payoutTitle: text("payout_title"),
+  photoKeys: jsonb("photo_keys").$type<string[]>().notNull().default([]),
+  status: text("status").notNull().default("requested"), // "requested" | "approved" | "rejected" | "refunded"
+  adminNote: text("admin_note"),
+  returnTrackingNumber: text("return_tracking_number"),
+  refundedAmount: integer("refunded_amount"),
+  refundReference: text("refund_reference"),
+  refundedAt: timestamp("refunded_at", { withTimezone: true }),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => [index("refund_requests_status_idx").on(table.status, table.createdAt)]);
+
+// Owner-editable website pictures that are not products, categories or homepage banners (those have their
+// own tables): see lib/site-images.ts for the list of slots and their fallbacks.
+export const siteImages = pgTable("site_images", {
+  slot: text("slot").primaryKey(),
+  r2Key: text("r2_key").notNull(),
+  altText: text("alt_text").notNull().default(""),
+  contentType: text("content_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  blurDataUrl: text("blur_data_url"),
+  variantWidths: jsonb("variant_widths").$type<number[]>(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

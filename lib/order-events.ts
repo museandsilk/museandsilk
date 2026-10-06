@@ -34,7 +34,7 @@ async function deliver(orderId: string, event: OrderEventKind, actor: "admin" | 
       orderNumber: orders.orderNumber,
       customerName: orders.customerName,
       customerEmail: orders.customerEmail,
-      trackingNumber: orders.postexTrackingNumber,
+      trackingNumber: orders.courierTrackingNumber,
     })
     .from(orders)
     .where(eq(orders.id, orderId))

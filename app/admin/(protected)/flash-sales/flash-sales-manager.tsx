@@ -143,8 +143,8 @@ export function FlashSalesManager() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Promotions</p>
           <h1>Flash sales</h1>
+          <p className="a-muted" style={{ marginTop: 5, maxWidth: 680 }}>A discount that starts and ends by itself at the times you choose. Customers see the lower price and a countdown. People who saved the item get an alert.</p>
         </div>
         <div className="admin-top-actions">
           <button type="button" onClick={() => setDraft(emptyDraft())}>

@@ -34,7 +34,10 @@ async function orderId(orderNumber: string): Promise<string> {
 }
 
 async function setStatus(request: APIRequestContext, orderNumber: string, toStatus: string) {
-  return request.post(`${BASE}/api/admin/orders/${await orderId(orderNumber)}/status`, { data: { toStatus } });
+  const id = await orderId(orderNumber);
+  // Cancelling has its own endpoint (and rules) – everything else is a plain forward step.
+  if (toStatus === "cancelled") return request.post(`${BASE}/api/admin/orders/${id}/cancel`, { data: { reason: "customer_asked" } });
+  return request.post(`${BASE}/api/admin/orders/${id}/status`, { data: { toStatus } });
 }
 
 test.beforeAll(async ({ request }) => {

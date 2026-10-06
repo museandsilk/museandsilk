@@ -8,12 +8,34 @@ import { auditLogEntry } from "@/lib/admin/audit";
 
 export const dynamic = "force-dynamic";
 
+/** Only web addresses are kept; a bare "instagram.com/name" gets https:// in front. Anything else is dropped. */
+function cleanUrl(value: string): string {
+  const text = value.trim();
+  if (!text) return "";
+  const withScheme = /^https?:\/\//i.test(text) ? text : `https://${text.replace(/^\/+/, "")}`;
+  try {
+    const url = new URL(withScheme);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 const updateSchema = z.object({
   brandName: z.string().min(1).optional(),
   whatsappNumber: z.string().optional(),
   supportPhone: z.string().optional(),
   supportEmail: z.string().optional(),
-  instagramUrl: z.string().optional(),
+  instagramUrl: z.string().max(300).optional(),
+  facebookUrl: z.string().max(300).optional(),
+  tiktokUrl: z.string().max(300).optional(),
+  whatsappChatUrl: z.string().max(300).optional(),
+  tcsShipperName: z.string().max(60).optional(),
+  tcsShipperAddress: z.string().max(240).optional(),
+  tcsShipperCityName: z.string().max(60).optional(),
+  tcsShipperCityCode: z.string().max(8).optional(),
+  tcsShipperPhone: z.string().max(30).optional(),
+  refundWindowDays: z.coerce.number().int().min(0).max(60).optional(),
   bankName: z.string().optional(),
   bankAccountTitle: z.string().optional(),
   bankAccountNumber: z.string().optional(),
@@ -47,7 +69,16 @@ export async function PATCH(request: Request) {
     ...(data.whatsappNumber !== undefined ? { whatsappNumber: cleanPhone(data.whatsappNumber) } : {}),
     ...(data.supportPhone !== undefined ? { supportPhone: cleanPhone(data.supportPhone) } : {}),
     ...(data.supportEmail !== undefined ? { supportEmail: data.supportEmail } : {}),
-    ...(data.instagramUrl !== undefined ? { instagramUrl: data.instagramUrl } : {}),
+    ...(data.instagramUrl !== undefined ? { instagramUrl: cleanUrl(data.instagramUrl) } : {}),
+    ...(data.facebookUrl !== undefined ? { facebookUrl: cleanUrl(data.facebookUrl) } : {}),
+    ...(data.tiktokUrl !== undefined ? { tiktokUrl: cleanUrl(data.tiktokUrl) } : {}),
+    ...(data.whatsappChatUrl !== undefined ? { whatsappChatUrl: cleanUrl(data.whatsappChatUrl) } : {}),
+    ...(data.tcsShipperName !== undefined ? { tcsShipperName: data.tcsShipperName.trim() } : {}),
+    ...(data.tcsShipperAddress !== undefined ? { tcsShipperAddress: data.tcsShipperAddress.trim() } : {}),
+    ...(data.tcsShipperCityName !== undefined ? { tcsShipperCityName: data.tcsShipperCityName.trim() } : {}),
+    ...(data.tcsShipperCityCode !== undefined ? { tcsShipperCityCode: data.tcsShipperCityCode.trim().toUpperCase() } : {}),
+    ...(data.tcsShipperPhone !== undefined ? { tcsShipperPhone: cleanPhone(data.tcsShipperPhone) } : {}),
+    ...(data.refundWindowDays !== undefined ? { refundWindowDays: data.refundWindowDays } : {}),
     ...(data.bankName !== undefined ? { bankName: data.bankName } : {}),
     ...(data.bankAccountTitle !== undefined ? { bankAccountTitle: data.bankAccountTitle } : {}),
     ...(data.bankAccountNumber !== undefined ? { bankAccountNumber: data.bankAccountNumber } : {}),

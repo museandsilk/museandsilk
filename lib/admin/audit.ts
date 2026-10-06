@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { adminAuditLog } from "@/db/schema";
+import { refreshStorefront, STOREFRONT_ACTIONS } from "@/lib/storefront-cache";
 
 /**
  * Builds an admin-audit-log insert and returns the (already-awaitable) query builder so callers can
@@ -22,6 +23,8 @@ export function auditLogEntry(params: {
   entityId?: string;
   detail?: unknown;
 }) {
+  // Every owner change that alters what the shop shows also refreshes the shop's page cache.
+  if (STOREFRONT_ACTIONS.test(params.action)) refreshStorefront();
   return db.insert(adminAuditLog).values({
     actorEmail: params.actorEmail,
     action: params.action,

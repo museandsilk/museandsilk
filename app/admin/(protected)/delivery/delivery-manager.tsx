@@ -66,8 +66,8 @@ export function DeliveryManager() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Nure Asmir</p>
-          <h1>Delivery Zones</h1>
+          <h1>Delivery charges</h1>
+          <p className="a-muted" style={{ marginTop: 5, maxWidth: 680 }}>What a customer pays for delivery, by city. Add one area for each price (for example “Karachi” and “Rest of Pakistan”).</p>
         </div>
       </header>
       {message && (

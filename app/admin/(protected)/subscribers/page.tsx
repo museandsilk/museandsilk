@@ -1,32 +1,26 @@
 import { desc } from "drizzle-orm";
 import { db } from "@/db";
 import { subscribers } from "@/db/schema";
+import { EmptyState, PageHeader, fullDate } from "../../_ui/ui";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Email list" };
 
 export default async function AdminSubscribersPage() {
-  const rows = await db.select().from(subscribers).orderBy(desc(subscribers.createdAt));
-
+  const rows = await db.select().from(subscribers).orderBy(desc(subscribers.createdAt)).limit(1000);
   return (
-    <section className="admin-main">
-      <header className="admin-topbar">
-        <div>
-          <p className="eyebrow">Nure Asmir</p>
-          <h1>Subscribers</h1>
-          <p>Consent-recorded newsletter subscribers collected by the website.</p>
-        </div>
-      </header>
-      <div className="order-desk">
-        <div className="admin-table-card">
-          <div className="admin-table-wrap">
-            <table>
+    <>
+      <PageHeader title="Email list" intro="People who signed up on your website to hear about new arrivals and offers. They agreed to receive your emails." />
+      <div className="a-card">
+        {rows.length ? (
+          <div className="a-table-wrap">
+            <table className="a-table">
               <thead>
                 <tr>
                   <th>Email</th>
                   <th>Name</th>
-                  <th>Source</th>
+                  <th>Signed up</th>
                   <th>Status</th>
-                  <th>Consent</th>
                 </tr>
               </thead>
               <tbody>
@@ -34,22 +28,17 @@ export default async function AdminSubscribersPage() {
                   <tr key={subscriber.email}>
                     <td>{subscriber.email}</td>
                     <td>{subscriber.firstName || "—"}</td>
-                    <td>{subscriber.source}</td>
-                    <td>{subscriber.status}</td>
-                    <td>{subscriber.consentAt.toLocaleString("en-PK")}</td>
+                    <td>{fullDate(subscriber.consentAt)}</td>
+                    <td>{subscriber.status === "subscribed" ? "Subscribed" : "Unsubscribed"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {!rows.length && (
-              <div className="admin-empty">
-                <h3>No subscribers yet</h3>
-                <p>Newsletter signups will appear here.</p>
-              </div>
-            )}
           </div>
-        </div>
+        ) : (
+          <EmptyState icon="mail" title="No sign-ups yet">When a customer enters their email in the box at the bottom of your website, it appears here.</EmptyState>
+        )}
       </div>
-    </section>
+    </>
   );
 }

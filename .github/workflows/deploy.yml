@@ -81,9 +81,12 @@ jobs:
           WHATSAPP_APP_SECRET: ${{ secrets.WHATSAPP_APP_SECRET }}
           WHATSAPP_TEMPLATE_NAME: ${{ secrets.WHATSAPP_TEMPLATE_NAME }}
           WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${{ secrets.WHATSAPP_WEBHOOK_VERIFY_TOKEN }}
-          POSTEX_API_TOKEN: ${{ secrets.POSTEX_API_TOKEN }}
-          POSTEX_PICKUP_ADDRESS_CODE: ${{ secrets.POSTEX_PICKUP_ADDRESS_CODE }}
-          POSTEX_AUTO_BOOK_FROM: ${{ secrets.POSTEX_AUTO_BOOK_FROM }}
+          TCS_USERNAME: ${{ secrets.TCS_USERNAME }}
+          TCS_PASSWORD: ${{ secrets.TCS_PASSWORD }}
+          TCS_ACCOUNT_NO: ${{ secrets.TCS_ACCOUNT_NO }}
+          TCS_COST_CENTER_CODE: ${{ secrets.TCS_COST_CENTER_CODE }}
+          TCS_ENV: ${{ secrets.TCS_ENV }}
+          TCS_SERVICE_CODE: ${{ secrets.TCS_SERVICE_CODE }}
         run: |
           set -euo pipefail
           # The Workers must exist before secrets can be attached, so deploy first on a brand-new account
@@ -93,7 +96,7 @@ jobs:
               AWS_SECRET_ACCESS_KEY AWS_REGION ALGOLIA_APP_ID ALGOLIA_ADMIN_KEY FIREBASE_SERVICE_ACCOUNT RESEND_API_KEY \
               RESEND_FROM_EMAIL RESEND_FROM_NAME WHATSAPP_DEFAULT_NUMBER CRON_SECRET GROQ_API_KEY TURNSTILE_SECRET_KEY \
               CSP_NONCE WHATSAPP_ACCESS_TOKEN WHATSAPP_PHONE_NUMBER_ID WHATSAPP_APP_SECRET WHATSAPP_TEMPLATE_NAME \
-              WHATSAPP_WEBHOOK_VERIFY_TOKEN POSTEX_API_TOKEN POSTEX_PICKUP_ADDRESS_CODE POSTEX_AUTO_BOOK_FROM; do
+              WHATSAPP_WEBHOOK_VERIFY_TOKEN TCS_USERNAME TCS_PASSWORD TCS_ACCOUNT_NO TCS_COST_CENTER_CODE TCS_ENV TCS_SERVICE_CODE; do
               value="${!name:-}"
               if [ -n "$value" ]; then
                 printf '%s' "$value" | npx wrangler secret put "$name" -c "$config" || echo "::warning::could not set $name on $config"

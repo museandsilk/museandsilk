@@ -155,7 +155,7 @@ test.describe("admin double-clicks", () => {
     await adminCookie(request);
     const [row] = (await sql`select id from orders where order_number = ${String(mine.body.orderNumber)}`) as Array<{ id: string }>;
     const results = await Promise.all(
-      Array.from({ length: 4 }, () => request.post(`${BASE}/api/admin/orders/${row.id}/status`, { data: { toStatus: "cancelled" } })),
+      Array.from({ length: 4 }, () => request.post(`${BASE}/api/admin/orders/${row.id}/cancel`, { data: { reason: "customer_asked" } })),
     );
     const codes = results.map((r) => r.status()).sort();
     expect(codes.filter((c) => c === 200)).toHaveLength(1);

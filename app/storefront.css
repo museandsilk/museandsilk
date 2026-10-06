@@ -349,3 +349,20 @@
 
 .field-wide { grid-column: 1 / -1; }
 @media (max-width: 800px) { .field-wide { grid-column: auto; } }
+
+/* ---- order help on the tracking page: cancel / refund ---- */
+.button-light { background: #fff; color: var(--ink); border-color: #cfcfcf; }
+.button-light:hover { border-color: var(--ink); }
+.button:disabled { opacity: .6; cursor: not-allowed; }
+.order-help { margin: 28px 0 8px; display: grid; gap: 14px; }
+.order-help-card, .order-help-form { padding: 20px; border: 1px solid #e1e1e1; display: grid; gap: 10px; justify-items: start; background: #fafafa; }
+.order-help-card h3, .order-help-form h3 { margin: 0; font: 500 18px/1.3 var(--sans); letter-spacing: .02em; }
+.order-help-card p, .order-help-form p { margin: 0; color: #444; line-height: 1.6; }
+.order-help-muted { color: #666; font-size: 14px; line-height: 1.6; }
+.order-help-done { padding: 14px 16px; background: #eef6f0; border: 1px solid #cfe5d5; color: #1d4d2c; }
+.order-help-form { justify-items: stretch; }
+.order-help-form label { display: grid; gap: 6px; }
+.order-help-form label > span { font-size: 14px; color: #333; }
+.order-help-form input:not([type="file"]), .order-help-form select, .order-help-form textarea { width: 100%; min-height: 46px; padding: 11px 12px; border: 1px solid #cfcfcf; background: #fff; font: 16px var(--sans); border-radius: 0; }
+.order-help-form textarea { resize: vertical; }
+.order-help-actions { display: flex; flex-wrap: wrap; gap: 10px; }

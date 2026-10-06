@@ -249,8 +249,8 @@ export function CampaignManager() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Nure Asmir</p>
-          <h1>Campaign</h1>
+          <h1>Home page banners</h1>
+          <p className="a-muted" style={{ marginTop: 5, maxWidth: 680 }}>The big pictures at the top of your home page. They change one after another. Upload a wide picture for computers and, if you like, a tall one for phones.</p>
         </div>
       </header>
       {message && (

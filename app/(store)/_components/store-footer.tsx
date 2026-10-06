@@ -3,11 +3,11 @@ import Link from "next/link";
 import { getActiveCategories, getPublicSettings } from "@/lib/commerce";
 import { BRAND } from "@/lib/brand";
 import { NewsletterForm } from "./store-components";
-import { InstagramIcon, WhatsAppIcon } from "./icons";
+import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from "./icons";
 
 export async function StoreFooter() {
   const [settings, categories] = await Promise.all([getPublicSettings(), getActiveCategories()]);
-  const whatsapp = settings.whatsappNumber ? `https://wa.me/${settings.whatsappNumber.replace(/[^\d]/g, "")}` : "/contact";
+  const whatsapp = settings.whatsappChatUrl || (settings.whatsappNumber ? `https://wa.me/${settings.whatsappNumber.replace(/[^\d]/g, "")}` : "/contact");
 
   return (
     <>
@@ -22,9 +22,19 @@ export async function StoreFooter() {
             <Image src="/brand/wordmark-light.png" alt={BRAND.name} width={395} height={100} unoptimized />
             <p>{BRAND.description}</p>
             <div className="footer-social">
+              {settings.facebookUrl && (
+                <a href={settings.facebookUrl} target="_blank" rel="noreferrer noopener" aria-label="Facebook">
+                  <FacebookIcon />
+                </a>
+              )}
               {settings.instagramUrl && (
-                <a href={settings.instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram">
+                <a href={settings.instagramUrl} target="_blank" rel="noreferrer noopener" aria-label="Instagram">
                   <InstagramIcon />
+                </a>
+              )}
+              {settings.tiktokUrl && (
+                <a href={settings.tiktokUrl} target="_blank" rel="noreferrer noopener" aria-label="TikTok">
+                  <TikTokIcon />
                 </a>
               )}
               <a href={whatsapp} target="_blank" rel="noreferrer" aria-label="WhatsApp">
@@ -55,8 +65,8 @@ export async function StoreFooter() {
               <Link href="/about">Our story</Link>
               <Link href="/policies/privacy">Privacy policy</Link>
               <Link href="/policies/terms">Terms of service</Link>
-              {settings.supportPhone && <p>{settings.supportPhone}</p>}
-              {settings.supportEmail && <p>{settings.supportEmail}</p>}
+              {settings.supportPhone && <a href={`tel:${settings.supportPhone.replace(/\s/g, "")}`}>{settings.supportPhone}</a>}
+              {settings.supportEmail && <a href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a>}
             </div>
           </div>
         </div>

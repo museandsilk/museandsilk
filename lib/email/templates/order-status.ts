@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from "../escape";
 
-export type OrderEventKind = "confirmed" | "paid" | "shipped" | "delivered" | "cancelled" | "returned";
+export type OrderEventKind = "confirmed" | "paid" | "shipped" | "delivered" | "cancelled" | "returned" | "refund_approved" | "refund_declined" | "refunded";
 
 export type OrderStatusEmailPayload = {
   event: OrderEventKind;
@@ -21,6 +21,9 @@ export const ORDER_EVENT_COPY: Record<OrderEventKind, { title: string; body: (n:
   delivered: { title: "Order delivered", body: (n) => `Order ${n} has been delivered. We hope you love it.` },
   cancelled: { title: "Order cancelled", body: (n) => `Order ${n} has been cancelled. Any reserved items were released.` },
   returned: { title: "Order returned", body: (n) => `Order ${n} was marked as returned. Contact us if you have any questions.` },
+  refund_approved: { title: "Refund approved", body: (n) => `Good news — we approved the refund for order ${n}. We will send your money shortly and let you know when it is done.` },
+  refund_declined: { title: "About your refund request", body: (n) => `We could not approve the refund for order ${n}. Open your order to read why, or WhatsApp us and we will help.` },
+  refunded: { title: "Your refund has been sent", body: (n) => `We have sent your refund for order ${n}. It can take a day or two to show in your account.` },
 };
 
 export function orderStatusEmail(payload: OrderStatusEmailPayload): string {

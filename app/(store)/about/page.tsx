@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { getSiteImages } from "@/lib/site-images";
 import { StoreFooter } from "../_components/store-footer";
+
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Our story",
@@ -9,12 +12,13 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const photo = (await getSiteImages()).about_hero;
   return (
     <main>
       <section className="story-page">
         <div className="story-image">
-          <Image src="/og.jpg" alt="Nure Asmir men's wear storefront" fill priority sizes="50vw" />
+          <Image src={photo?.url ?? "/og.jpg"} alt={photo?.alt || "Nure Asmir men's wear"} fill priority sizes="50vw" {...(photo?.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: photo.blurDataUrl } : {})} />
         </div>
         <article>
           <p className="eyebrow">Our story</p>

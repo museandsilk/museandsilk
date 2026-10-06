@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { BRAND } from "@/lib/brand";
 import { mediaUrl } from "@/lib/media-url";
 import { applySales, getActiveSales } from "@/lib/sales";
 import { campaignSlides, categories, collections, productCollections, productImages, products, productVariants, siteSettings } from "@/db/schema";
@@ -589,6 +590,10 @@ export type PublicSettings = {
   supportPhone: string;
   supportEmail: string;
   instagramUrl: string;
+  facebookUrl: string;
+  tiktokUrl: string;
+  /** wa.me link that opens a chat with the business (falls back to wa.me/<number>). */
+  whatsappChatUrl: string;
   freeDeliveryThreshold: number;
   metaPixelId: string;
   gaMeasurementId: string;
@@ -600,10 +605,13 @@ export type PublicSettings = {
 export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
   const [row] = await db.select().from(siteSettings).where(eq(siteSettings.id, "store")).limit(1);
   return {
-    whatsappNumber: row?.whatsappNumber || process.env.WHATSAPP_DEFAULT_NUMBER || "",
-    supportPhone: row?.supportPhone ?? "",
+    whatsappNumber: row?.whatsappNumber || process.env.WHATSAPP_DEFAULT_NUMBER || BRAND.contact.phone,
+    supportPhone: row?.supportPhone || BRAND.contact.phone,
     supportEmail: row?.supportEmail ?? "",
-    instagramUrl: row?.instagramUrl ?? "",
+    instagramUrl: row?.instagramUrl || BRAND.contact.instagramUrl,
+    facebookUrl: row?.facebookUrl || BRAND.contact.facebookUrl,
+    tiktokUrl: row?.tiktokUrl || BRAND.contact.tiktokUrl,
+    whatsappChatUrl: row?.whatsappChatUrl || BRAND.contact.whatsappChatUrl,
     freeDeliveryThreshold: row?.freeDeliveryThreshold ?? 4000,
     metaPixelId: row?.metaPixelId ?? "",
     gaMeasurementId: row?.gaMeasurementId ?? "",

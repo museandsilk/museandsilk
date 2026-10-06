@@ -253,8 +253,10 @@ export function CollectionManager({ products }: { products: Product[] }) {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Nure Asmir</p>
-          <h1>Categories &amp; Collections</h1>
+          <h1>Categories</h1>
+          <p className="a-muted" style={{ marginTop: 5, maxWidth: 680 }}>
+            <strong>Categories</strong> are the groups customers shop by, like Shirts or Pants. <strong>Collections</strong> are hand-picked lists you create for a season or event, like “Eid Edit”.
+          </p>
         </div>
         <div className="admin-top-actions">
           <Link href="/admin/products">← Products</Link>

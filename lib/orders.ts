@@ -32,7 +32,7 @@ export async function expireReservations(): Promise<void> {
   for (const order of expired) {
     const cancelled = await db
       .update(orders)
-      .set({ orderStatus: "cancelled", updatedAt: now })
+      .set({ orderStatus: "cancelled", updatedAt: now, cancelledAt: now, cancelReason: "expired", cancelledBy: "system" })
       .where(and(eq(orders.id, order.id), eq(orders.orderStatus, "pending_confirmation")))
       .returning({ id: orders.id });
     if (cancelled.length === 0) continue; // a concurrent run already handled this order

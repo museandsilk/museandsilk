@@ -1,0 +1,44 @@
+import { cache } from "react";
+import { db } from "@/db";
+import { siteImages } from "@/db/schema";
+import { mediaUrl } from "@/lib/media-url";
+
+/** Pictures the owner can swap from Admin → Website pictures (besides products, categories and home banners). */
+export const SITE_IMAGE_SLOTS = [
+  {
+    slot: "about_hero",
+    label: "Photo on the “Our story” page",
+    help: "The big picture next to the story. A portrait or square photo works best.",
+    size: "about 1200 × 1500 pixels (portrait)",
+    fallback: "/og.jpg",
+    aspect: "4 / 5",
+  },
+  {
+    slot: "share_image",
+    label: "Picture shown when someone shares your website link",
+    help: "What people see when your link is sent on WhatsApp, Facebook or in Google results.",
+    size: "1200 × 630 pixels (wide)",
+    fallback: "/og.jpg",
+    aspect: "1200 / 630",
+  },
+] as const;
+export type SiteImageSlot = (typeof SITE_IMAGE_SLOTS)[number]["slot"];
+
+export function isSiteImageSlot(value: string): value is SiteImageSlot {
+  return SITE_IMAGE_SLOTS.some((item) => item.slot === value);
+}
+
+export type SiteImage = { slot: string; url: string; originalKey: string; alt: string; blurDataUrl: string | null; updatedAt: number };
+
+/** All owner-set pictures (usually zero, one or two rows). Never throws – the shop falls back to its built-in pictures. */
+export const getSiteImages = cache(async (): Promise<Record<string, SiteImage>> => {
+  try {
+    const rows = await db.select().from(siteImages);
+    return Object.fromEntries(
+      rows.map((row) => [row.slot, { slot: row.slot, url: mediaUrl(row.r2Key, row.variantWidths), originalKey: row.r2Key, alt: row.altText, blurDataUrl: row.blurDataUrl, updatedAt: row.updatedAt.getTime() }]),
+    );
+  } catch (error) {
+    console.error("site images lookup failed – using built-in pictures", error);
+    return {};
+  }
+});

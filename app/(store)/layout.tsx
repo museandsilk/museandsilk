@@ -9,14 +9,15 @@ import { ServiceWorkerRegistrar } from "./_components/sw-register";
 export default async function StoreLayout({ children }: { children: React.ReactNode }) {
   const settings = await getPublicSettings();
   const digits = settings.whatsappNumber.replace(/[^\d]/g, "");
+  const chat = settings.whatsappChatUrl || (digits ? `https://wa.me/${digits}` : "");
   return (
     <CurrencyProvider>
       <StoreHeader />
       {children}
       <a
         className="float-whatsapp"
-        href={digits ? `https://wa.me/${digits}` : "/contact"}
-        target={digits ? "_blank" : undefined}
+        href={chat || "/contact"}
+        target={chat ? "_blank" : undefined}
         rel="noreferrer"
         aria-label="Chat with us on WhatsApp"
       >

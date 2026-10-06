@@ -152,3 +152,21 @@ export async function clearPushDevices() {
   await sql`delete from customer_push_devices`;
   await sql`delete from admin_push_devices`;
 }
+
+export const MOCK_TCS = process.env.E2E_MOCK_TCS ?? "http://127.0.0.1:4011";
+export const mockTcs = {
+  async reset() {
+    await fetch(`${MOCK_TCS}/__state`, { method: "DELETE" });
+  },
+  async state(): Promise<{ bookings: Array<{ cn: string; referenceno: string; codamount: number; pieces: number; cityname: string; mobile: string; cancelled: boolean }>; log: string[] }> {
+    return (await fetch(`${MOCK_TCS}/__state`)).json();
+  },
+  async setStatus(cn: string, status: string) {
+    await fetch(`${MOCK_TCS}/__status`, { method: "POST", body: JSON.stringify({ cn, status }) });
+  },
+};
+
+export async function orderIdOf(orderNumber: string): Promise<string> {
+  const [row] = (await sql`select id from orders where order_number = ${orderNumber}`) as Array<{ id: string }>;
+  return row.id;
+}

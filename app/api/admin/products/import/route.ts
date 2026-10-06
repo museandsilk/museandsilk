@@ -199,7 +199,8 @@ export async function POST(request: Request) {
   }
 
   // Bulk import touched many products — rebuild the search index once rather than per product.
-  if (succeeded.length) runInBackground(reindexAll(), "reindexAll");
+  // The bulk-upload screen sends small batches and asks for one rebuild at the very end (?reindex=0).
+  if (succeeded.length && new URL(request.url).searchParams.get("reindex") !== "0") runInBackground(reindexAll(), "reindexAll");
 
   return Response.json({ results });
 }

@@ -6,8 +6,8 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * End-to-end suite. Everything runs against a disposable Neon branch ("e2e-test", a child of
  * production), never production data: DATABASE_URL / AWS_ENDPOINT_URL_S3 come from
- * .env.development.local (git-ignored), and Algolia / email / WhatsApp / PostEx credentials are
- * blanked for the servers started below. Push notifications are tested against a local mock of
+ * .env.development.local (git-ignored). For the servers started below, Algolia / email / WhatsApp
+ * credentials are blanked and TCS points at a local mock. Push notifications are tested against a local mock of
  * Google's OAuth + FCM endpoints (e2e/support/mock-fcm.mjs).
  *
  *   npm run test:e2e                         everything
@@ -41,6 +41,7 @@ const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
   publicKeyEncoding: { type: "spki", format: "pem" },
 });
 const MOCK_PORT = 4010;
+const TCS_PORT = 4011;
 const APP_PORT = 3100;
 const PROD_PORT = 3200;
 
@@ -52,7 +53,13 @@ const serverEnv = {
   NEXT_PUBLIC_ALGOLIA_SEARCH_KEY: "",
   RESEND_API_KEY: "",
   WHATSAPP_ACCESS_TOKEN: "",
-  POSTEX_API_TOKEN: "",
+  // TCS talks to the local mock below (never to the real courier).
+  TCS_USERNAME: "tcs-user",
+  TCS_PASSWORD: "tcs-pass",
+  TCS_ACCOUNT_NO: "A1234",
+  TCS_COST_CENTER_CODE: "CC-01",
+  TCS_ENV: "",
+  TCS_BASE_URL: `http://127.0.0.1:${TCS_PORT}`,
   TURNSTILE_SECRET_KEY: "",
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: "",
   NEXT_PUBLIC_SENTRY_DSN: "",
@@ -69,6 +76,7 @@ process.env.DATABASE_URL = testEnv.DATABASE_URL;
 process.env.E2E_BASE_URL = `http://localhost:${APP_PORT}`;
 process.env.E2E_PROD_URL = `http://localhost:${PROD_PORT}`;
 process.env.E2E_MOCK_FCM = `http://127.0.0.1:${MOCK_PORT}`;
+process.env.E2E_MOCK_TCS = `http://127.0.0.1:${TCS_PORT}`;
 process.env.E2E_DATABASE_URL = testEnv.DATABASE_URL;
 process.env.E2E_S3_ENDPOINT = testEnv.AWS_ENDPOINT_URL_S3;
 process.env.E2E_CRON_SECRET = serverEnv.CRON_SECRET;
@@ -112,6 +120,12 @@ export default defineConfig({
   ],
 
   webServer: [
+    {
+      command: "node e2e/support/mock-tcs.mjs",
+      url: `http://127.0.0.1:${TCS_PORT}/health`,
+      reuseExistingServer: true,
+      env: { MOCK_TCS_PORT: String(TCS_PORT) },
+    },
     {
       command: "node e2e/support/mock-fcm.mjs",
       url: `http://127.0.0.1:${MOCK_PORT}/health`,

@@ -25,7 +25,8 @@ const command = process.argv[3] || "build";
 
 // Everything the other target owns. Shared pieces (root layout, db, lib, middleware, /api/media* …) stay.
 const EXCLUDE = {
-  store: ["app/admin", "app/api/admin"],
+  // public/vendor holds the browser build of ExcelJS, which only the admin panel loads.
+  store: ["app/admin", "app/api/admin", "public/vendor"],
   admin: [
     "app/(store)",
     "app/cdn",
@@ -40,6 +41,8 @@ const EXCLUDE = {
     "app/api/newsletter",
     "app/api/orders",
     "app/api/push",
+    "app/api/revalidate",
+    "app/api/search",
     "app/api/whatsapp",
   ],
 }[target];

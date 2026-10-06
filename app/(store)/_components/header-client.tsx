@@ -4,28 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { liteClient } from "algoliasearch/lite";
+import { searchProducts } from "@/lib/search/client";
+import type { SearchHit } from "@/lib/search/types";
 import { cartCount, readCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
 import { Price } from "./currency";
 
 type NavCategory = { name: string; slug: string };
 
-type Hit = {
-  objectID: string;
-  name: string;
-  slug: string;
-  price: number;
-  imageUrl: string | null;
-  category: string;
-  _highlightResult?: { name?: { value: string } };
-};
-
-const APP_ID = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID;
-const SEARCH_KEY = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY;
-const INDEX = process.env.NEXT_PUBLIC_ALGOLIA_INDEX_NAME || "nure_asmir_products";
-
-const searchClient = APP_ID && SEARCH_KEY ? liteClient(APP_ID, SEARCH_KEY) : null;
+type Hit = SearchHit;
 
 const Icon = {
   menu: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18" /></svg>,
@@ -207,6 +194,7 @@ function SearchOverlay({
   const [hits, setHits] = useState<Hit[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [engine, setEngine] = useState<"algolia" | "local">("algolia");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -215,7 +203,7 @@ function SearchOverlay({
 
   useEffect(() => {
     const term = query.trim();
-    if (!term || !searchClient) {
+    if (!term) {
       // Clearing results when the query is emptied is derived state that must follow the input.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setHits([]);
@@ -225,25 +213,12 @@ function SearchOverlay({
     let cancelled = false;
     setLoading(true);
     const timer = window.setTimeout(() => {
-      searchClient
-        .search<Hit>({
-          requests: [
-            {
-              indexName: INDEX,
-              query: term,
-              hitsPerPage: 8,
-              attributesToRetrieve: ["name", "slug", "price", "imageUrl", "category"],
-              attributesToHighlight: ["name"],
-              highlightPreTag: "<mark>",
-              highlightPostTag: "</mark>",
-            },
-          ],
-        })
-        .then((response) => {
+      searchProducts(term, 8)
+        .then((result) => {
           if (cancelled) return;
-          const result = response.results[0] as { hits: Hit[]; nbHits?: number };
           setHits(result.hits);
-          setTotal(result.nbHits ?? result.hits.length);
+          setTotal(result.total);
+          setEngine(result.engine);
         })
         .catch(() => {
           if (!cancelled) setHits([]);
@@ -307,7 +282,7 @@ function SearchOverlay({
                 </div>
                 <p
                   className="search-hit-title"
-                  dangerouslySetInnerHTML={{ __html: sanitizeHighlight(hit._highlightResult?.name?.value ?? hit.name) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHighlight(hit.highlight ?? hit.name) }}
                 />
                 <p className="search-hit-price">
                   <Price amount={hit.price} />
@@ -322,7 +297,7 @@ function SearchOverlay({
               </button>
             </div>
           )}
-          <p className="search-powered">Search by Algolia</p>
+          {engine === "algolia" && <p className="search-powered">Search by Algolia</p>}
         </div>
       )}
     </div>

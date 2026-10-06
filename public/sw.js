@@ -32,7 +32,7 @@ const NETWORK_TIMEOUT = 3500;
 const IS_ADMIN_HOST = self.location.hostname.startsWith("admin.");
 
 const NEVER = [/^\/api\//, /^\/admin/, /^\/cart/, /^\/checkout/, /^\/track-order/, /^\/wishlist/, /^\/search/, /^\/sw\.js/, /^\/firebase-messaging-sw\.js/, /^\/monitoring/];
-const CACHEABLE_API = [/^\/api\/currency$/, /^\/api\/catalog\/by-ids$/];
+const CACHEABLE_API = [/^\/api\/currency$/, /^\/api\/catalog\/by-ids$/, /^\/api\/search\/index$/];
 
 self.addEventListener("install", () => self.skipWaiting());
 

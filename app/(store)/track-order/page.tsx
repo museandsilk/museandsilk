@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { hasCustomerPushToken, pushSupport, registerCustomerPush } from "@/lib/customer-push";
 import { useLockedAction } from "@/lib/use-locked-action";
+import { OrderHelp, type TrackActions, type TrackRefund } from "./order-help";
 
 type Tracked = {
   courier: { name: string; trackingNumber: string; status: string } | null;
@@ -20,6 +21,8 @@ type Tracked = {
   };
   items: { productName: string; variantName: string; quantity: number; lineTotal: number }[];
   history: { status: string; note: string | null; createdAt: string }[];
+  actions: TrackActions;
+  refund: TrackRefund | null;
 };
 
 function TrackOrderForm() {
@@ -35,8 +38,17 @@ function TrackOrderForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
-    await lookup.run(async () => {
-      setError("");
+    await lookup.run(() => find(body));
+  }
+
+  /** Looks the order up again (after a cancel / refund) without making the shopper type it all in once more. */
+  function reload() {
+    if (!result) return;
+    void lookup.run(() => find({ orderNumber: result.order.orderNumber, phone }));
+  }
+
+  async function find(body: Record<string, string>) {
+    setError("");
       try {
         const response = await fetch("/api/orders/track", {
           method: "POST",
@@ -55,8 +67,7 @@ function TrackOrderForm() {
       } catch {
         setResult(null);
         setError("Could not reach the server. Check your connection and try again.");
-      }
-    });
+    }
   }
 
   return (
@@ -142,8 +153,9 @@ function TrackOrderForm() {
               </article>
             ))}
           </div>
+          <OrderHelp orderNumber={result.order.orderNumber} orderStatus={result.order.orderStatus} phone={phone} actions={result.actions} refund={result.refund} total={result.order.total} onChanged={reload} />
           <div className="tracking-items">
-            <h3>Reserved pieces</h3>
+            <h3>Your items</h3>
             {result.items.map((item) => (
               <p key={`${item.productName}-${item.variantName}`}>
                 <span>

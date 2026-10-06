@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { algoliasearch } from "algoliasearch";
 import { getCatalogProducts, toCard, type CatalogProduct } from "@/lib/commerce";
+import { searchProductIds } from "@/lib/search/server";
 import { ProductCard } from "../_components/store-components";
 import { StoreFooter } from "../_components/store-footer";
 
@@ -8,31 +8,16 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Search", robots: { index: false, follow: true } };
 
-/** Typo-tolerant search through Algolia, then mapped back onto the live catalogue so cards always
- * show current stock and prices. Falls back to a plain substring match if Algolia isn't configured
- * or is unreachable, so search never goes dark. */
+/** Typo-tolerant search through Algolia, then mapped back onto the live catalogue so cards always show
+ * current stock and prices. If Algolia's free allowance runs out (or it is unreachable) the built-in
+ * MiniSearch engine answers instead – see lib/search/server.ts – so search never goes dark. */
 async function searchProducts(query: string, catalog: CatalogProduct[]): Promise<CatalogProduct[]> {
-  const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID;
-  const key = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY;
-  if (appId && key) {
-    try {
-      const client = algoliasearch(appId, key);
-      const { hits } = await client.searchSingleIndex<{ objectID: string }>({
-        indexName: process.env.NEXT_PUBLIC_ALGOLIA_INDEX_NAME || "nure_asmir_products",
-        searchParams: { query, hitsPerPage: 48, attributesToRetrieve: ["objectID"] },
-      });
-      const byId = new Map(catalog.map((product) => [product.id, product]));
-      return hits.map((hit) => byId.get(hit.objectID)).filter((product): product is CatalogProduct => !!product);
-    } catch (error) {
-      console.error("Algolia search failed — falling back to substring match", error);
-    }
-  }
+  const { ids } = await searchProductIds(query, 48).catch(() => ({ ids: [] as string[] }));
+  const byId = new Map(catalog.map((product) => [product.id, product]));
+  const found = ids.map((id) => byId.get(id)).filter((product): product is CatalogProduct => !!product);
+  if (found.length) return found;
   const needle = query.toLowerCase();
-  return catalog.filter((product) =>
-    `${product.name} ${product.type} ${product.color} ${product.description ?? ""} ${product.shortDescription ?? ""} ${product.sku}`
-      .toLowerCase()
-      .includes(needle),
-  );
+  return catalog.filter((product) => `${product.name} ${product.type} ${product.color} ${product.description ?? ""} ${product.shortDescription ?? ""} ${product.sku}`.toLowerCase().includes(needle));
 }
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {

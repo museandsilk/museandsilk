@@ -1,8 +1,8 @@
 # Nure Asmir — storefront & admin
 
 Pakistani men's wear e-commerce site ("Tradition in a modern form"): Next.js 16 (App Router) on
-Cloudflare Workers via OpenNext, Neon Postgres + Object Storage + Auth, Algolia search, PostEx
-couriers, WhatsApp order confirmation. The storefront design follows the *Ismail Farid* benchmark:
+Cloudflare Workers via OpenNext, Neon Postgres + Object Storage + Auth, Algolia search (with a built-in MiniSearch fallback), TCS
+courier, WhatsApp order confirmation. The storefront design follows the *Ismail Farid* benchmark:
 a calm, white, image-led layout.
 
 ## Stack
@@ -13,10 +13,11 @@ a calm, white, image-led layout.
 | Database | Neon Postgres (`neondb`, Singapore `ap-southeast-1`) via Drizzle + `neon-http` |
 | Images & files | Neon Object Storage — `nure-asmir-media` (public) and `nure-asmir-private` (payment proofs) |
 | Auth | Neon Auth (Managed Better Auth) is enabled on the project; the admin panel currently uses its own session auth (`lib/auth`) |
-| Search | Algolia (`nure_asmir_products`), instant overlay + `/search` |
+| Search | Algolia (`nure_asmir_products`), instant overlay + `/search`. If Algolia's free allowance runs out (HTTP 429/403) or it is unreachable, the browser switches to a MiniSearch engine that is fetched **only then** (`lib/search/`) |
 | Currency | Frankfurter API (display only — orders are charged in PKR) |
 | Errors | Sentry (browser SDK + lightweight server reporter) |
-| Email / WhatsApp / courier | Resend / WhatsApp Cloud API / PostEx |
+| Email / WhatsApp / courier | Resend / WhatsApp Cloud API / TCS (E-COM API, `lib/tcs.ts`) |
+| Writing helper | Groq (`GROQ_API_KEY`) — product descriptions + SEO text |
 
 Next.js 16 has breaking changes versus older versions — read `node_modules/next/dist/docs/` before
 changing framework-level code (see `AGENTS.md`).
@@ -107,8 +108,9 @@ NEXT_DIST_DIR=.next-prod npx next build && E2E_PROD=1 npx playwright test --proj
 ```
 
 The suite refuses to run unless `DATABASE_URL` points at the disposable Neon branch `e2e-test` (set in the
-git-ignored `.env.development.local`); Algolia, email, WhatsApp and PostEx are switched off for it and push
-notifications go to a local mock of Google's OAuth + FCM endpoints (`e2e/support/mock-fcm.mjs`).
+git-ignored `.env.development.local`); Algolia, email and WhatsApp are switched off for it; push
+notifications go to a local mock of Google's OAuth + FCM endpoints (`e2e/support/mock-fcm.mjs`) and TCS to a local mock
+(`e2e/support/mock-tcs.mjs`).
 
 ## Deployment (GitHub Actions → Cloudflare)
 
@@ -118,7 +120,8 @@ notifications go to a local mock of Google's OAuth + FCM endpoints (`e2e/support
   `NEXT_PUBLIC_SITE_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_INITIAL_PASSWORD`, `CSP_NONCE`,
   `CRON_SECRET`, `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
   `ALGOLIA_APP_ID`, `ALGOLIA_ADMIN_KEY`, `ALGOLIA_INDEX_NAME`, `NEXT_PUBLIC_ALGOLIA_SEARCH_KEY`,
-  `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_CDN_URL` (optional), plus the Resend / WhatsApp / PostEx /
+  `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_CDN_URL` (optional), plus the Resend / WhatsApp / TCS (`TCS_USERNAME`, `TCS_PASSWORD`, `TCS_ACCOUNT_NO`, `TCS_COST_CENTER_CODE`, `TCS_ENV`) /
+  Firebase (`FIREBASE_SERVICE_ACCOUNT`, the whole service-account JSON) / Groq (`GROQ_API_KEY`) /
   Turnstile ones listed in `.env.example`, and `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT` (S3 credentials for the ISR cache bucket only, used by `scripts/purge-isr-cache.ts`).
 * The ISR page cache lives in a small Cloudflare R2 bucket, `nure-asmir-cache`
   (`npx wrangler r2 bucket create nure-asmir-cache`; the workflow does this idempotently).
@@ -138,3 +141,33 @@ for `/cdn/*`. Without `--apply` it only prints what it would do.
 Prices, sizes, stock levels, product copy and the policy pages (shipping, returns, privacy, terms)
 are working placeholders — edit them in the admin panel. The leather wallet / card-holder photos
 supplied show another brand's logo, so those two products are seeded as **draft**.
+
+## The admin panel (`/admin`, laptop only)
+
+Built for daily use by a non-technical owner: plain wording, a hint (?) next to every unfamiliar word, a
+"How this page works" box on every screen, light / night colours and a larger-text switch (cookies), Ctrl+K
+search, and a friendly "please open this on a laptop" screen below 1024 px.
+
+* **Home** – to-do tiles (orders to confirm, receipts, parcels to book, refunds), sales / orders / average order /
+  customers with previous-period comparison, daily chart, best sellers, cities, busiest hours, low stock
+  (`lib/admin/analytics.ts`, hand-drawn SVG charts, no client JS).
+* **Orders** – tabs by job (Needs you → To pack & send → With TCS → Delivered → Cancelled), search, tick boxes for bulk
+  confirm / book with TCS, one-click next step, order page with WhatsApp/call/copy, packing slip, CSV export.
+* **Cancelling** – only until TCS has the parcel (`lib/order-rules.ts`). `orders.handed_over_at` is set when TCS scans it
+  (cron sync) or the owner presses "TCS has collected it"; the guarded UPDATE in `lib/order-actions.ts` makes a cancel
+  and a pickup racing each other resolve to exactly one winner. Customers cancel from *Track your order*.
+* **Refunds** – customers ask from *Track your order* (reason, photos, payout account) within the refund window
+  (Settings, default 7 days); a paid order that is cancelled/returned opens one automatically. Owner approves /
+  declines / marks refunded with a payment reference (`lib/refunds.ts`).
+* **TCS** – `lib/tcs.ts` (token cache, book, cancel, reverse, track, label) and `lib/courier.ts`; with no credentials the
+  owner types the tracking number by hand. `TCS_ENV=production` only after TCS approves UAT. Endpoints follow the
+  *TCS API User Guide v1.0*; the login/label GET calls pass parameters in the query string — confirm both in UAT.
+* **Products** – one-page editor (photos, sizes, price, stock, "write it for me" + "improve for Google" via Groq),
+  **Excel / Google Sheets bulk upload** (`/admin/products/bulk`: template with dropdowns, row-by-row plain-English
+  errors, photo matching by file name, new categories created on request) and **price & stock update by sheet**.
+  ExcelJS is *not* in the app bundle: `scripts/copy-vendor.mjs` copies its browser build to `public/vendor/` and the
+  page loads it only when a button is pressed.
+* **Website pictures** – home banners, category pictures and two single-slot pictures (`site_images`: "Our story" photo,
+  share image). Every owner change refreshes the storefront cache (`lib/storefront-cache.ts` → `/api/revalidate`).
+* **Settings** – contact + social links (also in the footer / JSON-LD), TCS pickup details + connection test,
+  bank, free-delivery threshold, refund window, and a "what is connected" checklist.

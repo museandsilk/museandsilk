@@ -7,7 +7,7 @@ export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Reach Nure Asmir for order help, sizing questions or exchanges — by WhatsApp, email or Instagram.",
+  description: "Reach Nure Asmir for order help, sizing questions or exchanges — by WhatsApp, phone, email or social media.",
   alternates: { canonical: "/contact" },
 };
 
@@ -30,8 +30,8 @@ export default async function ContactPage() {
         <aside>
           <article>
             <span>WhatsApp Business</span>
-            {whatsapp ? (
-              <a href={`https://wa.me/${whatsapp}?text=${encodeURIComponent("Hello Nure Asmir, I would like some assistance.")}`} target="_blank" rel="noreferrer">
+            {settings.whatsappChatUrl || whatsapp ? (
+              <a href={settings.whatsappChatUrl || `https://wa.me/${whatsapp}?text=${encodeURIComponent("Hello Nure Asmir, I would like some assistance.")}`} target="_blank" rel="noreferrer">
                 Start a conversation ↗︎
               </a>
             ) : (
@@ -44,13 +44,33 @@ export default async function ContactPage() {
           </article>
           <article>
             <span>Phone</span>
-            {settings.supportPhone ? <a href={`tel:${settings.supportPhone}`}>{settings.supportPhone}</a> : <p>Coming soon.</p>}
+            {settings.supportPhone ? <a href={`tel:${settings.supportPhone.replace(/\s/g, "")}`}>{settings.supportPhone}</a> : <p>Coming soon.</p>}
           </article>
           <article>
             <span>Instagram</span>
             {settings.instagramUrl ? (
               <a href={settings.instagramUrl} target="_blank" rel="noreferrer">
                 Visit Instagram ↗︎
+              </a>
+            ) : (
+              <p>Coming soon.</p>
+            )}
+          </article>
+          <article>
+            <span>Facebook</span>
+            {settings.facebookUrl ? (
+              <a href={settings.facebookUrl} target="_blank" rel="noreferrer">
+                Visit Facebook ↗︎
+              </a>
+            ) : (
+              <p>Coming soon.</p>
+            )}
+          </article>
+          <article>
+            <span>TikTok</span>
+            {settings.tiktokUrl ? (
+              <a href={settings.tiktokUrl} target="_blank" rel="noreferrer">
+                Visit TikTok ↗︎
               </a>
             ) : (
               <p>Coming soon.</p>

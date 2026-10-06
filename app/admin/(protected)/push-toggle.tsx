@@ -87,10 +87,18 @@ export function PushToggle() {
   if (state === "unsupported") return null;
   return (
     <div className="admin-push">
-      <button type="button" disabled={state === "busy" || state === "blocked"} onClick={state === "on" ? disable : enable}>
-        {state === "on" ? "Order alerts: on" : state === "blocked" ? "Alerts blocked in browser" : "Enable order alerts"}
+      <button
+        type="button"
+        className={`a-btn${state === "on" ? "" : " a-btn-primary"}`}
+        disabled={state === "busy" || state === "blocked"}
+        onClick={state === "on" ? disable : enable}
+        title="Get a pop-up on this computer the moment a new order, payment or refund request arrives"
+      >
+        {state === "busy" ? <span className="spinner" aria-hidden="true" /> : null}
+        {state === "on" ? "Order alerts: on" : state === "blocked" ? "Alerts are blocked in this browser" : "Turn on order alerts"}
       </button>
-      {note && <small>{note}</small>}
+      {state === "blocked" && <small className="a-help">Click the padlock next to the address bar and allow notifications, then reload.</small>}
+      {note && <small className="a-help">{note}</small>}
     </div>
   );
 }

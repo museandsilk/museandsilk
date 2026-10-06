@@ -5,6 +5,7 @@ import "./storefront.css";
 import { BRAND, siteOrigin } from "@/lib/brand";
 import { getPublicSettings } from "@/lib/commerce";
 import { getNonce } from "@/lib/nonce";
+import { getSiteImages } from "@/lib/site-images";
 import { AnalyticsConsent } from "./analytics-consent";
 
 const display = Cormorant_Garamond({
@@ -29,8 +30,10 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
-export function generateMetadata(): Metadata {
+export async function generateMetadata(): Promise<Metadata> {
   const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const share = (await getSiteImages()).share_image;
+  const shareUrl = share ? (/^https?:\/\//.test(share.url) ? share.url.split("?")[0] : `${origin}${share.url.split("?")[0]}`) : `${origin}/og.jpg`;
   const title = `${BRAND.name} — ${BRAND.descriptor}`;
   return {
     metadataBase: new URL(origin),
@@ -51,13 +54,13 @@ export function generateMetadata(): Metadata {
       type: "website",
       locale: "en_PK",
       siteName: BRAND.name,
-      images: [{ url: `${origin}/og.jpg`, width: 1200, height: 630, alt: `${BRAND.name} — ${BRAND.tagline}` }],
+      images: [{ url: shareUrl, width: 1200, height: 630, alt: `${BRAND.name} — ${BRAND.tagline}` }],
     },
     twitter: {
       card: "summary_large_image",
       title: `${title} — ${BRAND.tagline}`,
       description: BRAND.description,
-      images: [`${origin}/og.jpg`],
+      images: [shareUrl],
     },
     robots: { index: true, follow: true },
   };
@@ -76,7 +79,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         name: BRAND.name,
         url: origin,
         logo: `${origin}/logo.png`,
-        ...(settings.instagramUrl ? { sameAs: [settings.instagramUrl] } : {}),
+        ...(settings.supportPhone ? { telephone: settings.supportPhone } : {}),
+        sameAs: [settings.instagramUrl, settings.facebookUrl, settings.tiktokUrl].filter(Boolean),
       },
       {
         "@type": "WebSite",
