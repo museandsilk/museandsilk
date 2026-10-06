@@ -30,7 +30,10 @@ const base = parseEnvFile(path.join(root, ".env.local"));
 const dev = parseEnvFile(path.join(root, ".env.development.local"));
 const testEnv: Record<string, string> = { ...base, ...dev };
 
-if (!/ep-restless-art|e2e/.test(testEnv.DATABASE_URL ?? "") && !process.env.E2E_ALLOW_ANY_DB) {
+// `--project=unit` alone (what CI runs) never touches a database or starts a server, so it needs neither guard nor servers.
+const unitOnly = process.argv.some((arg) => arg === "--project=unit") && !process.argv.some((arg) => /^--project=(?!unit$)/.test(arg));
+
+if (!unitOnly && !/ep-restless-art|e2e/.test(testEnv.DATABASE_URL ?? "") && !process.env.E2E_ALLOW_ANY_DB) {
   throw new Error("Refusing to run: DATABASE_URL is not the e2e-test branch. Create .env.development.local first (see README).");
 }
 
@@ -119,7 +122,9 @@ export default defineConfig({
     { name: "pwa", testDir: "./e2e/ui", testMatch: ["**/pwa.spec.ts"], use: { ...devices["Desktop Chrome"], baseURL: `http://localhost:${PROD_PORT}`, serviceWorkers: "allow" } },
   ],
 
-  webServer: [
+  webServer: unitOnly
+    ? []
+    : [
     {
       command: "node e2e/support/mock-tcs.mjs",
       url: `http://127.0.0.1:${TCS_PORT}/health`,
