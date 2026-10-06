@@ -5,6 +5,10 @@
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable
 
+# Versioned third-party files (the Excel library the admin uses): the name changes with the version, so keep forever.
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # The service worker must always be re-checked so a deploy reaches visitors promptly.
 /sw.js
   Cache-Control: no-cache

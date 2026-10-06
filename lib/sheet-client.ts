@@ -1,10 +1,11 @@
 "use client";
 
 // Browser-only Excel helpers. The Excel library (ExcelJS, ~0.9 MB) is NOT part of the website's code bundle:
-// it is a plain file in /public/vendor that is fetched only when the owner opens the bulk-upload page and
-// presses a button. That keeps the admin fast to open and the server code small.
+// it is a plain, versioned file in /public/vendor (cached by the browser permanently) that is fetched only after the
+// owner opens the product screens (a quiet prefetch) or presses a button. That keeps the admin fast to open and the server code small.
 
 import { parseCsv, SHEET_COLUMNS } from "./product-sheet";
+import { EXCELJS_URL } from "./vendor";
 
 type ExcelJSLike = {
   Workbook: new () => {
@@ -35,7 +36,7 @@ export function loadExcel(): Promise<ExcelJSLike> {
   if (existing) return Promise.resolve(existing);
   loading ??= new Promise<ExcelJSLike>((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "/vendor/exceljs.min.js";
+    script.src = EXCELJS_URL;
     script.async = true;
     script.onload = () => {
       const lib = (window as unknown as { ExcelJS?: ExcelJSLike }).ExcelJS;
