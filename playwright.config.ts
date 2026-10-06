@@ -31,7 +31,9 @@ const dev = parseEnvFile(path.join(root, ".env.development.local"));
 const testEnv: Record<string, string> = { ...base, ...dev };
 
 // `--project=unit` alone (what CI runs) never touches a database or starts a server, so it needs neither guard nor servers.
-const unitOnly = process.argv.some((arg) => arg === "--project=unit") && !process.argv.some((arg) => /^--project=(?!unit$)/.test(arg));
+const unitOnly = process.env.E2E_UNIT_ONLY === "1" || (process.argv.some((arg) => arg === "--project=unit") && !process.argv.some((arg) => /^--project=(?!unit$)/.test(arg)));
+// Playwright's worker processes load this file again without the command line – pass the decision on.
+if (unitOnly) process.env.E2E_UNIT_ONLY = "1";
 
 if (!unitOnly && !/ep-restless-art|e2e/.test(testEnv.DATABASE_URL ?? "") && !process.env.E2E_ALLOW_ANY_DB) {
   throw new Error("Refusing to run: DATABASE_URL is not the e2e-test branch. Create .env.development.local first (see README).");
