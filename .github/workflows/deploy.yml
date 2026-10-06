@@ -52,6 +52,61 @@ jobs:
       - name: Apply database migrations
         run: npx drizzle-kit migrate
 
+      # The ISR page cache needs Cloudflare R2. R2 must be switched on once in the Cloudflare dashboard (R2 →
+      # Enable); until then the site is deployed without it (pages render fresh instead of from the cache).
+      # The footer's "Admin" link needs the admin Worker's address at build time. Use the NEXT_PUBLIC_ADMIN_URL secret
+      # (a custom domain, once there is one); otherwise fall back to the Worker's free workers.dev address.
+      - name: Work out the admin address
+        run: |
+          if [ -z "${NEXT_PUBLIC_ADMIN_URL:-}" ]; then
+            sub=$(curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{console.log(JSON.parse(d).result.subdomain||'')}catch{console.log('')}})")
+            if [ -n "$sub" ]; then echo "NEXT_PUBLIC_ADMIN_URL=https://nure-asmir-admin.$sub.workers.dev" >> "$GITHUB_ENV"; else echo "::warning::could not work out the admin address; set the NEXT_PUBLIC_ADMIN_URL secret."; fi
+          fi
+
+      - name: Prepare the ISR cache bucket (R2)
+        run: |
+          if npx wrangler r2 bucket info nure-asmir-cache >/dev/null 2>&1 || npx wrangler r2 bucket create nure-asmir-cache; then
+            echo "STORE_CONFIG=wrangler.jsonc" >> "$GITHUB_ENV"
+            echo "ADMIN_CONFIG=wrangler.admin.jsonc" >> "$GITHUB_ENV"
+          else
+            echo "::warning::R2 is not enabled on this Cloudflare account – deploying without the page cache. Enable R2 in the Cloudflare dashboard and re-run this workflow."
+            node scripts/without-r2.mjs wrangler.jsonc wrangler.deploy.jsonc
+            node scripts/without-r2.mjs wrangler.admin.jsonc wrangler.admin.deploy.jsonc
+            echo "STORE_CONFIG=wrangler.deploy.jsonc" >> "$GITHUB_ENV"
+            echo "ADMIN_CONFIG=wrangler.admin.deploy.jsonc" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build storefront
+        run: npm run cf:build:store
+
+      - name: Deploy storefront
+        run: npx wrangler deploy -c "$STORE_CONFIG"
+
+      # The ISR page cache lives in a Cloudflare R2 bucket (nure-asmir-cache) that persists across
+      # deploys, while every build's JS/CSS chunk filenames are freshly content-hashed. Without this, a
+      # page cached by the previous build would keep being served after the deploy, referencing chunks
+      # that no longer exist. Scoped to "incremental-cache/" in that bucket only – product, category and
+      # campaign images live in Neon Object Storage and are never touched.
+      - name: Purge stale ISR page cache
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: nure-asmir-cache
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          if [ -n "${R2_ACCESS_KEY_ID:-}" ]; then
+            npx tsx scripts/purge-isr-cache.ts
+          else
+            echo "::warning::R2_* secrets are not set – skipping the ISR cache purge (harmless on a first deploy)."
+          fi
+
+      - name: Build admin
+        run: npm run cf:build:admin
+
+      - name: Deploy admin
+        run: npx wrangler deploy -c "$ADMIN_CONFIG"
+
       # Runtime secrets the Workers read via process.env. Each value arrives through `env:` and is piped
       # with printf '%s' — never interpolated into the script text — so a secret containing shell syntax
       # cannot alter the command. Pushed on every deploy so a rotated GitHub secret stays in sync.
@@ -89,8 +144,7 @@ jobs:
           TCS_SERVICE_CODE: ${{ secrets.TCS_SERVICE_CODE }}
         run: |
           set -euo pipefail
-          # The Workers must exist before secrets can be attached, so deploy first on a brand-new account
-          # (the build steps below do this), then re-run. On an existing account this step just works.
+          # Runs after the deploys: on a brand-new account the Workers only exist once they have been deployed.
           for config in wrangler.jsonc wrangler.admin.jsonc; do
             for name in DATABASE_URL SESSION_SECRET ADMIN_EMAIL ADMIN_INITIAL_PASSWORD AWS_ENDPOINT_URL_S3 AWS_ACCESS_KEY_ID \
               AWS_SECRET_ACCESS_KEY AWS_REGION ALGOLIA_APP_ID ALGOLIA_ADMIN_KEY FIREBASE_SERVICE_ACCOUNT RESEND_API_KEY \
@@ -103,35 +157,3 @@ jobs:
               fi
             done
           done
-
-      - name: Create the ISR cache bucket if it does not exist
-        run: |
-          if ! npx wrangler r2 bucket info nure-asmir-cache >/dev/null 2>&1; then
-            npx wrangler r2 bucket create nure-asmir-cache
-          fi
-
-      - name: Build storefront
-        run: npm run cf:build:store
-
-      - name: Deploy storefront
-        run: npx wrangler deploy -c wrangler.jsonc
-
-      # The ISR page cache lives in a Cloudflare R2 bucket (nure-asmir-cache) that persists across
-      # deploys, while every build's JS/CSS chunk filenames are freshly content-hashed. Without this, a
-      # page cached by the previous build would keep being served after the deploy, referencing chunks
-      # that no longer exist. Scoped to "incremental-cache/" in that bucket only – product, category and
-      # campaign images live in Neon Object Storage and are never touched.
-      - name: Purge stale ISR page cache
-        env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME: nure-asmir-cache
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-        run: npx tsx scripts/purge-isr-cache.ts
-
-      - name: Build admin
-        run: npm run cf:build:admin
-
-      - name: Deploy admin
-        run: npx wrangler deploy -c wrangler.admin.jsonc
