@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TourState } from "./engine";
+import type { TourState } from "@/lib/training-engine";
 
 /** Small building blocks that look like the real admin (same colours, same shapes), used to draw the pretend screens in each lesson. */
 
