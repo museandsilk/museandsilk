@@ -1,5 +1,5 @@
 import { validateImageUpload } from "@/lib/validation";
-import { putObject } from "@/lib/r2";
+import { putObject } from "@/lib/storage";
 import { variantKeyFor } from "@/lib/image-variants";
 
 /** Reads a pre-made set of WebP variants (fields named `${prefix}variant_{width}`, plus

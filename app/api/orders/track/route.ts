@@ -3,7 +3,8 @@ import { db } from "@/db";
 import { orderItems, orderStatusHistory, orders } from "@/db/schema";
 import { cleanPhone } from "@/lib/slug";
 import { toWhatsAppPhone } from "@/lib/whatsapp";
-import { customerFacingPostexStatus } from "@/lib/postex";
+import { customerFacingCourierStatus, cancelBlockReason } from "@/lib/order-rules";
+import { checkRefundEligibility, getRefundForOrder } from "@/lib/refunds";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +37,11 @@ export async function POST(request: Request) {
       paymentStatus: orders.paymentStatus,
       orderStatus: orders.orderStatus,
       reservationExpiresAt: orders.reservationExpiresAt,
-      postexTrackingNumber: orders.postexTrackingNumber,
-      postexStatus: orders.postexStatus,
+      courierName: orders.courierName,
+      courierTrackingNumber: orders.courierTrackingNumber,
+      courierStatus: orders.courierStatus,
+      handedOverAt: orders.handedOverAt,
+      cancelReason: orders.cancelReason,
       createdAt: orders.createdAt,
     })
     .from(orders)
@@ -80,16 +84,36 @@ export async function POST(request: Request) {
   ]);
 
   // Courier details come from what our own sync last stored — the customer's request never reaches
-  // PostEx, and the token never leaves the server. "PENDING" is the in-flight booking marker, not a
+  // TCS, and the account details never leaves the server. "PENDING" is the in-flight booking marker, not a
   // real tracking number, so it's never shown.
-  const hasCourier = Boolean(order.postexTrackingNumber) && order.postexTrackingNumber !== "PENDING";
+  const hasCourier = Boolean(order.courierTrackingNumber) && order.courierTrackingNumber !== "PENDING";
+  const [refund, refundCheck] = await Promise.all([getRefundForOrder(order.id), checkRefundEligibility({ id: order.id, orderStatus: order.orderStatus })]);
+  const cancelBlock = cancelBlockReason(order, "customer");
 
   return Response.json({
     courier: hasCourier
       ? {
-          name: "PostEx",
-          trackingNumber: order.postexTrackingNumber,
-          status: customerFacingPostexStatus(order.postexStatus),
+          name: order.courierName,
+          trackingNumber: order.courierTrackingNumber,
+          status: customerFacingCourierStatus(order.courierStatus),
+        }
+      : null,
+    // What the shopper may do next: cancel (only until TCS has the parcel) or ask for a refund.
+    actions: {
+      canCancel: cancelBlock === null,
+      cancelBlockedReason: cancelBlock,
+      canRequestRefund: refundCheck.ok,
+      refundBlockedReason: refundCheck.ok ? null : refundCheck.reason,
+    },
+    refund: refund
+      ? {
+          status: refund.status,
+          amount: refund.amount,
+          reason: refund.reason,
+          needsPayoutDetails: refund.status === "requested" && !refund.payoutAccount,
+          adminNote: refund.status === "rejected" || refund.status === "approved" ? refund.adminNote : null,
+          refundedAt: refund.refundedAt ? refund.refundedAt.toISOString() : null,
+          reference: refund.status === "refunded" ? refund.refundReference : null,
         }
       : null,
     order: {

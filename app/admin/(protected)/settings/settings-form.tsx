@@ -1,168 +1,214 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, ReactNode, useState } from "react";
+import { useLockedAction } from "@/lib/use-locked-action";
+import { callApi, Hint, useToast } from "../../_ui/client";
+import { Icon } from "../../_ui/icons";
+import { Badge } from "../../_ui/ui";
 
-type Settings = {
+export type SettingsValues = {
   brandName: string;
-  whatsappNumber: string;
   supportPhone: string;
+  whatsappNumber: string;
+  whatsappChatUrl: string;
   supportEmail: string;
   instagramUrl: string;
+  facebookUrl: string;
+  tiktokUrl: string;
+  tcsShipperName: string;
+  tcsShipperAddress: string;
+  tcsShipperCityName: string;
+  tcsShipperCityCode: string;
+  tcsShipperPhone: string;
   bankName: string;
   bankAccountTitle: string;
   bankAccountNumber: string;
   bankIban: string;
-  metaPixelId: string;
-  gaMeasurementId: string;
   freeDeliveryThreshold: number;
   codReservationHours: number;
   bankReservationHours: number;
-  taxEnabled: boolean;
+  refundWindowDays: number;
+  metaPixelId: string;
+  gaMeasurementId: string;
 };
+export type SystemStatus = { tcs: boolean; tcsLive: boolean; push: boolean; search: boolean; email: boolean; whatsapp: boolean; writer: boolean; spamShield: boolean };
 
-export function SettingsForm() {
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
+const CITY_CODES: Array<[string, string]> = [["Karachi", "KHI"], ["Lahore", "LHE"], ["Islamabad", "ISB"], ["Rawalpindi", "RWP"], ["Faisalabad", "LYP"], ["Multan", "MUX"], ["Peshawar", "PEW"], ["Quetta", "UET"], ["Hyderabad", "HDD"], ["Sialkot", "SKT"], ["Gujranwala", "GRW"]];
 
-  useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      const response = await fetch("/api/admin/settings", { cache: "no-store" });
-      if (response.ok) setSettings((await response.json()).settings);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const form = new FormData(event.currentTarget);
-      const body = {
-        brandName: form.get("brandName"),
-        whatsappNumber: form.get("whatsappNumber"),
-        supportPhone: form.get("supportPhone"),
-        supportEmail: form.get("supportEmail"),
-        instagramUrl: form.get("instagramUrl"),
-        bankName: form.get("bankName"),
-        bankAccountTitle: form.get("bankAccountTitle"),
-        bankAccountNumber: form.get("bankAccountNumber"),
-        bankIban: form.get("bankIban"),
-        metaPixelId: form.get("metaPixelId"),
-        gaMeasurementId: form.get("gaMeasurementId"),
-        freeDeliveryThreshold: form.get("freeDeliveryThreshold"),
-        codReservationHours: form.get("codReservationHours"),
-        bankReservationHours: form.get("bankReservationHours"),
-        taxEnabled: form.get("taxEnabled") === "on",
-      };
-      const response = await fetch("/api/admin/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const result = await response.json();
-      setMessage(response.ok ? "Store settings saved." : result.error ?? "Settings could not be saved.");
-      if (response.ok) setSettings(result.settings);
-    } catch (error) {
-      console.error("save settings failed", error);
-      setMessage("Something went wrong saving settings — check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function Section({ id, title, intro, children }: { id: string; title: string; intro?: string; children: ReactNode }) {
   return (
-    <section className="admin-main">
-      <header className="admin-topbar">
+    <section className="a-card" id={id} style={{ scrollMarginTop: 84 }}>
+      <header className="a-card-head">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
-          <h1>Store settings</h1>
+          <h2>{title}</h2>
+          {intro && <small>{intro}</small>}
         </div>
       </header>
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
-      {settings && (
-        <form className="admin-settings-card" onSubmit={save}>
-          <div>
-            <p className="eyebrow">Store identity &amp; customer assistance</p>
-            <h2>Your changeable contact details</h2>
-            <p>
-              These values are stored centrally so the public website, checkout and order messages can use the same current
-              information.
-            </p>
-          </div>
-          <div className="admin-form-grid">
-            <label>
-              <span>Brand name</span>
-              <input name="brandName" defaultValue={settings.brandName} />
-            </label>
-            <label>
-              <span>WhatsApp Business number</span>
-              <input name="whatsappNumber" defaultValue={settings.whatsappNumber} placeholder="+923001234567" />
-              <small>Used everywhere on the storefront for WhatsApp ordering links.</small>
-            </label>
-            <label>
-              <span>Support phone</span>
-              <input name="supportPhone" defaultValue={settings.supportPhone} placeholder="+923001234567" />
-            </label>
-            <label>
-              <span>Support email</span>
-              <input type="email" name="supportEmail" defaultValue={settings.supportEmail} placeholder="care@yourdomain.com" />
-            </label>
-            <label>
-              <span>Instagram profile</span>
-              <input type="url" name="instagramUrl" defaultValue={settings.instagramUrl} placeholder="https://instagram.com/..." />
-            </label>
-            <label>
-              <span>Free delivery threshold (PKR)</span>
-              <input type="number" min="0" name="freeDeliveryThreshold" defaultValue={settings.freeDeliveryThreshold} />
-            </label>
-            <label>
-              <span>Bank name</span>
-              <input name="bankName" defaultValue={settings.bankName} />
-            </label>
-            <label>
-              <span>Bank account title</span>
-              <input name="bankAccountTitle" defaultValue={settings.bankAccountTitle} />
-            </label>
-            <label>
-              <span>Bank account number</span>
-              <input name="bankAccountNumber" defaultValue={settings.bankAccountNumber} />
-            </label>
-            <label>
-              <span>IBAN</span>
-              <input name="bankIban" defaultValue={settings.bankIban} />
-            </label>
-            <label>
-              <span>Meta Pixel ID</span>
-              <input name="metaPixelId" defaultValue={settings.metaPixelId} placeholder="123456789012345" />
-            </label>
-            <label>
-              <span>Google Analytics Measurement ID</span>
-              <input name="gaMeasurementId" defaultValue={settings.gaMeasurementId} placeholder="G-XXXXXXXXXX" />
-            </label>
-            <label>
-              <span>COD reservation hours</span>
-              <input type="number" min="1" name="codReservationHours" defaultValue={settings.codReservationHours} />
-            </label>
-            <label>
-              <span>Bank deposit reservation hours</span>
-              <input type="number" min="1" name="bankReservationHours" defaultValue={settings.bankReservationHours} />
-            </label>
-            <label className="admin-check">
-              <input type="checkbox" name="taxEnabled" defaultChecked={settings.taxEnabled} />
-              <span>Tax calculation enabled</span>
-            </label>
-          </div>
-          <button className="admin-primary" disabled={busy}>
-            {busy ? "Saving…" : "Save settings"}
-          </button>
-        </form>
-      )}
+      <div className="a-card-pad a-form-grid">{children}</div>
     </section>
+  );
+}
+
+export function SettingsForm({ initial, status }: { initial: SettingsValues; status: SystemStatus }) {
+  const router = useRouter();
+  const toast = useToast();
+  const saving = useLockedAction();
+  const testing = useLockedAction();
+  const [form, setForm] = useState(initial);
+  const [dirty, setDirty] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const set = (key: keyof SettingsValues) => (event: { target: { value: string } }) => {
+    setForm((current) => ({ ...current, [key]: typeof initial[key] === "number" ? Number(event.target.value.replace(/\D/g, "")) : event.target.value }));
+    setDirty(true);
+  };
+  const text = (key: keyof SettingsValues, label: string, options: { hint?: string; placeholder?: string; wide?: boolean; type?: string; help?: string; prefix?: string } = {}) => (
+    <div className={`a-field${options.wide ? " wide" : ""}`}>
+      <label htmlFor={`s-${key}`}>
+        {label} {options.hint && <Hint text={options.hint} />}
+      </label>
+      <input id={`s-${key}`} type={options.type ?? "text"} value={String(form[key])} onChange={set(key)} placeholder={options.placeholder} inputMode={typeof initial[key] === "number" ? "numeric" : undefined} />
+      {options.help && <span className="a-help">{options.help}</span>}
+    </div>
+  );
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    await saving.run(async () => {
+      const result = await callApi<{ settings: Partial<Record<keyof SettingsValues, string | number>> }>("/api/admin/settings", "PATCH", form);
+      if (result.ok) {
+        // Show what was actually stored (web addresses get https:// added, phone numbers are tidied).
+        const saved = result.data.settings ?? {};
+        setForm((current) => ({ ...current, ...Object.fromEntries((Object.keys(current) as Array<keyof SettingsValues>).filter((key) => saved[key] !== undefined).map((key) => [key, saved[key]])) }));
+        toast("Settings saved. Your website is updating.", "good");
+        setDirty(false);
+        router.refresh();
+      } else toast(result.error, "bad");
+    });
+  }
+
+  const statusRow = (ok: boolean, label: string, good: string, bad: string) => (
+    <li className="a-row" style={{ justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+      <span>{label}</span>
+      <span className="a-row">
+        <span className="a-muted">{ok ? good : bad}</span>
+        <Badge tone={ok ? "done" : "new"}>{ok ? "Working" : "Not set up"}</Badge>
+      </span>
+    </li>
+  );
+
+  return (
+    <form onSubmit={save} className="a-stack">
+      <section className="a-card">
+        <header className="a-card-head">
+          <h2>Is everything connected?</h2>
+        </header>
+        <ul style={{ listStyle: "none", margin: 0, padding: "4px 22px 12px" }}>
+          {statusRow(status.tcs, "TCS (booking parcels)", status.tcsLive ? "Live" : "Test mode", "You can still type tracking numbers by hand")}
+          {statusRow(status.push, "Order alerts on your computer", "Ready", "Needs setup")}
+          {statusRow(status.search, "Website search", "Ready", "Basic search is used")}
+          {statusRow(status.email, "Emails to customers", "Ready", "No emails are sent")}
+          {statusRow(status.whatsapp, "WhatsApp order confirmation", "Ready", "Not connected — you can still WhatsApp customers yourself")}
+          {statusRow(status.writer, "“Write it for me” helper", "Ready", "Not set up")}
+          {statusRow(status.spamShield, "Protection against fake orders", "Ready", "Not set up")}
+        </ul>
+      </section>
+
+      <Section id="contact" title="Your shop and how customers reach you" intro="These appear in the footer, on the Contact page and in emails.">
+        {text("brandName", "Shop name")}
+        {text("supportPhone", "Phone number", { placeholder: "+92 311 6111963", hint: "Customers can tap this number to call you." })}
+        {text("whatsappNumber", "WhatsApp number", { hint: "The number for the green WhatsApp button on your website.", placeholder: "+92 311 6111963" })}
+        {text("whatsappChatUrl", "WhatsApp chat link (optional)", { hint: "A link that opens a chat with you, like wa.me/message/… from WhatsApp Business. If empty, we use your WhatsApp number.", placeholder: "https://wa.me/message/…" })}
+        {text("supportEmail", "Email address", { type: "email", placeholder: "hello@nureasmir.com" })}
+        {text("instagramUrl", "Instagram page", { placeholder: "https://www.instagram.com/yourname" })}
+        {text("facebookUrl", "Facebook page", { placeholder: "https://www.facebook.com/yourpage" })}
+        {text("tiktokUrl", "TikTok page", { placeholder: "https://www.tiktok.com/@yourname" })}
+      </Section>
+
+      <Section id="tcs" title="TCS delivery" intro="Where TCS collects parcels from. The TCS account login is stored safely on the server — see the note below.">
+        {text("tcsShipperName", "Name on the parcel (sender)", { hint: "The sender name TCS prints on the label." })}
+        {text("tcsShipperPhone", "Pickup contact phone", { placeholder: "03116111963", hint: "The rider calls this number when coming to collect." })}
+        <div className="a-field wide">
+          <label htmlFor="s-tcsShipperAddress">
+            Pickup address <Hint text="Full address where the TCS rider should come, with area and landmark." />
+          </label>
+          <textarea id="s-tcsShipperAddress" rows={2} value={form.tcsShipperAddress} onChange={set("tcsShipperAddress")} placeholder="Shop / house number, street, area" />
+        </div>
+        <div className="a-field">
+          <label htmlFor="s-city">Pickup city</label>
+          <select
+            id="s-city"
+            value={form.tcsShipperCityName}
+            onChange={(event) => {
+              const city = event.target.value;
+              setForm((current) => ({ ...current, tcsShipperCityName: city, tcsShipperCityCode: CITY_CODES.find(([name]) => name === city)?.[1] ?? current.tcsShipperCityCode }));
+              setDirty(true);
+            }}
+          >
+            {!CITY_CODES.some(([name]) => name === form.tcsShipperCityName) && <option>{form.tcsShipperCityName}</option>}
+            {CITY_CODES.map(([name]) => (
+              <option key={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+        {text("tcsShipperCityCode", "City code", { hint: "TCS's short code for your city (Karachi = KHI, Lahore = LHE). It fills in by itself when you pick the city." })}
+        <div className="wide a-note">
+          <Icon name="info" />
+          <div>
+            <strong>Connecting your TCS account.</strong> TCS gives you a username, password, account number and cost-centre code when they approve you for online booking. These are private, so they are added to the server by whoever manages your website — not typed here. Until then, book on the TCS website and use <em>“I booked it on the TCS website”</em> on the order.
+            <div className="a-row" style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className="a-btn a-btn-sm"
+                disabled={testing.pending}
+                onClick={() =>
+                  testing.run(async () => {
+                    setTestResult(null);
+                    const result = await callApi<{ ok: boolean; error?: string; environment?: string }>("/api/admin/courier/test", "POST");
+                    if (result.ok) setTestResult(result.data.ok ? { ok: true, text: `Connected to TCS (${result.data.environment} mode).` } : { ok: false, text: result.data.error ?? "Could not connect." });
+                    else setTestResult({ ok: false, text: result.error });
+                  })
+                }
+              >
+                {testing.pending ? <span className="spinner" aria-hidden="true" /> : null} Test TCS connection
+              </button>
+              {testResult && <span className={testResult.ok ? "a-delta-up" : "a-error"} role="status">{testResult.text}</span>}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section id="delivery" title="Delivery, payment and refunds">
+        {text("freeDeliveryThreshold", "Free delivery above (PKR)", { hint: "Orders worth more than this get free delivery. Put 0 to switch free delivery off." })}
+        {text("refundWindowDays", "Refund time (days)", { hint: "How many days after delivery a customer may ask for a refund. 0 = no refunds." })}
+        {text("codReservationHours", "Hold stock for cash-on-delivery orders (hours)", { hint: "If the customer does not confirm in this time, the order is cancelled and the stock goes back on sale." })}
+        {text("bankReservationHours", "Hold stock for bank-transfer orders (hours)", { hint: "How long a customer has to send the receipt." })}
+        {text("bankName", "Bank name", { placeholder: "e.g. Meezan Bank" })}
+        {text("bankAccountTitle", "Account title")}
+        {text("bankAccountNumber", "Account number")}
+        {text("bankIban", "IBAN", { placeholder: "PK00 XXXX 0000 0000 0000 0000" })}
+      </Section>
+
+      <Section id="alerts" title="Order alerts" intro="A pop-up on this computer the moment something needs you.">
+        <div className="wide a-stack" style={{ gap: 8 }}>
+          <p>Press <strong>“Turn on order alerts”</strong> at the bottom-left of the screen, and choose <strong>Allow</strong> when the browser asks. Do this on every computer you use.</p>
+          <p className="a-muted">You will get an alert for: a new order, a payment receipt, a refund request, an order cancelled by a customer, and when something is running low or sold out.</p>
+          {!status.push && <p className="a-note warn"><Icon name="alert" />Alerts are not set up on the server yet, so none will arrive until they are.</p>}
+        </div>
+      </Section>
+
+      <Section id="tracking" title="Advertising and visitor counting (optional)" intro="Leave empty if you do not use them.">
+        {text("metaPixelId", "Facebook / Instagram Pixel ID", { hint: "Lets Facebook show your ads to the right people and count sales." })}
+        {text("gaMeasurementId", "Google Analytics ID", { placeholder: "G-XXXXXXXXXX", hint: "Counts visitors to your website." })}
+      </Section>
+
+      <div className="a-savebar">
+        <span className="a-muted">{dirty ? "You have changes that are not saved yet." : "Everything is saved."}</span>
+        <button className="a-btn a-btn-primary a-btn-lg" disabled={saving.pending || !dirty} aria-busy={saving.pending}>
+          {saving.pending ? <span className="busy-label"><span className="spinner spinner-light" aria-hidden="true" /> Saving…</span> : "Save settings"}
+        </button>
+      </div>
+    </form>
   );
 }

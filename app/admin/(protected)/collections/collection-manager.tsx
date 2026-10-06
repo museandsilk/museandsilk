@@ -253,8 +253,10 @@ export function CollectionManager({ products }: { products: Product[] }) {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
-          <h1>Categories &amp; Collections</h1>
+          <h1>Categories</h1>
+          <p className="a-muted" style={{ marginTop: 5, maxWidth: 680 }}>
+            <strong>Categories</strong> are the groups customers shop by, like Shirts or Pants. <strong>Collections</strong> are hand-picked lists you create for a season or event, like “Eid Edit”.
+          </p>
         </div>
         <div className="admin-top-actions">
           <Link href="/admin/products">← Products</Link>
@@ -425,11 +427,11 @@ export function CollectionManager({ products }: { products: Product[] }) {
             <h2>Create category</h2>
             <label>
               <span>Name</span>
-              <input required name="name" placeholder="Scarves" />
+              <input required name="name" placeholder="Eid Edit" />
             </label>
             <label>
               <span>URL slug (optional)</span>
-              <input name="slug" placeholder="scarves" />
+              <input name="slug" placeholder="eid-edit" />
             </label>
             <label>
               <span>Description</span>

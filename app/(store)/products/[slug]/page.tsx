@@ -1,72 +1,84 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { StoreHeader } from "../../_components/store-components";
-import { getProductBySlug, getPublicSettings } from "@/lib/commerce";
+import { getCatalogProducts, getProductBySlug, getPublicSettings, toCard } from "@/lib/commerce";
+import { BRAND, siteOrigin } from "@/lib/brand";
 import { getNonce } from "@/lib/nonce";
-import { cropForCategory } from "@/lib/slug";
+import { ProductRail } from "../../_components/store-components";
+import { StoreFooter } from "../../_components/store-footer";
 import { ProductView } from "./product-view";
 
-export const revalidate = 300;
-
-const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
+// Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
+// always priced on the server regardless of what a cached page displays.
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return {};
   const title = product.seoTitle || product.name;
-  const description = product.seoDescription || product.shortDescription || `${product.name} in ${product.color}. Nationwide delivery across Pakistan with cash on delivery available.`;
+  const description =
+    product.seoDescription || product.shortDescription || `${product.name} in ${product.color}. Nationwide delivery across Pakistan with cash on delivery available.`;
   return {
     title,
     description,
     alternates: { canonical: `/products/${product.slug}` },
+    openGraph: { title, description, type: "website", images: product.imageUrl ? [{ url: absolute(product.imageUrl) }] : undefined },
   };
+}
+
+function absolute(url: string): string {
+  return url.startsWith("http") ? url : `${siteOrigin()}${url}`;
 }
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [product, settings] = await Promise.all([getProductBySlug(slug), getPublicSettings()]);
+  const [product, settings, catalog] = await Promise.all([getProductBySlug(slug), getPublicSettings(), getCatalogProducts()]);
   const nonce = getNonce();
   if (!product) notFound();
 
-  const crop = cropForCategory(product.category);
-  const fallbackImage = "/category-still-life.webp";
-  const primaryImage = product.imageUrl ? `${SITE_ORIGIN}${product.imageUrl}` : `${SITE_ORIGIN}${fallbackImage}`;
-  const canonicalUrl = `${SITE_ORIGIN}/products/${product.slug}`;
+  const origin = siteOrigin();
+  const fallbackImage = "/placeholder.webp";
+  const primaryImage = absolute(product.imageUrl ?? fallbackImage);
+  const canonicalUrl = `${origin}/products/${product.slug}`;
+  const related = catalog.filter((entry) => entry.category === product.category && entry.slug !== product.slug).slice(0, 10).map(toCard);
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_ORIGIN },
-      { "@type": "ListItem", position: 2, name: product.type, item: `${SITE_ORIGIN}/collections/${product.category}` },
+      { "@type": "ListItem", position: 1, name: "Home", item: origin },
+      { "@type": "ListItem", position: 2, name: product.type, item: `${origin}/collections/${product.category}` },
       { "@type": "ListItem", position: 3, name: product.name, item: canonicalUrl },
     ],
   };
 
+  const offer = (price: number, available: number) => ({
+    "@type": "Offer",
+    priceCurrency: "PKR",
+    price,
+    availability: available > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+    url: canonicalUrl,
+  });
+  const description = product.seoDescription || product.shortDescription || product.description;
+  const sizeVaries = product.variants.some((variant) => variant.size);
   const jsonLd =
     product.variants.length >= 2
       ? {
           "@context": "https://schema.org",
           "@type": "ProductGroup",
           name: product.name,
-          description: product.seoDescription || product.shortDescription || product.description,
-          brand: { "@type": "Brand", name: "Muse & Silk" },
+          description,
+          brand: { "@type": "Brand", name: BRAND.name },
           productGroupID: product.id,
-          variesBy: ["https://schema.org/color"],
+          variesBy: [...(sizeVaries ? ["https://schema.org/size"] : []), "https://schema.org/color"],
           hasVariant: product.variants.map((variant) => ({
             "@type": "Product",
-            name: `${product.name} — ${variant.color}`,
+            name: `${product.name} — ${variant.name}`,
             sku: variant.sku,
             color: variant.color,
+            ...(variant.size ? { size: variant.size } : {}),
             image: [primaryImage],
-            offers: {
-              "@type": "Offer",
-              priceCurrency: "PKR",
-              price: variant.price,
-              availability: variant.available > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-              url: canonicalUrl,
-            },
+            offers: offer(variant.price, variant.available),
           })),
         }
       : {
@@ -74,32 +86,32 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           "@type": "Product",
           name: product.name,
           image: [primaryImage],
-          description: product.seoDescription || product.shortDescription || product.description,
+          description,
           sku: product.sku,
-          brand: { "@type": "Brand", name: "Muse & Silk" },
-          offers: {
-            "@type": "Offer",
-            priceCurrency: "PKR",
-            price: product.price,
-            availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-            url: canonicalUrl,
-          },
+          brand: { "@type": "Brand", name: BRAND.name },
+          offers: offer(product.price, product.stock),
         };
 
   return (
     <main className="page-fade-in">
-      <StoreHeader />
-      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <script type="application/ld+json" nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <section className="product-page">
         <ProductView
           product={product}
-          crop={crop}
           fallback={fallbackImage}
           codReservationHours={settings.codReservationHours}
           bankReservationHours={settings.bankReservationHours}
         />
       </section>
+      {related.length > 0 && (
+        <section className="rail-section" aria-labelledby="related-title">
+          <h2 className="section-title" id="related-title">You may also like</h2>
+          <ProductRail products={related} />
+        </section>
+      )}
+      <div style={{ height: 64 }} />
+      <StoreFooter />
     </main>
   );
 }

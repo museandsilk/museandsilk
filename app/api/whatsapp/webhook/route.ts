@@ -1,8 +1,10 @@
+import { siteOrigin } from "@/lib/brand";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { announceOrderEvent } from "@/lib/order-events";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, orderStatusHistory } from "@/db/schema";
-import { releaseOrderReservation } from "@/lib/orders";
+import { cancelOrder } from "@/lib/order-actions";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { sendWhatsAppText, toWhatsAppPhone } from "@/lib/whatsapp";
 
@@ -89,6 +91,22 @@ function statusForButtonPayload(buttonPayload: string): "confirmed" | "cancelled
 async function handleButtonReply(repliedToMessageId: string, buttonPayload: string): Promise<void> {
   const toStatus = statusForButtonPayload(buttonPayload);
   if (!toStatus) return;
+  const siteUrl = siteOrigin();
+
+  if (toStatus === "cancelled") {
+    // Same single cancel path as the website and the admin (lib/order-actions.ts): only an order still
+    // waiting for confirmation is linked to this message, so TCS can never already have it.
+    const [linked] = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.whatsappMessageId, repliedToMessageId), eq(orders.orderStatus, "pending_confirmation")))
+      .limit(1);
+    if (!linked) return;
+    const result = await cancelOrder(linked.id, { kind: "customer" }, "changed_mind", 'Tapped "Cancel" on WhatsApp');
+    if (!result.ok) return;
+    await sendWhatsAppText(toWhatsAppPhone(linked.customerPhone), `Your order #${linked.orderNumber} has been cancelled. Feel free to visit again anytime!`);
+    return;
+  }
 
   // Guarded the same way as every other contested order-status write in this codebase: the WHERE
   // only matches an order that's both linked to this exact WhatsApp message AND still
@@ -97,7 +115,7 @@ async function handleButtonReply(repliedToMessageId: string, buttonPayload: stri
   // the guarded UPDATE simply matches nothing the second time.
   const [order] = await db
     .update(orders)
-    .set({ orderStatus: toStatus, updatedAt: new Date() })
+    .set({ orderStatus: "confirmed", updatedAt: new Date() })
     .where(and(eq(orders.whatsappMessageId, repliedToMessageId), eq(orders.orderStatus, "pending_confirmation")))
     .returning();
   if (!order) return;
@@ -105,27 +123,11 @@ async function handleButtonReply(repliedToMessageId: string, buttonPayload: stri
   await db.insert(orderStatusHistory).values({
     orderId: order.id,
     fromStatus: "pending_confirmation",
-    toStatus,
-    note: `Customer tapped "${toStatus === "confirmed" ? "Confirm" : "Cancel"}" on WhatsApp`,
+    toStatus: "confirmed",
+    note: 'Customer tapped "Confirm" on WhatsApp',
     actorEmail: "customer",
   });
-
-  if (toStatus === "cancelled") {
-    await releaseOrderReservation(order.id, "Order cancelled by customer via WhatsApp", "customer");
-  }
-
-  await auditLogEntry({
-    actorEmail: "customer",
-    action: "order.whatsapp_reply",
-    entityType: "order",
-    entityId: order.id,
-    detail: { buttonPayload, toStatus },
-  });
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
-  const replyText =
-    toStatus === "confirmed"
-      ? `Your order #${order.orderNumber} has been confirmed. You can track it on our website: ${siteUrl}/track-order`
-      : `Your order #${order.orderNumber} has been cancelled. Feel free to visit again anytime!`;
-  await sendWhatsAppText(toWhatsAppPhone(order.customerPhone), replyText);
+  announceOrderEvent(order.id, "confirmed", "customer");
+  await auditLogEntry({ actorEmail: "customer", action: "order.whatsapp_reply", entityType: "order", entityId: order.id, detail: { buttonPayload, toStatus } });
+  await sendWhatsAppText(toWhatsAppPhone(order.customerPhone), `Your order #${order.orderNumber} has been confirmed. You can track it on our website: ${siteUrl}/track-order`);
 }

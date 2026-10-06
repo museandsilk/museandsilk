@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The owner's admin panel – a separate Worker from the storefront (see scripts/build-target.mjs):
+  // shoppers never download or share a bundle with it, and it has its own origin, cookies and robots rules.
+  "name": "nure-asmir-admin",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "nure-asmir-cache" }
+  ],
+  "vars": { "APP_TARGET": "admin" },
+  "observability": { "enabled": true },
+  "workers_dev": true
+  // Attach a hostname such as admin.<domain> once the domain is on this Cloudflare account:
+  // "routes": [{ "pattern": "admin.nureasmir.com", "custom_domain": true }]
+}

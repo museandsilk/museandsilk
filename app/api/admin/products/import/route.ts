@@ -1,4 +1,6 @@
 import { ilike } from "drizzle-orm";
+import { runInBackground } from "@/lib/background";
+import { reindexAll } from "@/lib/search/algolia";
 import { db } from "@/db";
 import { categories, products, productVariants } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
@@ -195,6 +197,10 @@ export async function POST(request: Request) {
       detail: { imported: succeeded.length, failed: results.length - succeeded.length },
     });
   }
+
+  // Bulk import touched many products — rebuild the search index once rather than per product.
+  // The bulk-upload screen sends small batches and asks for one rebuild at the very end (?reindex=0).
+  if (succeeded.length && new URL(request.url).searchParams.get("reindex") !== "0") runInBackground(reindexAll(), "reindexAll");
 
   return Response.json({ results });
 }

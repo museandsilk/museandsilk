@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { runInBackground } from "@/lib/background";
+import { reindexAll } from "@/lib/search/algolia";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
@@ -52,6 +54,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!row) return Response.json({ error: "Category not found." }, { status: 404 });
 
   await auditLogEntry({ actorEmail: admin.email, action: "category.update", entityType: "category", entityId: id, detail: data });
+
+  // Category name/slug are part of every product record in the search index.
+  runInBackground(reindexAll(), "reindexAll");
 
   return Response.json({ category: row });
 }

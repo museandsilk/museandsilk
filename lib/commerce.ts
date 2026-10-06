@@ -1,6 +1,9 @@
 import { cache } from "react";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { BRAND } from "@/lib/brand";
+import { mediaUrl } from "@/lib/media-url";
+import { applySales, getActiveSales } from "@/lib/sales";
 import { campaignSlides, categories, collections, productCollections, productImages, products, productVariants, siteSettings } from "@/db/schema";
 
 export type CatalogVariant = {
@@ -12,11 +15,38 @@ export type CatalogVariant = {
   fabric?: string;
   price: number;
   compareAtPrice?: number | null;
+  /** ISO time the flash sale pricing on this variant ends (undefined = not on sale). */
+  saleEndsAt?: string;
   stock: number;
   reserved: number;
   available: number;
   isDefault: boolean;
 };
+
+/** The slim shape product cards need. Client components serialise their props into the page's RSC
+ * payload, so listings pass this (see `toCard`) instead of the full catalogue entry – descriptions,
+ * variants and gallery images stay on the server. */
+export type CardProduct = Pick<
+  CatalogProduct,
+  "id" | "slug" | "name" | "price" | "compareAtPrice" | "imageUrl" | "altImageUrl" | "blurDataUrl" | "badge" | "stock" | "saleEndsAt" | "category"
+>;
+
+export function toCard(product: CatalogProduct): CardProduct {
+  return {
+    id: product.id,
+    slug: product.slug,
+    name: product.name,
+    price: product.price,
+    compareAtPrice: product.compareAtPrice ?? undefined,
+    imageUrl: product.imageUrl,
+    altImageUrl: product.altImageUrl,
+    blurDataUrl: product.blurDataUrl,
+    badge: product.badge,
+    stock: product.stock,
+    saleEndsAt: product.saleEndsAt,
+    category: product.category,
+  };
+}
 
 export type CatalogImage = {
   id: string;
@@ -56,69 +86,59 @@ export type CatalogProduct = {
   featured: boolean;
   variants: CatalogVariant[];
   images: CatalogImage[];
-  /** One lead image per variant (in variant-creation order), for products with more than one
-   * variant — lets a product card cycle through each color/style instead of showing only the
-   * default variant's picture. Empty when variants have no images of their own yet. */
-  variantImages: CatalogImage[];
+  /** Second photo, shown on hover in product cards. */
+  altImageUrl?: string;
+  /** ISO time the current flash sale on this product ends (undefined = not on sale). */
+  saleEndsAt?: string;
+  saleName?: string;
 };
 
-function imageUrlFor(imageId: string) {
-  return `/api/media/${imageId}`;
+function imageUrlFor(key: string, variantWidths?: number[] | null) {
+  return mediaUrl(key, variantWidths);
 }
 
-/** For each given product, the first active image belonging to each of its active variants
- * (ordered by that image's own sortOrder/createdAt), returned in variant-creation order. Used to
- * drive the color-cycling product card on storefront listings — kept separate from the single
- * product-level "primary" image query above so that query keeps its one-row-per-product guarantee
- * (multiple variants each having their own primary image would otherwise multiply join rows). */
-async function getVariantLeadImages(productIds: string[]): Promise<Map<string, CatalogImage[]>> {
-  if (!productIds.length) return new Map();
+type ListingExtras = { available: number; altImageUrl?: string };
 
-  const rows = await db
-    .selectDistinctOn([productImages.variantId], {
-      variantId: productImages.variantId,
-      productId: productImages.productId,
-      imageId: productImages.id,
-      altText: productImages.altText,
-      sortOrder: productImages.sortOrder,
-      isPrimary: productImages.isPrimary,
-      blurDataUrl: productImages.blurDataUrl,
-      variantCreatedAt: productVariants.createdAt,
-    })
-    .from(productImages)
-    .innerJoin(productVariants, eq(productVariants.id, productImages.variantId))
-    .where(
-      and(
-        inArray(productImages.productId, productIds),
-        eq(productImages.status, "active"),
-        eq(productVariants.status, "active"),
-      ),
-    )
-    .orderBy(productImages.variantId, asc(productImages.sortOrder), asc(productImages.createdAt));
+/** Per-product data a listing card needs beyond the default-variant join: stock summed across every
+ * size (so a product isn't "sold out" just because its default size is), and the second photo for
+ * the hover swap. Two small queries for the whole page rather than one per product. */
+async function getListingExtras(productIds: string[]): Promise<Map<string, ListingExtras>> {
+  const extras = new Map<string, ListingExtras>();
+  if (!productIds.length) return extras;
 
-  const byProduct = new Map<string, { image: CatalogImage; variantCreatedAt: Date }[]>();
-  for (const row of rows) {
-    const list = byProduct.get(row.productId) ?? [];
-    list.push({
-      image: {
-        id: row.imageId,
-        url: imageUrlFor(row.imageId),
-        altText: row.altText,
-        sortOrder: row.sortOrder,
-        isPrimary: row.isPrimary,
-        blurDataUrl: row.blurDataUrl ?? undefined,
-      },
-      variantCreatedAt: row.variantCreatedAt,
-    });
-    byProduct.set(row.productId, list);
+  const [stockRows, imageRows] = await Promise.all([
+    db
+      .select({
+        productId: productVariants.productId,
+        available: sql<number>`coalesce(sum(greatest(${productVariants.stockQuantity} - ${productVariants.reservedQuantity}, 0)), 0)::int`,
+      })
+      .from(productVariants)
+      .where(and(inArray(productVariants.productId, productIds), eq(productVariants.status, "active")))
+      .groupBy(productVariants.productId),
+    db
+      .select({
+        productId: productImages.productId,
+        key: productImages.r2Key,
+        widths: productImages.variantWidths,
+        isPrimary: productImages.isPrimary,
+      })
+      .from(productImages)
+      .where(and(inArray(productImages.productId, productIds), eq(productImages.status, "active"), isNull(productImages.variantId)))
+      .orderBy(desc(productImages.isPrimary), asc(productImages.sortOrder), asc(productImages.createdAt)),
+  ]);
+
+  for (const row of stockRows) extras.set(row.productId, { available: row.available });
+  const seen = new Map<string, number>();
+  for (const row of imageRows) {
+    const position = (seen.get(row.productId) ?? 0) + 1;
+    seen.set(row.productId, position);
+    if (position === 2) {
+      const entry = extras.get(row.productId) ?? { available: 0 };
+      entry.altImageUrl = imageUrlFor(row.key, row.widths);
+      extras.set(row.productId, entry);
+    }
   }
-
-  const result = new Map<string, CatalogImage[]>();
-  for (const [productId, entries] of byProduct) {
-    entries.sort((a, b) => a.variantCreatedAt.getTime() - b.variantCreatedAt.getTime());
-    result.set(productId, entries.map((entry) => entry.image));
-  }
-  return result;
+  return extras;
 }
 
 /** Published products for storefront listing (shop grid, homepage "New arrivals", etc). Each product
@@ -147,7 +167,8 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
       compareAtPrice: productVariants.compareAtPrice,
       stock: productVariants.stockQuantity,
       reserved: productVariants.reservedQuantity,
-      imageId: productImages.id,
+      imageKey: productImages.r2Key,
+      imageWidths: productImages.variantWidths,
       altText: productImages.altText,
       blurDataUrl: productImages.blurDataUrl,
     })
@@ -158,23 +179,27 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     .where(eq(products.status, "published"))
     .orderBy(desc(products.publishedAt), desc(products.createdAt));
 
-  const variantImagesByProduct = await getVariantLeadImages(rows.map((row) => row.id));
+  const [extras, sales] = await Promise.all([getListingExtras(rows.map((row) => row.id)), getActiveSales()]);
 
-  return rows.map((row) => ({
+  return rows.map((row) => {
+    const sale = applySales(row.price, row.id, sales);
+    return {
     id: row.id,
     slug: row.slug,
     name: row.name,
     category: row.categorySlug,
     categoryId: row.categoryId,
     type: row.type,
-    price: row.price,
-    compareAtPrice: row.compareAtPrice,
+    price: sale?.price ?? row.price,
+    compareAtPrice: sale ? sale.originalPrice : row.compareAtPrice,
+    saleEndsAt: sale?.sale.endsAt.toISOString(),
+    saleName: sale?.sale.name,
     color: row.color,
     badge: row.badge ?? "",
     sku: row.sku,
-    imageUrl: row.imageId ? imageUrlFor(row.imageId) : undefined,
+    imageUrl: row.imageKey ? imageUrlFor(row.imageKey, row.imageWidths) : undefined,
     blurDataUrl: row.blurDataUrl ?? undefined,
-    stock: Math.max(0, row.stock - row.reserved),
+    stock: extras.get(row.id)?.available ?? Math.max(0, row.stock - row.reserved),
     description: row.description ?? "",
     shortDescription: row.shortDescription ?? "",
     material: row.material ?? "",
@@ -182,8 +207,9 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     featured: row.featured,
     variants: [],
     images: [],
-    variantImages: variantImagesByProduct.get(row.id) ?? [],
-  }));
+    altImageUrl: extras.get(row.id)?.altImageUrl,
+    };
+  });
 }
 
 export async function getProductBySlug(slug: string): Promise<CatalogProduct | null> {
@@ -232,6 +258,8 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     db
       .select({
         id: productImages.id,
+        key: productImages.r2Key,
+        widths: productImages.variantWidths,
         variantId: productImages.variantId,
         altText: productImages.altText,
         sortOrder: productImages.sortOrder,
@@ -242,25 +270,29 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
       .where(and(eq(productImages.productId, row.id), eq(productImages.status, "active")))
       .orderBy(desc(productImages.isPrimary), asc(productImages.sortOrder), asc(productImages.createdAt)),
   ]);
-  const variantImagesByProduct = await getVariantLeadImages([row.id]);
 
-  const variants: CatalogVariant[] = variantRows.map((v) => ({
-    id: v.id,
-    name: v.name,
-    sku: v.sku,
-    color: v.color,
-    size: v.size ?? undefined,
-    fabric: v.fabric ?? undefined,
-    price: v.price,
-    compareAtPrice: v.compareAtPrice,
-    stock: v.stock,
-    reserved: v.reserved,
-    available: Math.max(0, v.stock - v.reserved),
-    isDefault: v.isDefault,
-  }));
+  const sales = await getActiveSales();
+  const variants: CatalogVariant[] = variantRows.map((v) => {
+    const sale = applySales(v.price, row.id, sales);
+    return {
+      id: v.id,
+      name: v.name,
+      sku: v.sku,
+      color: v.color,
+      size: v.size ?? undefined,
+      fabric: v.fabric ?? undefined,
+      price: sale?.price ?? v.price,
+      compareAtPrice: sale ? sale.originalPrice : v.compareAtPrice,
+      saleEndsAt: sale?.sale.endsAt.toISOString(),
+      stock: v.stock,
+      reserved: v.reserved,
+      available: Math.max(0, v.stock - v.reserved),
+      isDefault: v.isDefault,
+    };
+  });
   const images: CatalogImage[] = imageRows.map((img) => ({
     id: img.id,
-    url: imageUrlFor(img.id),
+    url: imageUrlFor(img.key, img.widths),
     altText: img.altText,
     sortOrder: img.sortOrder,
     isPrimary: img.isPrimary,
@@ -278,6 +310,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     type: row.type,
     price: defaultVariant?.price ?? 0,
     compareAtPrice: defaultVariant?.compareAtPrice,
+    saleEndsAt: defaultVariant?.saleEndsAt,
     color: defaultVariant?.color ?? "",
     badge: row.badge ?? "",
     sku: defaultVariant?.sku ?? "",
@@ -294,18 +327,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     featured: row.featured,
     variants,
     images,
-    variantImages: variantImagesByProduct.get(row.id) ?? [],
   };
-}
-
-/** Appends a cache-busting version to a media URL derived from the row's updatedAt. Necessary
- * because /api/media, /api/category-media and /api/campaign-media are now cached at Cloudflare's
- * edge as `immutable` for a year (see lib/edge-cache.ts) — correct for product images, which
- * always get a brand-new row/id per upload, but categories and campaign slides *replace* their
- * image in place under the same id/URL. Without a version in the URL, replacing a photo would
- * silently keep serving the old cached bytes at the same URL for up to a year. */
-function versionedMediaUrl(base: string, updatedAt: Date): string {
-  return `${base}${base.includes("?") ? "&" : "?"}v=${updatedAt.getTime()}`;
 }
 
 export type CampaignSlide = {
@@ -337,7 +359,10 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
       sortOrder: campaignSlides.sortOrder,
       active: campaignSlides.active,
       blurDataUrl: campaignSlides.blurDataUrl,
+      r2Key: campaignSlides.r2Key,
+      variantWidths: campaignSlides.variantWidths,
       mobileR2Key: campaignSlides.mobileR2Key,
+      mobileVariantWidths: campaignSlides.mobileVariantWidths,
       updatedAt: campaignSlides.updatedAt,
     })
     .from(campaignSlides)
@@ -346,8 +371,8 @@ export async function getCampaignSlides(includeInactive = false): Promise<Campai
 
   return rows.map((row) => ({
     id: row.id,
-    imageUrl: versionedMediaUrl(`/api/campaign-media/${row.id}`, row.updatedAt),
-    mobileImageUrl: row.mobileR2Key ? versionedMediaUrl(`/api/campaign-media/${row.id}?variant=mobile`, row.updatedAt) : null,
+    imageUrl: mediaUrl(row.r2Key, row.variantWidths),
+    mobileImageUrl: row.mobileR2Key ? mediaUrl(row.mobileR2Key, row.mobileVariantWidths) : null,
     altText: row.altText,
     eyebrow: row.eyebrow,
     headline: row.headline,
@@ -385,18 +410,19 @@ export async function getCollectionBySlug(
       price: productVariants.price,
       stock: productVariants.stockQuantity,
       reserved: productVariants.reservedQuantity,
-      imageId: productImages.id,
+      imageKey: productImages.r2Key,
+      imageWidths: productImages.variantWidths,
       blurDataUrl: productImages.blurDataUrl,
     })
     .from(products)
     .innerJoin(categories, eq(categories.id, products.categoryId))
     .innerJoin(productCollections, eq(productCollections.productId, products.id))
     .innerJoin(productVariants, and(eq(productVariants.productId, products.id), eq(productVariants.isDefault, true)))
-    .leftJoin(productImages, and(eq(productImages.productId, products.id), eq(productImages.isPrimary, true)))
+    .leftJoin(productImages, and(eq(productImages.productId, products.id), eq(productImages.isPrimary, true), eq(productImages.status, "active")))
     .where(and(eq(productCollections.collectionId, collection.id), eq(products.status, "published")))
     .orderBy(desc(products.publishedAt));
 
-  const variantImagesByProduct = await getVariantLeadImages(rows.map((row) => row.id));
+  const [extras, collectionSales] = await Promise.all([getListingExtras(rows.map((row) => row.id)), getActiveSales()]);
 
   return {
     name: collection.name,
@@ -408,17 +434,19 @@ export async function getCollectionBySlug(
       category: row.categorySlug,
       categoryId: row.categoryId,
       type: row.type,
-      price: row.price,
+      price: collectionSales ? (applySales(row.price, row.id, collectionSales)?.price ?? row.price) : row.price,
+      compareAtPrice: collectionSales ? applySales(row.price, row.id, collectionSales)?.originalPrice : undefined,
+      saleEndsAt: collectionSales ? applySales(row.price, row.id, collectionSales)?.sale.endsAt.toISOString() : undefined,
       color: row.color,
       badge: row.badge ?? "",
       sku: row.sku,
-      imageUrl: row.imageId ? imageUrlFor(row.imageId) : undefined,
+      imageUrl: row.imageKey ? imageUrlFor(row.imageKey, row.imageWidths) : undefined,
       blurDataUrl: row.blurDataUrl ?? undefined,
-      stock: Math.max(0, row.stock - row.reserved),
+      stock: extras.get(row.id)?.available ?? Math.max(0, row.stock - row.reserved),
       featured: row.featured,
       variants: [],
       images: [],
-      variantImages: variantImagesByProduct.get(row.id) ?? [],
+      altImageUrl: extras.get(row.id)?.altImageUrl,
     })),
   };
 }
@@ -460,8 +488,10 @@ export async function getActiveCategories(): Promise<CategoryWithImage[]> {
       sortOrder: categories.sortOrder,
       description: categories.description,
       imageR2Key: categories.imageR2Key,
+      imageWidths: categories.imageVariantWidths,
       blurDataUrl: categories.imageBlurDataUrl,
       heroR2Key: categories.heroR2Key,
+      heroWidths: categories.heroVariantWidths,
       heroBlurDataUrl: categories.heroBlurDataUrl,
       updatedAt: categories.updatedAt,
     })
@@ -475,9 +505,9 @@ export async function getActiveCategories(): Promise<CategoryWithImage[]> {
     slug: row.slug,
     sortOrder: row.sortOrder,
     description: row.description ?? undefined,
-    imageUrl: row.imageR2Key ? versionedMediaUrl(`/api/category-media/${row.id}`, row.updatedAt) : undefined,
+    imageUrl: row.imageR2Key ? mediaUrl(row.imageR2Key, row.imageWidths) : undefined,
     blurDataUrl: row.blurDataUrl ?? undefined,
-    heroImageUrl: row.heroR2Key ? versionedMediaUrl(`/api/category-media/${row.id}?variant=hero`, row.updatedAt) : undefined,
+    heroImageUrl: row.heroR2Key ? mediaUrl(row.heroR2Key, row.heroWidths) : undefined,
     heroBlurDataUrl: row.heroBlurDataUrl ?? undefined,
   }));
 }
@@ -560,6 +590,10 @@ export type PublicSettings = {
   supportPhone: string;
   supportEmail: string;
   instagramUrl: string;
+  facebookUrl: string;
+  tiktokUrl: string;
+  /** wa.me link that opens a chat with the business (falls back to wa.me/<number>). */
+  whatsappChatUrl: string;
   freeDeliveryThreshold: number;
   metaPixelId: string;
   gaMeasurementId: string;
@@ -571,14 +605,17 @@ export type PublicSettings = {
 export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
   const [row] = await db.select().from(siteSettings).where(eq(siteSettings.id, "store")).limit(1);
   return {
-    whatsappNumber: row?.whatsappNumber || process.env.WHATSAPP_DEFAULT_NUMBER || "",
-    supportPhone: row?.supportPhone ?? "",
+    whatsappNumber: row?.whatsappNumber || process.env.WHATSAPP_DEFAULT_NUMBER || BRAND.contact.phone,
+    supportPhone: row?.supportPhone || BRAND.contact.phone,
     supportEmail: row?.supportEmail ?? "",
-    instagramUrl: row?.instagramUrl ?? "",
+    instagramUrl: row?.instagramUrl || BRAND.contact.instagramUrl,
+    facebookUrl: row?.facebookUrl || BRAND.contact.facebookUrl,
+    tiktokUrl: row?.tiktokUrl || BRAND.contact.tiktokUrl,
+    whatsappChatUrl: row?.whatsappChatUrl || BRAND.contact.whatsappChatUrl,
     freeDeliveryThreshold: row?.freeDeliveryThreshold ?? 4000,
     metaPixelId: row?.metaPixelId ?? "",
     gaMeasurementId: row?.gaMeasurementId ?? "",
-    brandName: row?.brandName ?? "Muse & Silk",
+    brandName: row?.brandName ?? "Nure Asmir",
     codReservationHours: row?.codReservationHours ?? 6,
     bankReservationHours: row?.bankReservationHours ?? 6,
   };

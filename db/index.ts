@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
@@ -26,6 +26,22 @@ function requireDatabaseUrl(): string {
 // atomicity (order creation, reservation expiry) use guarded sequential awaits instead — see
 // app/api/orders/route.ts and lib/orders.ts for the pattern (a conditional UPDATE with a WHERE
 // guard acts as the atomicity check, since Postgres itself still applies each statement safely).
+// Retry only failures that happen BEFORE a request could have reached Neon (DNS / refused / connect
+// timeout). Those are safe to repeat even for writes; anything else (a reset after sending, an HTTP
+// error) is surfaced untouched so a write is never executed twice.
+const CONNECT_PHASE_ERRORS = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "ENETUNREACH"]);
+neonConfig.fetchFunction = async (input: RequestInfo | URL, init?: RequestInit) => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      const code = (error as { cause?: { code?: string } })?.cause?.code ?? "";
+      if (attempt >= 3 || !CONNECT_PHASE_ERRORS.has(code)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+};
+
 const sql = neon(requireDatabaseUrl());
 
 export const db = drizzle(sql, { schema });

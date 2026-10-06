@@ -1,30 +1,45 @@
-import type { Metadata } from "next";
-import { Instrument_Serif, Manrope } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Cormorant_Garamond, Jost } from "next/font/google";
 import "./globals.css";
+import "./storefront.css";
+import { BRAND, normalizeOrigin, siteOrigin } from "@/lib/brand";
 import { getPublicSettings } from "@/lib/commerce";
 import { getNonce } from "@/lib/nonce";
+import { getSiteImages } from "@/lib/site-images";
 import { AnalyticsConsent } from "./analytics-consent";
 
-const instrumentSerif = Instrument_Serif({
-  variable: "--font-instrument-serif",
+const display = Cormorant_Garamond({
+  variable: "--font-display",
   subsets: ["latin"],
-  weight: "400",
+  weight: ["400", "500", "600"],
   display: "swap",
 });
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+const sans = Jost({
+  variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
   display: "swap",
 });
 
-export function generateMetadata(): Metadata {
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Draw edge to edge on notched phones; floating widgets add the safe-area insets themselves.
+  viewportFit: "cover",
+  themeColor: "#ffffff",
+};
+
+export async function generateMetadata(): Promise<Metadata> {
+  const origin = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000");
+  const share = (await getSiteImages()).share_image;
+  const shareUrl = share ? (/^https?:\/\//.test(share.url) ? share.url.split("?")[0] : `${origin}${share.url.split("?")[0]}`) : `${origin}/og.jpg`;
+  const title = `${BRAND.name} — ${BRAND.descriptor}`;
   return {
     metadataBase: new URL(origin),
-    title: { default: "Muse & Silk — Modern scarves, bandanas and eyewear", template: "%s | Muse & Silk" },
-    description: "A modern accessories house offering considered scarves, silk bandanas and eyewear, delivered across Pakistan.",
-    applicationName: "Muse & Silk",
+    title: { default: `${title}. ${BRAND.tagline}.`, template: `%s | ${BRAND.name}` },
+    description: BRAND.description,
+    applicationName: BRAND.name,
     icons: {
       icon: [
         { url: "/logo.ico", sizes: "32x32" },
@@ -34,17 +49,18 @@ export function generateMetadata(): Metadata {
       apple: "/apple-touch-icon.png",
     },
     openGraph: {
-      title: "Muse & Silk — The final layer, considered.",
-      description: "Scarves, bandanas and eyewear selected for the way they transform an everyday look.",
+      title: `${title} — ${BRAND.tagline}`,
+      description: BRAND.description,
       type: "website",
       locale: "en_PK",
-      images: [{ url: `${origin}/og.png`, width: 1792, height: 922, alt: "Muse & Silk — The final layer, considered." }],
+      siteName: BRAND.name,
+      images: [{ url: shareUrl, width: 1200, height: 630, alt: `${BRAND.name} — ${BRAND.tagline}` }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Muse & Silk — The final layer, considered.",
-      description: "Modern accessories, composed with intention.",
-      images: [`${origin}/og.png`],
+      title: `${title} — ${BRAND.tagline}`,
+      description: BRAND.description,
+      images: [shareUrl],
     },
     robots: { index: true, follow: true },
   };
@@ -53,23 +69,22 @@ export function generateMetadata(): Metadata {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const settings = await getPublicSettings();
   const nonce = getNonce();
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
+  const origin = siteOrigin();
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "Organization",
-        name: "Muse & Silk",
-        alternateName: ["Muse and Silk", "museandsilk"],
+        name: BRAND.name,
         url: origin,
         logo: `${origin}/logo.png`,
-        ...(settings.instagramUrl ? { sameAs: [settings.instagramUrl] } : {}),
+        ...(settings.supportPhone ? { telephone: settings.supportPhone } : {}),
+        sameAs: [settings.instagramUrl, settings.facebookUrl, settings.tiktokUrl].filter(Boolean),
       },
       {
         "@type": "WebSite",
-        name: "Muse & Silk",
-        alternateName: ["Muse and Silk", "museandsilk"],
+        name: BRAND.name,
         url: origin,
         potentialAction: {
           "@type": "SearchAction",
@@ -84,9 +99,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   };
 
   return (
-    <html lang="en" className={`${instrumentSerif.variable} ${manrope.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${display.variable} ${sans.variable}`}>
       <head>
-        <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+        <script type="application/ld+json" nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </head>
       <body>
         {children}

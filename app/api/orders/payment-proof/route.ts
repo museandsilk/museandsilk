@@ -1,7 +1,8 @@
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, paymentProofs } from "@/db/schema";
-import { newObjectKey, putObject } from "@/lib/r2";
+import { newObjectKey, putObject } from "@/lib/storage";
+import { notifyAdmins } from "@/lib/push/notify";
 import { validatePaymentProofUpload } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   }
 
   const [order] = await db
-    .select({ id: orders.id, paymentMethod: orders.paymentMethod })
+    .select({ id: orders.id, orderNumber: orders.orderNumber, paymentMethod: orders.paymentMethod })
     .from(orders)
     .where(and(eq(orders.id, orderId), eq(orders.paymentMethod, "bank_deposit"), ne(orders.orderStatus, "cancelled")))
     .limit(1);
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
 
   const key = newObjectKey(`payment-proofs/${order.id}`, file.type);
   try {
-    await putObject(key, bytes, file.type);
+    await putObject(key, bytes, file.type, "private");
     await db.insert(paymentProofs).values({
       orderId: order.id,
       r2Key: key,
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
       byteSize: bytes.byteLength,
       status: "pending",
     });
+    notifyAdmins({ title: "Payment proof received", body: `A receipt was uploaded for order ${order.orderNumber}.`, url: "/admin/orders" });
     return Response.json({ ok: true }, { status: 201 });
   } catch (error) {
     console.error("Failed to store payment proof", error);

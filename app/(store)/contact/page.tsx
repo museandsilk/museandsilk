@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { StoreHeader } from "../_components/store-components";
 import { StoreFooter } from "../_components/store-footer";
 import { getPublicSettings } from "@/lib/commerce";
 
@@ -8,7 +7,7 @@ export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Reach Muse & Silk for order help, styling questions or aftercare — by WhatsApp, email or Instagram.",
+  description: "Reach Nure Asmir for order help, sizing questions or exchanges — by WhatsApp, phone, email or social media.",
   alternates: { canonical: "/contact" },
 };
 
@@ -18,35 +17,34 @@ export default async function ContactPage() {
 
   return (
     <main>
-      <StoreHeader />
       <section className="contact-page">
         <div>
-          <p className="eyebrow">Personal assistance</p>
+          <p className="eyebrow">Customer care</p>
           <h1>We are here to help.</h1>
           <p>
-            Product questions, sizing and styling guidance, order confirmation and aftercare — every message reaches a real person
-            at Muse &amp; Silk, not a queue. WhatsApp is the fastest way to reach us, especially for order confirmation once you have
+            Product questions, sizing guidance, order confirmation and exchanges — every message reaches a real person
+            at Nure Asmir, not a queue. WhatsApp is the fastest way to reach us, especially for order confirmation once you have
             checked out.
           </p>
         </div>
         <aside>
           <article>
             <span>WhatsApp Business</span>
-            {whatsapp ? (
-              <a href={`https://wa.me/${whatsapp}?text=${encodeURIComponent("Hello Muse & Silk, I would like some assistance.")}`} target="_blank" rel="noreferrer">
+            {settings.whatsappChatUrl || whatsapp ? (
+              <a href={settings.whatsappChatUrl || `https://wa.me/${whatsapp}?text=${encodeURIComponent("Hello Nure Asmir, I would like some assistance.")}`} target="_blank" rel="noreferrer">
                 Start a conversation ↗︎
               </a>
             ) : (
-              <p>Add your WhatsApp number in Owner Studio.</p>
+              <p>Coming soon.</p>
             )}
           </article>
           <article>
             <span>Email</span>
-            {settings.supportEmail ? <a href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a> : <p>Add your support email in Owner Studio.</p>}
+            {settings.supportEmail ? <a href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a> : <p>Coming soon.</p>}
           </article>
           <article>
             <span>Phone</span>
-            {settings.supportPhone ? <a href={`tel:${settings.supportPhone}`}>{settings.supportPhone}</a> : <p>Add your support phone in Owner Studio.</p>}
+            {settings.supportPhone ? <a href={`tel:${settings.supportPhone.replace(/\s/g, "")}`}>{settings.supportPhone}</a> : <p>Coming soon.</p>}
           </article>
           <article>
             <span>Instagram</span>
@@ -55,7 +53,27 @@ export default async function ContactPage() {
                 Visit Instagram ↗︎
               </a>
             ) : (
-              <p>Add your Instagram profile in Owner Studio.</p>
+              <p>Coming soon.</p>
+            )}
+          </article>
+          <article>
+            <span>Facebook</span>
+            {settings.facebookUrl ? (
+              <a href={settings.facebookUrl} target="_blank" rel="noreferrer">
+                Visit Facebook ↗︎
+              </a>
+            ) : (
+              <p>Coming soon.</p>
+            )}
+          </article>
+          <article>
+            <span>TikTok</span>
+            {settings.tiktokUrl ? (
+              <a href={settings.tiktokUrl} target="_blank" rel="noreferrer">
+                Visit TikTok ↗︎
+              </a>
+            ) : (
+              <p>Coming soon.</p>
             )}
           </article>
           <article>

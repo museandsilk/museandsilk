@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { campaignSlides } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
-import { deleteObject } from "@/lib/r2";
+import { deleteObject } from "@/lib/storage";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { variantKeyFor } from "@/lib/image-variants";
 

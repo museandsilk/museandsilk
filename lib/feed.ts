@@ -1,6 +1,6 @@
 import type { FeedProduct } from "@/lib/commerce";
 
-const FALLBACK_IMAGE = "/category-still-life.webp";
+const FALLBACK_IMAGE = "/placeholder.webp";
 
 function escapeXml(value: string): string {
   return value
@@ -26,7 +26,7 @@ export function buildProductFeedXml(feedProducts: FeedProduct[], origin: string,
   const items = feedProducts.flatMap((product) => {
     const link = `${origin}/products/${product.slug}`;
     const imageLink = product.imageId ? `${origin}/api/media/${product.imageId}` : `${origin}${FALLBACK_IMAGE}`;
-    const rawDescription = product.description ? stripHtml(product.description) : `${product.name} from Muse & Silk. Nationwide delivery across Pakistan.`;
+    const rawDescription = product.description ? stripHtml(product.description) : `${product.name} from Nure Asmir. Nationwide delivery across Pakistan.`;
 
     return product.variants.map((variant) => {
       const itemTitle = `${product.name} - ${variant.color}`;
@@ -46,7 +46,7 @@ export function buildProductFeedXml(feedProducts: FeedProduct[], origin: string,
       <g:condition>new</g:condition>
       <g:availability>${availability}</g:availability>
       <g:price>${formatPrice(variant.price)}</g:price>
-      <g:brand>Muse &amp; Silk</g:brand>
+      <g:brand>Nure Asmir</g:brand>
       <g:item_group_id>${escapeXml(product.id)}</g:item_group_id>
       ${categoryTag}
       ${mpnOrGtin}

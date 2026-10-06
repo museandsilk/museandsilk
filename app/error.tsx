@@ -1,16 +1,18 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 export default function StoreError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
+    Sentry.captureException(error);
     console.error("Storefront route error", error);
   }, [error]);
 
   return (
     <main style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
       <div style={{ maxWidth: 440, textAlign: "center" }}>
-        <p className="eyebrow">Muse &amp; Silk</p>
+        <p className="eyebrow">Nure Asmir</p>
         <h1 style={{ margin: "8px 0 16px", font: "400 clamp(32px, 5vw, 46px)/1.05 var(--display)" }}>
           Something briefly went wrong.
         </h1>

@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
-import { getObjectBytes } from "@/lib/r2";
+import { getObjectBytes } from "@/lib/storage";
 import { nearestVariantWidth, variantKeyFor } from "@/lib/image-variants";
 import { matchEdgeCache, putEdgeCache } from "@/lib/edge-cache";
 

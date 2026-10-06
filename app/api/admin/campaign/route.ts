@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { campaignSlides } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { validateImageUpload } from "@/lib/validation";
-import { newObjectKey, putObject } from "@/lib/r2";
+import { newObjectKey, putObject } from "@/lib/storage";
 import { auditLogEntry } from "@/lib/admin/audit";
 import { storeVariantsFromForm } from "@/lib/admin/campaign-images";
 

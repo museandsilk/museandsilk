@@ -1,65 +1,45 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { StoreHeader } from "../_components/store-components";
+import { getSiteImages } from "@/lib/site-images";
 import { StoreFooter } from "../_components/store-footer";
+
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Our story",
-  description: "Muse & Silk is a modern accessories house built around considered scarves, bandanas and eyewear designed to be worn, not stored.",
+  description: "Nure Asmir is a Pakistani men's wear label — tradition in a modern form. Shalwar kameez, shirts, pants and accessories.",
   alternates: { canonical: "/about" },
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const photo = (await getSiteImages()).about_hero;
   return (
     <main>
-      <StoreHeader theme="dark" />
       <section className="story-page">
         <div className="story-image">
-          <Image src="/campaign-hero.webp" alt="Muse & Silk campaign portrait" fill priority sizes="50vw" />
+          <Image src={photo?.url ?? "/og.jpg"} alt={photo?.alt || "Nure Asmir men's wear"} fill priority sizes="50vw" {...(photo?.blurDataUrl ? { placeholder: "blur" as const, blurDataURL: photo.blurDataUrl } : {})} />
         </div>
         <article>
-          <p className="eyebrow">Our point of view</p>
-          <h1>Accessories are the final idea.</h1>
+          <p className="eyebrow">Our story</p>
+          <h1>Tradition in a modern form.</h1>
 
           <p>
-            Muse and Silk began with a narrow, stubborn question: why should the piece that finishes a look be the one we think about
-            least? Scarves were folded away in drawers. Sunglasses were an afterthought bought at an airport counter. We started this
-            house to treat the final layer with the same seriousness as everything underneath it.
+            Nure Asmir is a men&apos;s wear label from Pakistan. We design the pieces a man reaches for every day — shalwar kameez, shirts,
+            pants and leather accessories — with one idea in mind: keep what is timeless about how we dress, and cut it for how we live now.
           </p>
 
           <p>
-            We work in three categories only — scarves, bandanas and eyewear — because restraint is part of the design brief, not a
-            limitation of it. Each edit is small enough that every piece earns its place. Nothing is added to fill a rack, and nothing
-            ships until the color, the drape, the stitch and the finish meet the standard we set for it.
+            Our range is deliberately small. Each piece is designed to be worn often and to pair easily with the rest of your wardrobe, so
+            nothing is added just to fill a rail.
           </p>
 
-          <blockquote>Less noise. More intention.</blockquote>
+          <blockquote>Style. Heritage. Confidence.</blockquote>
 
           <p>
-            Our approach to materials is direct. We favor silk-touch fabrications that hold color without becoming precious, weights
-            that move rather than stiffen, and finishes that soften with wear instead of fraying with it. A scarf from this house is
-            built to be knotted, wrapped and re-worn through a hundred different outfits, not preserved behind tissue paper.
-          </p>
-
-          <p>
-            The same discipline shapes our eyewear. Frames are chosen for how they sit on a real face across a full day — light at the
-            temple, balanced at the bridge — before we consider how they photograph. Confidence, to us, is a frame you forget you are
-            wearing until someone asks where it is from.
-          </p>
-
-          <p>
-            What we are building is not a wardrobe of disposable extras. It is a short list of objects designed to be reached for
-            repeatedly — the scarf that rescues a plain coat, the bandana that changes a bag entirely, the sunglasses that make a
-            Tuesday feel considered. Every product page on this site is written from verified supplier information, every sellable
-            option carries its own SKU and stock count, and every order is personally reviewed before it leaves us.
-          </p>
-
-          <p>
-            We deliver across Pakistan, we confirm every order by phone or WhatsApp before it is dispatched, and we stand behind what
-            we sell. If a piece is not right, our{" "}
-            <Link href="/policies/returns">returns policy</Link> explains exactly how to send it back. If you have a question before
-            you buy, <Link href="/contact">write to us</Link> — a person, not a script, will answer.
+            We deliver across Pakistan, with cash on delivery available, and we confirm every order by phone or WhatsApp before it is
+            dispatched. If a piece is not right, our <Link href="/policies/returns">returns policy</Link> explains how to exchange it. If you
+            have a question before you buy, <Link href="/contact">write to us</Link> — a person will answer.
           </p>
         </article>
       </section>

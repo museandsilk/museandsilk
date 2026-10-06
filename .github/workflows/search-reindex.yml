@@ -1,0 +1,21 @@
+name: Algolia reindex
+
+# Nightly safety net: rebuilds the Algolia product index from the database so search can never
+# drift from the catalogue (the admin routes already sync on every product change; this also covers
+# stock sold through checkout and any out-of-band database edits).
+on:
+  schedule:
+    - cron: "40 2 * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rebuild the search index
+        env:
+          SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: curl -sf -X GET "$SITE_URL/api/cron/search-reindex" -H "Authorization: Bearer $CRON_SECRET"

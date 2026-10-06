@@ -1,51 +1,19 @@
-import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { orders, paymentProofs } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
+import { isOrderTab, listOrders, orderTabCounts } from "@/lib/admin/orders-query";
 
 export const dynamic = "force-dynamic";
 
-const VALID_STATUSES = [
-  "pending_confirmation",
-  "confirmed",
-  "processing",
-  "packed",
-  "shipped",
-  "delivered",
-  "cancelled",
-  "returned",
-];
-
+/** Paged, searchable order list (the order screen reads the same query directly on the server). */
 export async function GET(request: Request) {
   const admin = await getAdminUser();
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);
-  const status = url.searchParams.get("status") ?? "";
-
-  const rows = await db
-    .select({
-      id: orders.id,
-      orderNumber: orders.orderNumber,
-      customerName: orders.customerName,
-      customerPhone: orders.customerPhone,
-      city: orders.city,
-      province: orders.province,
-      total: orders.total,
-      paymentMethod: orders.paymentMethod,
-      paymentStatus: orders.paymentStatus,
-      orderStatus: orders.orderStatus,
-      reservationExpiresAt: orders.reservationExpiresAt,
-      postexTrackingNumber: orders.postexTrackingNumber,
-      postexStatus: orders.postexStatus,
-      createdAt: orders.createdAt,
-      proofId: paymentProofs.id,
-      proofStatus: paymentProofs.status,
-    })
-    .from(orders)
-    .leftJoin(paymentProofs, eq(paymentProofs.orderId, orders.id))
-    .where(status && VALID_STATUSES.includes(status) ? and(eq(orders.orderStatus, status)) : undefined)
-    .orderBy(desc(orders.createdAt));
-
-  return Response.json({ orders: rows });
+  const tabParam = url.searchParams.get("tab") ?? undefined;
+  const tab = isOrderTab(tabParam) ? tabParam : "all";
+  const [list, counts] = await Promise.all([
+    listOrders({ tab, q: url.searchParams.get("q") ?? "", page: Number(url.searchParams.get("page") ?? 1) || 1, pageSize: Math.min(100, Number(url.searchParams.get("pageSize") ?? 25) || 25) }),
+    orderTabCounts(),
+  ]);
+  return Response.json({ orders: list.rows, total: list.total, page: list.page, pageSize: list.pageSize, counts });
 }

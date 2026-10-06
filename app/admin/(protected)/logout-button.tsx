@@ -20,10 +20,9 @@ export function LogoutButton() {
   }
 
   return (
-    <div className="admin-top-actions">
-      <button type="button" onClick={logout} disabled={busy}>
-        {busy ? "Signing out…" : "Sign out"}
-      </button>
-    </div>
+    <button type="button" className="a-btn a-btn-quiet" onClick={logout} disabled={busy} style={{ justifyContent: "flex-start" }}>
+      {busy ? <span className="spinner" aria-hidden="true" /> : null}
+      {busy ? "Signing out…" : "Sign out"}
+    </button>
   );
 }

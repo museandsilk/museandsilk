@@ -1,31 +1,26 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import { StoreHeader } from "../_components/store-components";
 import { StoreFooter } from "../_components/store-footer";
 import { ShopGrid } from "./shop-grid";
-import { getCatalogProducts } from "@/lib/commerce";
+import { getActiveCategories, getCatalogProducts, toCard } from "@/lib/commerce";
 
-export const revalidate = 300;
+// Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
+// always priced on the server regardless of what a cached page displays.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: "Shop scarves, bandanas and eyewear",
-  description: "Explore the complete Muse & Silk edit of scarves, bandanas and sunglasses.",
+  title: "Shop all — new arrivals",
+  description: "Shop the full Nure Asmir range: shalwar kameez, shirts, pants and leather accessories.",
   alternates: { canonical: "/shop" },
 };
 
 export default async function ShopPage() {
-  const products = await getCatalogProducts();
+  const [products, categories] = await Promise.all([getCatalogProducts(), getActiveCategories()]);
   return (
     <main className="page-fade-in">
-      <StoreHeader theme="dark" />
-      <section className="collection-hero">
-        <Image src="/category-still-life.webp" alt="" fill priority sizes="100vw" />
-        <div />
-        <p className="eyebrow">The complete edit</p>
-        <h1>Shop all pieces</h1>
-      </section>
-      <ShopGrid products={products} />
-
+      <header className="listing-head">
+        <h1 className="page-title">New arrivals</h1>
+      </header>
+      <ShopGrid products={products.map(toCard)} categories={categories.map((category) => ({ slug: category.slug, name: category.name }))} />
       <StoreFooter />
     </main>
   );

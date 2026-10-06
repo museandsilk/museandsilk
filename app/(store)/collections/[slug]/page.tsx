@@ -1,81 +1,68 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { StoreHeader } from "../../_components/store-components";
 import { StoreFooter } from "../../_components/store-footer";
 import { ShopGrid } from "../../shop/shop-grid";
-import { getActiveCategories, getCatalogProducts, getCollectionBySlug } from "@/lib/commerce";
-import { buildSrcSet } from "@/lib/images";
+import { getActiveCategories, getCatalogProducts, getCollectionBySlug, toCard } from "@/lib/commerce";
+import { BRAND, siteOrigin } from "@/lib/brand";
 import { getNonce } from "@/lib/nonce";
 
-const names: Record<string, string> = { scarves: "Scarves", bandanas: "Bandanas", glasses: "Eyewear", eyewear: "Eyewear" };
+// Short ISR window: a flash sale that goes live (or ends) shows up within about a minute. Orders are
+// always priced on the server regardless of what a cached page displays.
+export const revalidate = 60;
 
-const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
-
-export const revalidate = 300;
+/** A slug resolves to a category first (the main storefront navigation) and otherwise to a custom,
+ * admin-curated collection. */
+async function resolve(slug: string) {
+  const categories = await getActiveCategories();
+  const category = categories.find((entry) => entry.slug === slug);
+  if (category) return { kind: "category" as const, title: category.name, description: category.description ?? "", category };
+  const collection = await getCollectionBySlug(slug);
+  if (collection) return { kind: "collection" as const, title: collection.name, description: collection.description, collection };
+  return null;
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const custom = names[slug] ? null : await getCollectionBySlug(slug);
-  const title = custom?.name ?? names[slug] ?? "Collection";
+  const found = await resolve(slug);
+  if (!found) return {};
   return {
-    title,
-    description: custom?.description || `Shop ${names[slug] ?? "the collection"} from Muse & Silk.`,
+    title: found.title,
+    description: found.description || `Shop ${found.title} from ${BRAND.name}.`,
     alternates: { canonical: `/collections/${slug}` },
   };
 }
 
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const normalized = slug === "eyewear" ? "glasses" : slug;
-  const [catalog, allCategories] = await Promise.all([getCatalogProducts(), getActiveCategories()]);
+  const found = await resolve(slug);
+  if (!found) notFound();
   const nonce = getNonce();
-  const custom = names[slug] ? null : await getCollectionBySlug(slug);
 
-  if (!names[slug] && !custom) notFound();
-
-  const products = custom?.products ?? catalog.filter((product) => product.category === normalized);
-  const title = custom?.name ?? names[slug] ?? "Collection";
-  const heroCategory = names[slug] ? allCategories.find((entry) => entry.slug === normalized) : undefined;
-
+  const products = found.kind === "collection" ? found.collection.products : (await getCatalogProducts()).filter((product) => product.category === slug);
+  const origin = siteOrigin();
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_ORIGIN },
-      { "@type": "ListItem", position: 2, name: title, item: `${SITE_ORIGIN}/collections/${slug}` },
+      { "@type": "ListItem", position: 1, name: "Home", item: origin },
+      { "@type": "ListItem", position: 2, name: found.title, item: `${origin}/collections/${slug}` },
     ],
   };
 
   return (
     <main className="page-fade-in">
-      <StoreHeader theme="dark" />
-      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
-      <section className={`collection-hero collection-${normalized}`}>
-        {(() => {
-          // Mobile gets the same tall 3:4 crop as the homepage card — the wide hero crop is
-          // specifically framed for a short, wide banner and looks wrong cropped down further for
-          // a narrow screen. Desktop/laptop gets the wide hero crop (falling back to the card crop
-          // if no hero was ever uploaded for this category). next/image can't render this — art-
-          // directing a genuinely different crop per breakpoint needs a real <picture><source
-          // media="…"> pair (see CampaignCarousel for the same pattern).
-          const mobileSrc = heroCategory?.imageUrl ?? "/category-still-life.webp";
-          const desktopSrc = heroCategory?.heroImageUrl ?? heroCategory?.imageUrl ?? "/category-still-life.webp";
-          const blurDataUrl = heroCategory?.heroImageUrl ? heroCategory.heroBlurDataUrl : heroCategory?.blurDataUrl;
-          return (
-            <div className="collection-hero-media" style={blurDataUrl ? { backgroundImage: `url(${blurDataUrl})` } : undefined}>
-              <picture>
-                <source media="(max-width: 760px)" srcSet={buildSrcSet(mobileSrc)} sizes="100vw" />
-                <img src={desktopSrc} srcSet={buildSrcSet(desktopSrc)} sizes="100vw" alt="" fetchPriority="high" />
-              </picture>
-            </div>
-          );
-        })()}
-        <div />
-        <p className="eyebrow">The signature edit</p>
-        <h1>{title}</h1>
-      </section>
-      <ShopGrid products={products} showCategoryFilter={false} />
-
+      <script type="application/ld+json" nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <header className="listing-head">
+        <nav className="breadcrumb" aria-label="Breadcrumb">
+          <Link href="/">Home</Link>
+          <span aria-hidden="true">/</span>
+          <span>{found.title}</span>
+        </nav>
+        <h1 className="page-title">{found.title}</h1>
+        {found.description && <p>{found.description}</p>}
+      </header>
+      <ShopGrid products={products.map(toCard)} />
       <StoreFooter />
     </main>
   );

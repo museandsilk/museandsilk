@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { inventoryMovements, orderItems, orderStatusHistory, orders, productVariants } from "@/db/schema";
 import { sendReservationReminderEmail } from "@/lib/email/resend";
 import { getPublicSettings } from "@/lib/commerce";
+import { checkStockAlerts } from "@/lib/stock-alerts";
+import { announceOrderEvent } from "@/lib/order-events";
 
 const REMINDER_WINDOW_HOURS = 3;
 
@@ -30,7 +32,7 @@ export async function expireReservations(): Promise<void> {
   for (const order of expired) {
     const cancelled = await db
       .update(orders)
-      .set({ orderStatus: "cancelled", updatedAt: now })
+      .set({ orderStatus: "cancelled", updatedAt: now, cancelledAt: now, cancelReason: "expired", cancelledBy: "system" })
       .where(and(eq(orders.id, order.id), eq(orders.orderStatus, "pending_confirmation")))
       .returning({ id: orders.id });
     if (cancelled.length === 0) continue; // a concurrent run already handled this order
@@ -44,6 +46,7 @@ export async function expireReservations(): Promise<void> {
     });
 
     await releaseOrderReservation(order.id, "Reservation expired", "system", now);
+    announceOrderEvent(order.id, "cancelled", "system");
   }
 }
 
@@ -85,6 +88,7 @@ export async function releaseOrderReservation(
       actorEmail,
     });
   }
+  await checkStockAlerts(items.flatMap((item) => (item.variantId ? [item.variantId] : [])));
 }
 
 /**
@@ -122,6 +126,7 @@ export async function fulfillOrderReservation(orderId: string, actorEmail: strin
       actorEmail,
     });
   }
+  await checkStockAlerts(items.flatMap((item) => (item.variantId ? [item.variantId] : [])));
 }
 
 /**
@@ -157,6 +162,7 @@ export async function restockReturnedOrder(orderId: string, actorEmail: string, 
       actorEmail,
     });
   }
+  await checkStockAlerts(items.flatMap((item) => (item.variantId ? [item.variantId] : [])));
 }
 
 /**
@@ -220,4 +226,32 @@ export async function sendReservationReminders(): Promise<void> {
       whatsappNumber: settings.whatsappNumber || undefined,
     });
   }
+}
+
+/**
+ * Repairs reserved-stock drift. `reservedQuantity` is bumped before the order row is written (see
+ * app/api/orders/route.ts), so a Worker killed in between would leak a reservation that no order
+ * owns. This recomputes what the open orders (pending → shipped) actually hold and corrects any
+ * variant that disagrees and has been idle for 10 minutes (so an order mid-creation is never
+ * "corrected" underneath itself). Safe to run repeatedly.
+ */
+export async function reconcileReservedStock(): Promise<{ repaired: number }> {
+  const idleBefore = new Date(Date.now() - 10 * 60 * 1000);
+  const result = await db.execute(sql`
+    UPDATE product_variants v
+    SET reserved_quantity = x.expected, updated_at = now()
+    FROM (
+      SELECT pv.id,
+             coalesce(sum(oi.quantity) FILTER (WHERE o.order_status IN ('pending_confirmation','confirmed','processing','packed','shipped')), 0)::int AS expected
+      FROM product_variants pv
+      LEFT JOIN order_items oi ON oi.variant_id = pv.id
+      LEFT JOIN orders o ON o.id = oi.order_id
+      GROUP BY pv.id
+    ) x
+    WHERE v.id = x.id AND v.reserved_quantity <> x.expected AND v.updated_at < ${idleBefore}
+    RETURNING v.id
+  `);
+  const rows = (result as unknown as { rows?: unknown[] }).rows ?? [];
+  if (rows.length) console.warn(`reconcileReservedStock repaired ${rows.length} variant(s)`);
+  return { repaired: rows.length };
 }

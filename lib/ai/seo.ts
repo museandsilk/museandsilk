@@ -34,9 +34,9 @@ export async function generateSeoFields(input: SeoFieldsInput): Promise<SeoField
     .filter(Boolean)
     .join(", ");
 
-  const prompt = `Write SEO metadata for a luxury accessories e-commerce product page.
+  const prompt = `Write SEO metadata for a men's wear e-commerce product page.
 Product name: "${input.name}"${details ? `\nKnown details: ${details}` : ""}
-Brand: Muse & Silk, a modern, premium, understated accessories house (scarves, bandanas, eyewear), nationwide delivery in Pakistan.
+Brand: Nure Asmir, a Pakistani men's wear label (shalwar kameez, shirts, pants, leather accessories) with the tagline "Tradition in a modern form", nationwide delivery in Pakistan.
 Return strict JSON only, no other text, no markdown code fences: {"seoTitle": "...", "seoDescription": "..."}
 - seoTitle: under 60 characters, include the product name naturally, no clickbait, no "Buy now"/"Shop now" phrasing.
 - seoDescription: under 155 characters, one or two plain sentences describing the product and mentioning nationwide delivery in Pakistan, confident and understated tone, no exclamation marks, no clichés.`;

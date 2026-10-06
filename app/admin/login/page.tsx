@@ -1,20 +1,29 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useLockedAction } from "@/lib/use-locked-action";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = searchParams.get("returnTo") || "/admin";
+  const requested = searchParams.get("returnTo") || "/admin";
+  // Only ever go back to a page inside the admin – never to an address someone put in the link.
+  const returnTo = requested.startsWith("/admin") && !requested.startsWith("//") ? requested : "/admin";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const action = useLockedAction();
+  const busy = action.pending;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
+    await action.run(() => signIn());
+  }
+
+  async function signIn() {
     setError("");
     try {
       const response = await fetch("/api/admin/login", {
@@ -22,65 +31,63 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        setError(result.error ?? "Invalid email or password.");
+        setError(result.error ?? "That email or password is not correct. Please try again.");
         return;
       }
       router.push(returnTo);
       router.refresh();
-    } catch (error) {
-      console.error("login failed", error);
-      setError("Something went wrong — check your connection and try again.");
-    } finally {
-      setBusy(false);
+    } catch (caught) {
+      console.error("login failed", caught);
+      setError("Could not reach the server. Please check your internet and try again.");
     }
   }
 
   return (
-    <main className="admin-standalone">
-      <header>
+    <main className="adm-login-wrap">
+      <div className="a-card adm-login">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
-          <h1>Owner sign in</h1>
-          <p>Sign in with your admin email and password to manage the store.</p>
+          <Image src="/logo.png" alt="Nure Asmir" width={56} height={56} priority />
         </div>
-      </header>
-      <form className="admin-settings-card" onSubmit={submit}>
-        <div className="admin-form-grid">
-          <label className="field-wide">
-            <span>Email</span>
-            <input
-              required
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="owner@museandsilk.com"
-            />
-          </label>
-          <label className="field-wide">
-            <span>Password</span>
-            <input
-              required
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
+        <div>
+          <h1>Welcome back</h1>
+          <p className="a-muted" style={{ marginTop: 6 }}>
+            Sign in to manage your shop, orders and products.
+          </p>
         </div>
-        {error && <p className="admin-message">{error}</p>}
-        <button className="admin-primary" disabled={busy}>
-          {busy ? (
-            <span className="busy-label">
-              <span className="spinner spinner-light" aria-hidden="true" /> Signing in…
-            </span>
-          ) : (
-            "Sign in"
+        {/* method="post": if the form is submitted before the page has hydrated, credentials must never end up in the URL. */}
+        <form method="post" action="/admin/login" onSubmit={submit} className="a-stack" style={{ gap: 16 }}>
+          <div className="a-field">
+            <label htmlFor="login-email">Email</label>
+            <input id="login-email" required type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@nureasmir.com" />
+          </div>
+          <div className="a-field">
+            <label htmlFor="login-password">Password</label>
+            <div style={{ position: "relative" }}>
+              <input id="login-password" required type={show ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} style={{ paddingRight: 84 }} />
+              <button type="button" className="a-btn a-btn-quiet a-btn-sm" style={{ position: "absolute", right: 5, top: 5 }} onClick={() => setShow((value) => !value)} aria-pressed={show}>
+                {show ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
+          {error && (
+            <p className="a-error" role="alert">
+              {error}
+            </p>
           )}
-        </button>
-      </form>
+          <button className="a-btn a-btn-primary a-btn-lg" disabled={busy} aria-busy={busy}>
+            {busy ? (
+              <span className="busy-label">
+                <span className="spinner spinner-light" aria-hidden="true" /> Signing in…
+              </span>
+            ) : (
+              "Sign in"
+            )}
+          </button>
+          <p className="a-help">Forgot your password? Ask the person who set up your shop to reset it.</p>
+        </form>
+      </div>
     </main>
   );
 }

@@ -21,6 +21,17 @@ export const adminSessions = pgTable("admin_sessions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("admin_sessions_email_idx").on(table.adminEmail)]);
 
+// Browser/phone push registrations (Firebase Cloud Messaging) for the owner's order alerts. One row
+// per device token; tokens FCM reports as unregistered are deleted on the next send.
+export const adminPushDevices = pgTable("admin_push_devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminEmail: text("admin_email").notNull().references(() => adminOwners.email, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("admin_push_devices_email_idx").on(table.adminEmail)]);
+
 export const loginAttempts = pgTable("login_attempts", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull(),
@@ -119,7 +130,7 @@ export const products = pgTable("products", {
   occasion: text("occasion"),
   style: text("style"),
   countryOfOrigin: text("country_of_origin"),
-  gender: text("gender").notNull().default("female"),
+  gender: text("gender").notNull().default("male"),
   googleProductCategory: text("google_product_category"),
   publishedAt: timestamp("published_at", { withTimezone: true }),
   ...timestamps,
@@ -144,6 +155,9 @@ export const productVariants = pgTable("product_variants", {
   stockQuantity: integer("stock_quantity").notNull().default(0),
   reservedQuantity: integer("reserved_quantity").notNull().default(0),
   lowStockThreshold: integer("low_stock_threshold").notNull().default(3),
+  // Last stock level the owner was alerted about ("ok" | "low" | "out") so a push goes out once per
+  // transition instead of on every order — see lib/stock-alerts.ts.
+  stockAlertState: text("stock_alert_state").notNull().default("ok"),
   isDefault: boolean("is_default").notNull().default(false),
   status: text("status").notNull().default("active"),
   ...timestamps,
@@ -181,10 +195,10 @@ export const campaignSlides = pgTable("campaign_slides", {
   altText: text("alt_text").notNull(),
   contentType: text("content_type").notNull(),
   byteSize: integer("byte_size").notNull(),
-  eyebrow: text("eyebrow").notNull().default("The first edit · 2026"),
-  headline: text("headline").notNull().default("The final layer, considered."),
-  body: text("body").notNull().default("Scarves, bandanas and eyewear selected for the way they transform an everyday look."),
-  ctaLabel: text("cta_label").notNull().default("Shop the first edit"),
+  eyebrow: text("eyebrow").notNull().default("New arrivals"),
+  headline: text("headline").notNull().default("Tradition in a modern form"),
+  body: text("body").notNull().default("Shalwar kameez, shirts, pants and accessories for the modern man."),
+  ctaLabel: text("cta_label").notNull().default("Shop now"),
   ctaHref: text("cta_href").notNull().default("/shop"),
   sortOrder: integer("sort_order").notNull().default(0),
   active: boolean("active").notNull().default(true),
@@ -256,23 +270,26 @@ export const orders = pgTable("orders", {
   // than recomputed — the zone's estimate can change later, but the promise already made to this
   // specific customer at checkout shouldn't.
   estimatedDeliveryDate: date("estimated_delivery_date"),
-  // PostEx courier booking (see lib/postex.ts and app/api/admin/orders/[id]/postex). Null until an
-  // admin books the parcel. While a booking request is in flight this holds the sentinel "PENDING"
-  // (with postexBookedAt as the claim time) so a double-click can't book the same order twice; it's
-  // replaced by the real tracking number on success, or reset to null on failure.
-  postexTrackingNumber: text("postex_tracking_number"),
-  postexBookedAt: timestamp("postex_booked_at", { withTimezone: true }),
-  // PostEx's own last-known status name ("Unbooked" → "Booked" once a load sheet is generated, then
-  // "Picked By PostEx", "Out For Delivery", "Delivered", …). Refreshed by the scheduled sync
-  // (app/api/cron/postex-sync) and the admin "Sync" buttons, and read by the customer tracking page
-  // so it never has to call PostEx (or expose the token) on a customer's behalf.
-  postexStatus: text("postex_status"),
-  postexSyncedAt: timestamp("postex_synced_at", { withTimezone: true }),
-  // Automatic booking bookkeeping: attempts made so far (capped at 3, also set to 3 to opt an order
-  // out — e.g. when an admin cancels its booking, so the sweeper doesn't just re-book it) and the
-  // reason the last attempt failed, shown to the admin in the order drawer.
-  postexAutoAttempts: integer("postex_auto_attempts").notNull().default(0),
-  postexAutoError: text("postex_auto_error"),
+  // Courier booking (TCS — see lib/tcs.ts and lib/courier.ts). Null until the parcel is booked. While a
+  // booking request is in flight this holds the sentinel "PENDING" (with courierBookedAt as the claim
+  // time) so a double-click can't book the same order twice; it is replaced by the real consignment
+  // (CN) number on success, or reset to null on failure. An admin can also type in a CN booked by hand
+  // on the TCS portal.
+  courierName: text("courier_name").notNull().default("TCS"),
+  courierTrackingNumber: text("courier_tracking_number"),
+  courierBookedAt: timestamp("courier_booked_at", { withTimezone: true }),
+  // The courier's own last-known status text ("Shipment Picked Up", "Out For Delivery", "Delivered", …),
+  // refreshed by the scheduled sync and read by the customer tracking page so it never calls TCS itself.
+  courierStatus: text("courier_status"),
+  courierSyncedAt: timestamp("courier_synced_at", { withTimezone: true }),
+  courierAutoAttempts: integer("courier_auto_attempts").notNull().default(0),
+  courierAutoError: text("courier_auto_error"),
+  // The moment TCS physically took the parcel. From here on the order can no longer be cancelled
+  // (lib/order-rules.ts) — a refusal at the door comes back as a return instead.
+  handedOverAt: timestamp("handed_over_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancelReason: text("cancel_reason"),
+  cancelledBy: text("cancelled_by"),
   ...timestamps,
 }, (table) => [
   index("orders_phone_idx").on(table.customerPhone),
@@ -293,6 +310,49 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull(),
   lineTotal: integer("line_total").notNull(),
 }, (table) => [index("order_items_order_idx").on(table.orderId)]);
+
+// Time-boxed storewide or per-product discounts ("flash sales"). The price a shopper pays is always
+// computed server-side at order time from the sales active *right then* (lib/sales.ts), so a stale
+// cached page or a tampered cart can never get a discount that has ended.
+export const flashSales = pgTable("flash_sales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  discountType: text("discount_type").notNull(), // "percent" | "fixed"
+  discountValue: integer("discount_value").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  active: boolean("active").notNull().default(true),
+  appliesToAll: boolean("applies_to_all").notNull().default(false),
+  // Set once the "sale is live" push has gone out, so the cron never alerts twice.
+  startNotifiedAt: timestamp("start_notified_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => [index("flash_sales_window_idx").on(table.active, table.startsAt, table.endsAt)]);
+
+export const flashSaleProducts = pgTable("flash_sale_products", {
+  saleId: uuid("sale_id").notNull().references(() => flashSales.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.saleId, table.productId] })]);
+
+// Shopper devices that opted into push (Firebase Cloud Messaging): order updates for the orders they
+// placed on this device and sale alerts for wishlisted products. No account exists for shoppers, so a
+// device is tied to an order only after proving the order number + phone number.
+export const customerPushDevices = pgTable("customer_push_devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").notNull().unique(),
+  orderNumbers: jsonb("order_numbers").$type<string[]>().notNull().default([]),
+  wishlist: jsonb("wishlist").$type<string[]>().notNull().default([]),
+  salesOptIn: boolean("sales_opt_in").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One row per (order, lifecycle event) that has already been announced to the customer — makes the
+// notifications idempotent when an admin double-clicks or a webhook is retried.
+export const orderEventsSent = pgTable("order_events_sent", {
+  orderId: uuid("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  event: text("event").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.orderId, table.event] })]);
 
 export const orderStatusHistory = pgTable("order_status_history", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -338,11 +398,23 @@ export const subscribers = pgTable("subscribers", {
 
 export const siteSettings = pgTable("site_settings", {
   id: text("id").primaryKey().default("store"),
-  brandName: text("brand_name").notNull().default("Muse & Silk"),
+  brandName: text("brand_name").notNull().default("Nure Asmir"),
   whatsappNumber: text("whatsapp_number").notNull().default(""),
   supportPhone: text("support_phone").notNull().default(""),
   supportEmail: text("support_email").notNull().default(""),
   instagramUrl: text("instagram_url").notNull().default(""),
+  facebookUrl: text("facebook_url").notNull().default(""),
+  tiktokUrl: text("tiktok_url").notNull().default(""),
+  // A wa.me "message" link (opens a chat with the business) — preferred over building one from the number.
+  whatsappChatUrl: text("whatsapp_chat_url").notNull().default(""),
+  // TCS "from" details printed on every booking (credentials live in env, never here).
+  tcsShipperName: text("tcs_shipper_name").notNull().default("Nure Asmir"),
+  tcsShipperAddress: text("tcs_shipper_address").notNull().default(""),
+  tcsShipperCityName: text("tcs_shipper_city_name").notNull().default("Karachi"),
+  tcsShipperCityCode: text("tcs_shipper_city_code").notNull().default("KHI"),
+  tcsShipperPhone: text("tcs_shipper_phone").notNull().default(""),
+  // How many days after delivery a shopper may ask for a refund.
+  refundWindowDays: integer("refund_window_days").notNull().default(7),
   bankName: text("bank_name").notNull().default(""),
   bankAccountTitle: text("bank_account_title").notNull().default(""),
   bankAccountNumber: text("bank_account_number").notNull().default(""),
@@ -394,3 +466,43 @@ export const deliveryZones = pgTable("delivery_zones", {
   sortOrder: integer("sort_order").notNull().default(0),
   ...timestamps,
 }, (table) => [uniqueIndex("delivery_zones_name_idx").on(table.name)]);
+
+// A shopper's refund claim (or one the system opens when a prepaid order is cancelled). The owner reviews
+// it, optionally arranges a return pickup with TCS, and finally marks it refunded with the payment
+// reference. One per order.
+export const refundRequests = pgTable("refund_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id").notNull().unique().references(() => orders.id, { onDelete: "cascade" }),
+  source: text("source").notNull().default("customer"), // "customer" | "admin" | "system"
+  reason: text("reason").notNull(),
+  details: text("details"),
+  amount: integer("amount").notNull(),
+  payoutMethod: text("payout_method"), // "bank" | "jazzcash" | "easypaisa" | "nayapay" | "other"
+  payoutAccount: text("payout_account"),
+  payoutTitle: text("payout_title"),
+  photoKeys: jsonb("photo_keys").$type<string[]>().notNull().default([]),
+  status: text("status").notNull().default("requested"), // "requested" | "approved" | "rejected" | "refunded"
+  adminNote: text("admin_note"),
+  returnTrackingNumber: text("return_tracking_number"),
+  refundedAmount: integer("refunded_amount"),
+  refundReference: text("refund_reference"),
+  refundedAt: timestamp("refunded_at", { withTimezone: true }),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => [index("refund_requests_status_idx").on(table.status, table.createdAt)]);
+
+// Owner-editable website pictures that are not products, categories or homepage banners (those have their
+// own tables): see lib/site-images.ts for the list of slots and their fallbacks.
+export const siteImages = pgTable("site_images", {
+  slot: text("slot").primaryKey(),
+  r2Key: text("r2_key").notNull(),
+  altText: text("alt_text").notNull().default(""),
+  contentType: text("content_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  blurDataUrl: text("blur_data_url"),
+  variantWidths: jsonb("variant_widths").$type<number[]>(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

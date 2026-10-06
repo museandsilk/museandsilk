@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { StoreHeader } from "../../_components/store-components";
 import { StoreFooter } from "../../_components/store-footer";
 import { getPublicSettings } from "@/lib/commerce";
 
@@ -20,7 +19,7 @@ type Policy = {
 const policies: Record<string, Policy> = {
   shipping: {
     title: "Shipping & delivery",
-    intro: "Clear delivery expectations for every Muse & Silk order, delivered nationwide across Pakistan.",
+    intro: "Clear delivery expectations for every Nure Asmir order, delivered nationwide across Pakistan.",
     sections: [
       [
         "Order confirmation",
@@ -54,19 +53,23 @@ const policies: Record<string, Policy> = {
       ],
       [
         "How to start a return",
-        "Contact us on WhatsApp or by email within the 7-day window with your order number and the reason for return. We will confirm eligibility and share the return address and next steps directly.",
+        "Open Track your order, enter your order number and phone number, and press “Ask for a refund” within the 7-day window. Tell us what went wrong (photos help if the item is damaged) and where to send your money. We review every request, and we may arrange a TCS return pickup for you. You can also reach us on WhatsApp.",
+      ],
+      [
+        "Cancelling an order",
+        "You can cancel an order yourself on the Track your order page, any time until we hand the parcel to TCS. Once TCS has collected it the order can no longer be cancelled — if you do not want it, you may refuse it at the door and it will come back to us. If you had already paid, we refund you in full.",
       ],
       [
         "Non-returnable items",
         "Items showing wear, marks, scent, alteration or missing packaging cannot be accepted. Final-sale items and any personalised items are not returnable unless they arrive defective.",
       ],
       [
-        "Eyewear returns",
-        "Eyewear must be returned without scratches, adjustment or signs of wear, with any hygiene seal or protective film still intact, for the same reasons a worn or altered garment cannot be resold.",
+        "Leather accessories",
+        "Belts, wallets and card holders must be returned unused and unmarked, with their original packaging and tags, for the same reasons a worn garment cannot be resold.",
       ],
       [
         "Refunds and exchanges",
-        "Approved returns are refunded or exchanged after the item is inspected. Original delivery charges are not refundable. Return delivery is the customer's responsibility unless the item received was incorrect, damaged or defective, in which case we cover it.",
+        "Approved refunds are paid to the bank account, JazzCash or Easypaisa number you give us — usually within a few working days of approval (or of the item reaching us, if it must come back). Original delivery charges are not refundable. Return delivery is the customer's responsibility unless the item received was incorrect, damaged or defective, in which case we cover it.",
       ],
     ],
   },
@@ -98,7 +101,7 @@ const policies: Record<string, Policy> = {
   },
   terms: {
     title: "Terms of service",
-    intro: "The conditions that govern purchases made from Muse & Silk.",
+    intro: "The conditions that govern purchases made from Nure Asmir.",
     sections: [
       [
         "Product information",
@@ -114,7 +117,7 @@ const policies: Record<string, Policy> = {
       ],
       [
         "Returns and cancellations",
-        "Returns and exchanges are handled under our Returns policy. Orders may be cancelled before dispatch by contacting us directly; once an order has shipped, our returns process applies instead.",
+        "Returns and exchanges are handled under our Returns policy. Orders may be cancelled on the Track your order page until the parcel is handed to TCS; once TCS has collected it, our returns process applies instead.",
       ],
       [
         "Liability",
@@ -158,7 +161,6 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
 
   return (
     <main>
-      <StoreHeader />
       <article className="content-page">
         <header>
           <p className="eyebrow">Customer care</p>

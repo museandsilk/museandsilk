@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, paymentProofs } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
-import { getSignedObjectUrl } from "@/lib/r2";
+import { getSignedObjectUrl } from "@/lib/storage";
 import { auditLogEntry } from "@/lib/admin/audit";
+import { announceOrderEvent } from "@/lib/order-events";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   // Approving a bank-deposit receipt marks the order's payment as verified so the admin can proceed
   // to confirm it; rejecting leaves paymentStatus untouched for the admin to follow up with the customer.
   if (status === "approved") {
-    await db.update(orders).set({ paymentStatus: "paid", updatedAt: new Date() }).where(eq(orders.id, proof.orderId));
+    const marked = await db
+      .update(orders)
+      .set({ paymentStatus: "paid", updatedAt: new Date() })
+      .where(and(eq(orders.id, proof.orderId), ne(orders.paymentStatus, "paid")))
+      .returning({ id: orders.id });
+    if (marked.length) announceOrderEvent(proof.orderId, "paid", "admin");
   }
 
   await auditLogEntry({

@@ -181,9 +181,8 @@ export function CouponsManager() {
     <section className="admin-main">
       <header className="admin-topbar">
         <div>
-          <p className="eyebrow">Muse &amp; Silk</p>
-          <h1>Coupons</h1>
-          <p>Create and manage discount codes customers can apply at checkout.</p>
+          <h1>Discount codes</h1>
+          <p className="a-muted" style={{ marginTop: 5, maxWidth: 680 }}>Codes customers type at checkout to get money off, for example EID10 for 10% off. Share them on Instagram or WhatsApp.</p>
         </div>
         <div className="admin-top-actions">
           <button onClick={openNew}>Add coupon</button>

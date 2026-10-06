@@ -2,7 +2,9 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { StoreHeader } from "@/app/(store)/_components/store-components";
+import { hasCustomerPushToken, pushSupport, registerCustomerPush } from "@/lib/customer-push";
+import { useLockedAction } from "@/lib/use-locked-action";
+import { OrderHelp, type TrackActions, type TrackRefund } from "./order-help";
 
 type Tracked = {
   courier: { name: string; trackingNumber: string; status: string } | null;
@@ -19,28 +21,52 @@ type Tracked = {
   };
   items: { productName: string; variantName: string; quantity: number; lineTotal: number }[];
   history: { status: string; note: string | null; createdAt: string }[];
+  actions: TrackActions;
+  refund: TrackRefund | null;
 };
 
 function TrackOrderForm() {
   const params = useSearchParams();
   const [result, setResult] = useState<Tracked | null>(null);
   const [error, setError] = useState("");
+  const [phone, setPhone] = useState("");
+  const [pushNote, setPushNote] = useState("");
+  const [pushOn, setPushOn] = useState(false);
+  const lookup = useLockedAction();
+  const pushAction = useLockedAction();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const body = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
+    await lookup.run(() => find(body));
+  }
+
+  /** Looks the order up again (after a cancel / refund) without making the shopper type it all in once more. */
+  function reload() {
+    if (!result) return;
+    void lookup.run(() => find({ orderNumber: result.order.orderNumber, phone }));
+  }
+
+  async function find(body: Record<string, string>) {
     setError("");
-    const body = Object.fromEntries(new FormData(event.currentTarget));
-    const response = await fetch("/api/orders/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await response.json();
-    if (response.ok) {
-      setResult(data as Tracked);
-    } else {
-      setResult(null);
-      setError(data.error ?? "No matching order was found.");
+      try {
+        const response = await fetch("/api/orders/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setResult(data as Tracked);
+          setPhone(body.phone ?? "");
+          setPushOn(hasCustomerPushToken());
+        } else {
+          setResult(null);
+          setError(data.error ?? "No matching order was found.");
+        }
+      } catch {
+        setResult(null);
+        setError("Could not reach the server. Check your connection and try again.");
     }
   }
 
@@ -53,13 +79,21 @@ function TrackOrderForm() {
         <form onSubmit={submit}>
           <label>
             <span>Order number</span>
-            <input required name="orderNumber" defaultValue={params.get("order") ?? ""} placeholder="MS-260728-123456" />
+            <input required name="orderNumber" defaultValue={params.get("order") ?? ""} placeholder="NA-261005-123456" />
           </label>
           <label>
             <span>Phone / WhatsApp</span>
             <input required name="phone" placeholder="+923001234567" />
           </label>
-          <button className="button button-dark">Find my order</button>
+          <button className="button button-dark" disabled={lookup.pending} aria-busy={lookup.pending}>
+            {lookup.pending ? (
+              <span className="busy-label">
+                <span className="spinner spinner-light" aria-hidden="true" /> Looking…
+              </span>
+            ) : (
+              "Find my order"
+            )}
+          </button>
         </form>
         {error && <p className="checkout-error">{error}</p>}
       </div>
@@ -68,7 +102,36 @@ function TrackOrderForm() {
           <header>
             <p className="eyebrow">{result.order.orderNumber}</p>
             <h2>{result.order.orderStatus.replaceAll("_", " ")}</h2>
-            <span>PKR {result.order.total.toLocaleString("en-PK")}</span>
+            <span>
+              PKR {result.order.total.toLocaleString("en-PK")} · {result.order.paymentStatus === "paid" ? "Paid" : "Payment pending"}
+            </span>
+            {pushSupport() === "available" && !pushOn && (
+              <p>
+                <button
+                  type="button"
+                  className="text-link"
+                  disabled={pushAction.pending}
+                  aria-busy={pushAction.pending}
+                  onClick={() =>
+                    pushAction.run(async () => {
+                      const outcome = await registerCustomerPush({ orderNumber: result.order.orderNumber, phone });
+                      if (outcome.ok) {
+                        setPushOn(true);
+                        setPushNote("");
+                      } else setPushNote(outcome.error);
+                    })
+                  }
+                >
+                  {pushAction.pending ? "Enabling…" : "Get updates on this device"}
+                </button>
+                {pushNote && <small> {pushNote}</small>}
+              </p>
+            )}
+            {pushOn && (
+              <p>
+                <small>Updates on: you&apos;ll be notified here when this order changes.</small>
+              </p>
+            )}
             {result.courier && (
               <p>
                 <small>
@@ -90,8 +153,9 @@ function TrackOrderForm() {
               </article>
             ))}
           </div>
+          <OrderHelp orderNumber={result.order.orderNumber} orderStatus={result.order.orderStatus} phone={phone} actions={result.actions} refund={result.refund} total={result.order.total} onChanged={reload} />
           <div className="tracking-items">
-            <h3>Reserved pieces</h3>
+            <h3>Your items</h3>
             {result.items.map((item) => (
               <p key={`${item.productName}-${item.variantName}`}>
                 <span>
@@ -113,7 +177,6 @@ function TrackOrderForm() {
 export default function TrackOrderPage() {
   return (
     <main>
-      <StoreHeader />
       <Suspense fallback={null}>
         <TrackOrderForm />
       </Suspense>

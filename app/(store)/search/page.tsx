@@ -1,41 +1,51 @@
-import { getCatalogProducts } from "@/lib/commerce";
-import { StoreHeader, ProductCard } from "../_components/store-components";
+import type { Metadata } from "next";
+import { getCatalogProducts, toCard, type CatalogProduct } from "@/lib/commerce";
+import { searchProductIds } from "@/lib/search/server";
+import { ProductCard } from "../_components/store-components";
 import { StoreFooter } from "../_components/store-footer";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Search", robots: { index: false, follow: true } };
+
+/** Typo-tolerant search through Algolia, then mapped back onto the live catalogue so cards always show
+ * current stock and prices. If Algolia's free allowance runs out (or it is unreachable) the built-in
+ * MiniSearch engine answers instead – see lib/search/server.ts – so search never goes dark. */
+async function searchProducts(query: string, catalog: CatalogProduct[]): Promise<CatalogProduct[]> {
+  const { ids } = await searchProductIds(query, 48).catch(() => ({ ids: [] as string[] }));
+  const byId = new Map(catalog.map((product) => [product.id, product]));
+  const found = ids.map((id) => byId.get(id)).filter((product): product is CatalogProduct => !!product);
+  if (found.length) return found;
+  const needle = query.toLowerCase();
+  return catalog.filter((product) => `${product.name} ${product.type} ${product.color} ${product.description ?? ""} ${product.shortDescription ?? ""} ${product.sku}`.toLowerCase().includes(needle));
+}
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const query = String((await searchParams).q ?? "").trim();
+  const query = String((await searchParams).q ?? "").trim().slice(0, 100);
   const catalog = await getCatalogProducts();
-  const needle = query.toLowerCase();
-  const results = query
-    ? catalog.filter((product) =>
-        `${product.name} ${product.type} ${product.color} ${product.description ?? ""} ${product.shortDescription ?? ""} ${product.sku}`
-          .toLowerCase()
-          .includes(needle),
-      )
-    : [];
+  const results = query ? await searchProducts(query, catalog) : [];
 
   return (
-    <main>
-      <StoreHeader />
+    <main className="page-fade-in">
       <section className="search-page">
-        <p className="eyebrow">Search the collection</p>
-        <h1>{query ? `Results for "${query}"` : "Find your final layer"}</h1>
-        <p>{results.length} pieces found</p>
-        <div className="product-grid">
-          {results.map((product) => (
-            <ProductCard key={product.slug} product={product} />
-          ))}
-        </div>
+        <header>
+          <h1 className="page-title">{query ? `Results for “${query}”` : "Search"}</h1>
+          <p className="result-count">{query ? `${results.length} ${results.length === 1 ? "product" : "products"}` : "Use the search icon above to find a product."}</p>
+        </header>
+        {results.length > 0 && (
+          <div className="product-grid">
+            {results.map((product) => (
+              <ProductCard key={product.slug} product={toCard(product)} />
+            ))}
+          </div>
+        )}
         {query && !results.length && (
           <div className="cart-empty">
             <h2>No exact match.</h2>
-            <p>Try a category, color or product name.</p>
+            <p>Try a category, colour or product name.</p>
           </div>
         )}
       </section>
-
       <StoreFooter />
     </main>
   );

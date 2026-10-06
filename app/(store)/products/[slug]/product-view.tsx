@@ -2,35 +2,34 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { CatalogProduct } from "@/lib/commerce";
+import type { CatalogProduct, CatalogVariant } from "@/lib/commerce";
+import { Price } from "../../_components/currency";
+import { discountLabel, SaleCountdown } from "../../_components/sale";
+import { WishlistButton } from "../../_components/wishlist-button";
 import { ProductGallery } from "./product-gallery";
 import { ProductPurchase } from "./product-purchase";
 import { BackButton } from "./back-button";
 
-/** Renders the gallery and the buy column together so picking a color/variant swaps the gallery
- * to that variant's own photos — the two used to be unconnected siblings, each managing its own
- * state, so switching color never touched what images were shown. A shopper choosing "Crimson
- * Red" saw the "Emerald Green" photos the whole time. Falls back to the product's shared photos
- * (never tied to a specific variant) for any variant that has none of its own, and falls back
- * further to every photo the product has if even that comes up empty, so the gallery is never
- * blank. Returns a Fragment (no wrapping element) so the two-column `.product-page` grid layout
- * in globals.css still applies directly to its children. */
+/** Renders the gallery and the buy column together so the chosen colour swaps the gallery to that
+ * variant's own photos. Variants model a colour + size grid: shoppers pick a colour (when there is
+ * more than one) and then a size; the matching variant drives price, stock and the cart line.
+ * Returns a Fragment so the two-column `.product-page` grid applies directly to its children. */
 export function ProductView({
   product,
-  crop,
   fallback,
   codReservationHours,
   bankReservationHours,
 }: {
   product: CatalogProduct;
-  crop: string;
   fallback: string;
   codReservationHours: number;
   bankReservationHours: number;
 }) {
-  const variants = product.variants.length
-    ? product.variants
-    : [
+  const variants = useMemo<CatalogVariant[]>(
+    () =>
+      product.variants.length
+        ? product.variants
+        : [
         {
           id: product.sku,
           name: product.color,
@@ -43,19 +42,33 @@ export function ProductView({
           available: product.stock,
           isDefault: true,
         },
-      ];
-  const [selectedId, setSelectedId] = useState(variants.find((v) => v.isDefault)?.id ?? variants[0].id);
+      ],
+    [product],
+  );
+
+  const colors = useMemo(() => [...new Set(variants.map((variant) => variant.color))], [variants]);
+  const defaultVariant = variants.find((variant) => variant.isDefault) ?? variants[0];
+  const [color, setColor] = useState(defaultVariant.color);
+  const [sizeId, setSizeId] = useState<string | null>(null);
+
+  const colorVariants = variants.filter((variant) => variant.color === color);
+  const sized = colorVariants.some((variant) => variant.size);
+  // With no size choice to make (single-variant colours, accessories) the variant is implied.
+  const selected: CatalogVariant | null = sized ? (colorVariants.find((variant) => variant.id === sizeId) ?? null) : (colorVariants[0] ?? null);
+  const shown = selected ?? colorVariants.find((variant) => variant.isDefault) ?? colorVariants[0] ?? defaultVariant;
 
   const gallery = useMemo(() => {
-    const ownPhotos = product.images.filter((image) => image.variantId === selectedId);
-    if (ownPhotos.length) return ownPhotos;
-    const sharedPhotos = product.images.filter((image) => !image.variantId);
-    return sharedPhotos.length ? sharedPhotos : product.images;
-  }, [product.images, selectedId]);
+    const colorVariantIds = new Set(variants.filter((variant) => variant.color === color).map((variant) => variant.id));
+    const own = product.images.filter((image) => image.variantId && colorVariantIds.has(image.variantId));
+    if (own.length) return own;
+    const shared = product.images.filter((image) => !image.variantId);
+    return shared.length ? shared : product.images;
+  }, [product.images, variants, color]);
 
   return (
     <>
-      <ProductGallery name={product.name} crop={crop} images={gallery} fallback={fallback} />
+      {/* Keyed by the image set so switching colour restarts on the first photo. */}
+      <ProductGallery key={gallery.map((image) => image.id).join("|")} name={product.name} images={gallery} fallback={fallback} />
       <div className="product-buy">
         <nav aria-label="Breadcrumb">
           <BackButton />
@@ -63,41 +76,62 @@ export function ProductView({
           <span>/</span>
           <Link href={`/collections/${product.category}`}>{product.type}</Link>
         </nav>
-        <p className="eyebrow">{product.type}</p>
         <h1>{product.name}</h1>
         <p className="product-price">
-          {product.compareAtPrice && product.compareAtPrice > product.price && (
-            <span className="product-price-compare">PKR {product.compareAtPrice.toLocaleString("en-PK")}</span>
+          {shown.compareAtPrice && shown.compareAtPrice > shown.price && (
+            <span className="product-price-compare">
+              <Price amount={shown.compareAtPrice} />
+            </span>
           )}
-          PKR {product.price.toLocaleString("en-PK")}
+          <Price amount={shown.price} />
         </p>
-        <p className="product-intro">
-          {product.shortDescription || "A composed study in line, texture and warm neutral color—designed to make even the simplest look feel intentional."}
-        </p>
-        <ProductPurchase product={product} variants={variants} selectedId={selectedId} onSelectVariant={setSelectedId} />
+        {shown.saleEndsAt && (
+          <div className="sale-banner">
+            <span className="sale-tag">{discountLabel(shown.price, shown.compareAtPrice) ?? "Sale"}</span>
+            <SaleCountdown endsAt={shown.saleEndsAt} />
+          </div>
+        )}
+        {product.shortDescription && <p className="product-intro">{product.shortDescription}</p>}
+        <ProductPurchase
+          product={product}
+          colors={colors}
+          color={color}
+          onColor={(next) => {
+            setColor(next);
+            setSizeId(null);
+          }}
+          colorVariants={colorVariants}
+          sized={sized}
+          selected={selected}
+          onSize={setSizeId}
+        />
+        <WishlistButton productId={product.id} name={product.name} variant="inline" />
         <div className="product-accordions">
           <details open>
             <summary>
-              Details &amp; material <span>+</span>
+              Details <span>+</span>
             </summary>
-            <p>{product.description || "Fine silk-touch construction with a softly luminous finish."}</p>
+            <p>{product.description || "Tailored with attention to fit and finish."}</p>
           </details>
-          <details>
-            <summary>
-              Dimensions &amp; care <span>+</span>
-            </summary>
-            <p>
-              {product.dimensions ? `${product.dimensions}. ` : ""}
-              {product.careInstructions || "Store folded in the included pouch. Gentle specialist cleaning recommended."}
-            </p>
-          </details>
+          {(product.material || product.dimensions || product.careInstructions) && (
+            <details>
+              <summary>
+                Material &amp; care <span>+</span>
+              </summary>
+              <p>
+                {product.material ? `${product.material}. ` : ""}
+                {product.dimensions ? `${product.dimensions}. ` : ""}
+                {product.careInstructions}
+              </p>
+            </details>
+          )}
           <details>
             <summary>
               Delivery &amp; returns <span>+</span>
             </summary>
             <p>
-              Nationwide delivery. Cash-on-delivery orders are reserved for {codReservationHours} hours; bank-deposit orders for{" "}
-              {bankReservationHours} hours. Final return eligibility appears before checkout.
+              Nationwide delivery across Pakistan. Cash-on-delivery orders are reserved for {codReservationHours} hours; bank-deposit orders
+              for {bankReservationHours} hours. Exchange details are shown before checkout.
             </p>
           </details>
         </div>
