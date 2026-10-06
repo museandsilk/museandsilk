@@ -3,7 +3,7 @@ import { runInBackground } from "@/lib/background";
 import { syncProductSearch } from "@/lib/search/algolia";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { productImages } from "@/db/schema";
+import { productImages, productVariants } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
 import { deleteObject } from "@/lib/storage";
 import { auditLogEntry } from "@/lib/admin/audit";
@@ -15,6 +15,8 @@ const updateSchema = z.object({
   altText: z.string().min(1).optional(),
   sortOrder: z.coerce.number().int().min(0).optional(),
   isPrimary: z.boolean().optional(),
+  /** Which colour's photo this is (any variant of that colour); null makes it a shared, whole-product photo. */
+  variantId: z.string().uuid().nullable().optional(),
   focalPointX: z.coerce.number().int().min(0).max(100).optional(),
   focalPointY: z.coerce.number().int().min(0).max(100).optional(),
 });
@@ -35,6 +37,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const [existing] = await db.select().from(productImages).where(eq(productImages.id, id)).limit(1);
   if (!existing) return Response.json({ error: "Image not found." }, { status: 404 });
 
+  if (data.variantId) {
+    const [variant] = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, data.variantId)).limit(1);
+    if (!variant || variant.productId !== existing.productId) return Response.json({ error: "That colour does not belong to this product." }, { status: 400 });
+  }
+
   if (data.isPrimary === true) {
     await db.update(productImages).set({ isPrimary: false }).where(eq(productImages.productId, existing.productId));
   }
@@ -45,6 +52,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       ...(data.altText !== undefined ? { altText: data.altText } : {}),
       ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
       ...(data.isPrimary !== undefined ? { isPrimary: data.isPrimary } : {}),
+      ...(data.variantId !== undefined ? { variantId: data.variantId } : {}),
       ...(data.focalPointX !== undefined ? { focalPointX: data.focalPointX } : {}),
       ...(data.focalPointY !== undefined ? { focalPointY: data.focalPointY } : {}),
     })

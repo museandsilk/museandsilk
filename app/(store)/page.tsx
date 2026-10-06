@@ -10,8 +10,10 @@ import { getActiveCategories, getCampaignSlides, getCatalogProducts, toCard } fr
 export const revalidate = 60;
 
 export default async function Home() {
-  const [products, campaignSlides, categories] = await Promise.all([
-    getCatalogProducts(),
+  // Only what this page shows is read: the newest dozen and the owner's featured picks, never the whole catalogue.
+  const [products, featuredProducts, campaignSlides, categories] = await Promise.all([
+    getCatalogProducts({ limit: 12 }),
+    getCatalogProducts({ featuredOnly: true, limit: 8 }),
     getCampaignSlides(),
     getActiveCategories(),
   ]);
@@ -20,7 +22,7 @@ export default async function Home() {
   // owner has ticked "Featured on homepage" in the admin panel (hidden if nothing is featured, so
   // the page never repeats the same products twice in a row).
   const newArrivals = products.slice(0, 12).map(toCard);
-  const featured = products.filter((product) => product.featured).slice(0, 8).map(toCard);
+  const featured = featuredProducts.map(toCard);
   const showFeatured = featured.length >= 4 && featured.some((product) => !newArrivals.slice(0, 5).some((entry) => entry.id === product.id));
 
   return (

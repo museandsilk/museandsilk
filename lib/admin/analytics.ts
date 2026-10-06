@@ -4,17 +4,10 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 
-export const RANGES = [
-  { key: "today", label: "Today", days: 1 },
-  { key: "7d", label: "7 days", days: 7 },
-  { key: "30d", label: "30 days", days: 30 },
-  { key: "90d", label: "90 days", days: 90 },
-] as const;
-export type RangeKey = (typeof RANGES)[number]["key"];
+import { RANGES, isRangeKey, type RangeKey } from "./ranges";
 
-export function isRangeKey(value: string | undefined): value is RangeKey {
-  return RANGES.some((range) => range.key === value);
-}
+export { RANGES, isRangeKey };
+export type { RangeKey };
 
 const DAY = 86_400_000;
 const PKT_OFFSET = 5 * 3_600_000; // Pakistan has no daylight saving: always UTC+5

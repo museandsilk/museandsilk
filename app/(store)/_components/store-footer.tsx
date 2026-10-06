@@ -2,11 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { getActiveCategories, getPublicSettings } from "@/lib/commerce";
 import { BRAND } from "@/lib/brand";
+import { getStoreLocations } from "@/lib/locations";
 import { NewsletterForm } from "./store-components";
 import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from "./icons";
 
 export async function StoreFooter() {
-  const [settings, categories] = await Promise.all([getPublicSettings(), getActiveCategories()]);
+  const [settings, categories, locations] = await Promise.all([getPublicSettings(), getActiveCategories(), getStoreLocations()]);
   const whatsapp = settings.whatsappChatUrl || (settings.whatsappNumber ? `https://wa.me/${settings.whatsappNumber.replace(/[^\d]/g, "")}` : "/contact");
 
   return (
@@ -60,6 +61,18 @@ export async function StoreFooter() {
               <Link href="/policies/returns">Returns &amp; exchanges</Link>
               <Link href="/contact">Contact us</Link>
             </div>
+            {locations.length > 0 && (
+              <div>
+                <h3>Visit us</h3>
+                {locations.map((shop) => (
+                  <Link key={shop.id} href="/contact">
+                    {locations.length > 1 ? `${shop.name}: ` : ""}
+                    {shop.address}
+                    {shop.city ? `, ${shop.city}` : ""}
+                  </Link>
+                ))}
+              </div>
+            )}
             <div>
               <h3>Company</h3>
               <Link href="/about">Our story</Link>

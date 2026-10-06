@@ -1,4 +1,5 @@
 "use client";
+import { AddressSearch } from "@/components/address-search";
 
 import Link from "next/link";
 import Script from "next/script";
@@ -573,6 +574,21 @@ export default function CheckoutPage() {
               <fieldset>
                 <legend>02 · Delivery address</legend>
                 <div className="checkout-grid">
+                  <AddressSearch
+                    className="field-wide"
+                    label="Find your address (optional – or type it below)"
+                    onPick={(found) => {
+                      const fill = (selector: string, text: string) => {
+                        const field = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector);
+                        if (field && text) {
+                          field.value = text;
+                          field.dispatchEvent(new Event("input", { bubbles: true }));
+                        }
+                      };
+                      fill('textarea[name="address"]', found.address);
+                      fill('input[name="city"]', found.city);
+                    }}
+                  />
                   <label className="field-wide">
                     <span>Complete address *</span>
                     <textarea required name="address" rows={3} autoComplete="street-address" />

@@ -53,6 +53,7 @@ test.describe("admin (desktop Chromium)", () => {
     await cleanOrders();
     await sql`delete from products where name like 'E2E %'`;
     await sql`delete from categories where name like 'E2E %'`;
+    await sql`delete from store_locations where name like 'E2E %'`;
     await sql`delete from site_images`;
     await sql`update site_settings set support_phone = '+923116111963' where id = 'store'`;
   });
@@ -345,7 +346,9 @@ test.describe("admin (desktop Chromium)", () => {
     test("stock screen: change a number, Save appears only for that row, and sold-out shows", async ({ page }) => {
       await login(page);
       await page.goto("/admin/stock?q=E2E%20Linen");
-      const rows = page.locator("tbody tr");
+      // one list row per product (searching opens it); its sizes are the editable rows inside
+      await expect(page.locator(".a-stock > tbody")).toHaveCount(1);
+      const rows = page.locator(".a-stock-sizes tbody tr");
       await expect(rows).toHaveCount(5);
       const first = rows.first();
       await expect(first.getByRole("button", { name: "Save" })).toHaveCount(0);
@@ -360,6 +363,148 @@ test.describe("admin (desktop Chromium)", () => {
       await first.getByLabel(/^Stock for/).fill("0");
       await first.getByRole("button", { name: "Save" }).click();
       await expect(first).toContainText("Sold out", { timeout: 15_000 });
+    });
+
+    test("same shirt in another colour: sizes and prices are copied, photos stay with their colour, the shop shows both", async ({ page }) => {
+      await sql`delete from products where name = 'E2E Denim Shirt'`;
+      await login(page);
+      await page.goto("/admin/products/new");
+      await page.getByLabel("Product name").fill("E2E Denim Shirt");
+      await page.getByLabel("What is it?").fill("Shirt");
+      await page.getByLabel("Colour", { exact: true }).fill("Indigo");
+      await page.locator('input[type="file"]').first().setInputFiles({ name: "indigo.png", mimeType: "image/png", buffer: makePng() });
+      await page.getByRole("button", { name: "S M L XL XXL" }).click();
+      await page.getByLabel("Price", { exact: true }).first().fill("3900");
+      await page.getByRole("button", { name: "Use the first price for every size" }).click();
+      await page.getByLabel("In stock", { exact: true }).first().fill("5");
+
+      // the second colour starts from the first one's sizes and prices, with no stock
+      await page.getByRole("button", { name: "Add another colour" }).click();
+      await page.getByLabel("New colour").fill("Charcoal");
+      await page.getByRole("button", { name: "Add colour", exact: true }).click();
+      await expect(page.getByLabel("Size", { exact: true })).toHaveCount(5);
+      await expect(page.getByLabel("Price", { exact: true }).first()).toHaveValue("3900");
+      await expect(page.getByLabel("In stock", { exact: true }).first()).toHaveValue("0");
+      await expect(page.getByLabel("Colour", { exact: true })).toHaveValue("Charcoal");
+      await page.locator('input[type="file"]').first().setInputFiles({ name: "charcoal.png", mimeType: "image/png", buffer: makePng() });
+      await expect(page.locator(".a-photo")).toHaveCount(1); // only this colour's photos are shown
+      await page.getByLabel("In stock", { exact: true }).first().fill("4");
+
+      await page.getByRole("button", { name: "Add product" }).click();
+      await expect(page).toHaveURL(/\/admin\/products\/[0-9a-f-]{36}$/, { timeout: 60_000 });
+
+      const [product] = (await sql`select id, slug from products where name = 'E2E Denim Shirt'`) as Array<{ id: string; slug: string }>;
+      const variants = (await sql`select color, sku, stock_quantity as stock from product_variants where product_id = ${product.id}`) as Array<{ color: string; sku: string; stock: number }>;
+      expect(variants).toHaveLength(10);
+      expect(new Set(variants.map((v) => v.color))).toEqual(new Set(["Indigo", "Charcoal"]));
+      expect(new Set(variants.map((v) => v.sku)).size, "every size of every colour has its own code").toBe(10);
+      const photos = (await sql`select i.is_primary as main, v.color from product_images i left join product_variants v on v.id = i.variant_id where i.product_id = ${product.id}`) as Array<{ main: boolean; color: string | null }>;
+      expect(photos.map((p) => p.color).sort(), "each photo is linked to its colour").toEqual(["Charcoal", "Indigo"]);
+      expect(photos.filter((p) => p.main)).toHaveLength(1);
+
+      // reopening shows both colours with their own data
+      await page.reload();
+      await expect(page.getByRole("button", { name: /^Indigo/ })).toBeVisible();
+      await page.getByRole("button", { name: /^Charcoal/ }).click();
+      await expect(page.getByLabel("In stock", { exact: true }).first()).toHaveValue("4");
+      await expect(page.locator(".a-photo")).toHaveCount(1);
+
+      // the customer sees both colours on one product page
+      const page1 = await page.request.get(`${BASE}/products/${product.slug}`);
+      const html = await page1.text();
+      expect(html).toContain("Indigo");
+      expect(html).toContain("Charcoal");
+
+      // stock: one line for the product with the total, sizes per colour inside
+      await page.goto("/admin/stock?q=E2E%20Denim");
+      await expect(page.locator(".a-stock > tbody")).toHaveCount(1);
+      await expect(page.locator(".a-stock > tbody").first()).toContainText("E2E Denim Shirt");
+      await expect(page.locator(".a-stock > tbody > tr").first().locator("td").nth(1)).toHaveText("2");
+      await expect(page.locator(".a-stock > tbody > tr").first().locator("td").nth(2)).toHaveText("9");
+      await expect(page.getByRole("region", { name: "Indigo sizes" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Charcoal sizes" })).toBeVisible();
+    });
+
+    test("preview: the unsaved draft shows as a phone page and a laptop page, colours and sizes can be tapped", async ({ page }) => {
+      await login(page);
+      await page.goto("/admin/products/new");
+      await page.getByLabel("Product name").fill("E2E Preview Kurta");
+      await page.getByLabel("Colour", { exact: true }).fill("Ivory");
+      await page.getByRole("button", { name: "S M L XL XXL" }).click();
+      await page.getByLabel("Price", { exact: true }).first().fill("6500");
+      await page.getByRole("button", { name: "Add another colour" }).click();
+      await page.getByLabel("New colour").fill("Black");
+      await page.getByRole("button", { name: "Add colour", exact: true }).click();
+      await page.getByRole("button", { name: "Preview" }).click();
+      const dialog = page.getByRole("dialog", { name: /preview/i });
+      await expect(dialog.getByRole("heading", { name: "E2E Preview Kurta" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Ivory" })).toBeVisible();
+      await dialog.getByRole("button", { name: "Black" }).click();
+      await expect(dialog.getByText("Colour: Black")).toBeVisible();
+      await dialog.getByRole("button", { name: "Laptop" }).click();
+      await expect(dialog.getByRole("button", { name: "Laptop" })).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      expect((await sql`select 1 from products where name = 'E2E Preview Kurta'`).length, "previewing never saves").toBe(0);
+    });
+
+    test("shop locations: add one, it is listed, the main shop cannot be removed", async ({ page }) => {
+      await sql`delete from store_locations where name like 'E2E %'`;
+      await login(page);
+      await page.goto("/admin/locations");
+      await expect(page.getByText("Main shop").first()).toBeVisible();
+      await page.getByRole("button", { name: "Add a shop" }).click();
+      await page.getByLabel("Shop name").fill("E2E Gulberg Outlet");
+      await page.getByLabel("Full address").fill("12 Main Boulevard, Gulberg III");
+      await page.getByLabel("City").fill("Lahore");
+      await page.getByRole("button", { name: "Save shop" }).click();
+      await expect(page.getByText("E2E Gulberg Outlet")).toBeVisible({ timeout: 15_000 });
+      const rows = (await sql`select name, is_main as main from store_locations order by sort_order`) as Array<{ name: string; main: boolean }>;
+      expect(rows.filter((r) => r.main)).toHaveLength(1);
+      const mains = await page.request.get(`${BASE}/api/admin/locations`);
+      const [main] = ((await mains.json()) as { locations: Array<{ id: string; isMain: boolean }> }).locations.filter((l) => l.isMain);
+      const refused = await page.request.delete(`${BASE}/api/admin/locations/${main.id}`);
+      expect(refused.status()).toBe(409);
+    });
+
+    test("stock: category buttons show only that category, one list row per product", async ({ page }) => {
+      await sql`delete from products where name = 'E2E Chino'`;
+      await sql`delete from categories where name = 'E2E Trousers'`;
+      const [cat] = (await sql`insert into categories (name, slug) values ('E2E Trousers', 'e2e-trousers') returning id`) as Array<{ id: string }>;
+      const [prod] = (await sql`insert into products (category_id, name, slug, type_label, status) values (${cat.id}, 'E2E Chino', 'e2e-chino', 'Pants', 'published') returning id`) as Array<{ id: string }>;
+      await sql`insert into product_variants (product_id, name, sku, color, size, price, stock_quantity, is_default) values (${prod.id}, 'Khaki / 32', 'E2E-CHINO-32', 'Khaki', '32', 3000, 2, true), (${prod.id}, 'Khaki / 34', 'E2E-CHINO-34', 'Khaki', '34', 3000, 3, false)`;
+      await login(page);
+      await page.goto("/admin/stock");
+      await expect(page.getByRole("link", { name: /^All categories/ })).toBeVisible();
+      await page.getByRole("link", { name: /^E2E Trousers/ }).click();
+      await expect(page).toHaveURL(/cat=/);
+      await expect(page.locator(".a-stock > tbody")).toHaveCount(1);
+      await expect(page.locator(".a-stock")).toContainText("E2E Chino");
+      await expect(page.locator(".a-stock")).not.toContainText("E2E Linen");
+      // two sizes, one list row: the total is 5 and the sizes appear when it is opened
+      await expect(page.locator(".a-stock > tbody > tr").first().locator("td").nth(2)).toHaveText("5");
+      await page.getByRole("button", { name: /Sizes/ }).click();
+      await expect(page.getByLabel("Stock for E2E Chino Khaki 32")).toHaveValue("2");
+      await expect(page.getByLabel("Stock for E2E Chino Khaki 34")).toHaveValue("3");
+    });
+
+    test("home: changing the period updates the numbers in place — no reload, the page does not jump", async ({ page }) => {
+      await login(page);
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+      await page.evaluate(() => {
+        (window as unknown as { __kept: number }).__kept = 1;
+        window.scrollTo(0, 500);
+      });
+      const before = await page.evaluate(() => window.scrollY);
+      expect(before).toBeGreaterThan(0);
+      const answered = page.waitForResponse((response) => response.url().includes("/api/admin/analytics?range=90d") && response.ok());
+      await page.getByRole("button", { name: "90 days" }).click();
+      await answered;
+      await expect(page.getByRole("button", { name: "90 days" })).toHaveAttribute("aria-pressed", "true");
+      expect(await page.evaluate(() => (window as unknown as { __kept?: number }).__kept), "the page was not reloaded").toBe(1);
+      expect(await page.evaluate(() => window.scrollY), "still scrolled where it was").toBeGreaterThan(0);
+      await expect(page).toHaveURL(/range=90d/);
     });
 
     test("Excel: download the sheet, fill it in, upload it, add photos, and the products appear (and a bad row is explained)", async ({ page }) => {

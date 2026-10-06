@@ -32,7 +32,7 @@ function absolute(url: string): string {
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [product, settings, catalog] = await Promise.all([getProductBySlug(slug), getPublicSettings(), getCatalogProducts()]);
+  const [product, settings] = await Promise.all([getProductBySlug(slug), getPublicSettings()]);
   const nonce = getNonce();
   if (!product) notFound();
 
@@ -40,7 +40,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fallbackImage = "/placeholder.webp";
   const primaryImage = absolute(product.imageUrl ?? fallbackImage);
   const canonicalUrl = `${origin}/products/${product.slug}`;
-  const related = catalog.filter((entry) => entry.category === product.category && entry.slug !== product.slug).slice(0, 10).map(toCard);
+  const related = (await getCatalogProducts({ categorySlug: product.category, limit: 11 })).filter((entry) => entry.slug !== product.slug).slice(0, 10).map(toCard);
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",

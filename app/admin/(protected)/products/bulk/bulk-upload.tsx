@@ -95,7 +95,16 @@ function AddProducts({ categoryNames }: { categoryNames: string[] }) {
       setStep("working");
       setOutcomes([]);
       const results: Outcome[] = [];
-      const total = products.length;
+      // Rows with the same product name are ONE product in several colours (the sheet has one row per colour and size).
+      type Group = { key: string; first: ParsedProduct; colours: ParsedProduct[] };
+      const grouped: Group[] = [];
+      for (const entry of products) {
+        const key = `${entry.name.toLowerCase()}|${entry.category.toLowerCase()}`;
+        const found = grouped.find((group) => group.key === key);
+        if (found) found.colours.push(entry);
+        else grouped.push({ key, first: entry, colours: [entry] });
+      }
+      const total = grouped.length;
       setProgress({ done: 0, total, label: "Starting…" });
 
       if (createCategories && newCategories.length) {
@@ -106,10 +115,12 @@ function AddProducts({ categoryNames }: { categoryNames: string[] }) {
         }
       }
 
-      for (let index = 0; index < products.length; index++) {
-        const product = products[index];
+      for (let index = 0; index < grouped.length; index++) {
+        const { first: product, colours } = grouped[index];
         setProgress({ done: index, total, label: product.name });
-        const photoFiles = product.photos.filter((file) => pictureFor(file));
+        const photoFilesOf = (entry: ParsedProduct) => entry.photos.filter((file) => pictureFor(file));
+        const photoFiles = colours.flatMap(photoFilesOf);
+        const sizeCount = colours.reduce((sum, entry) => sum + entry.variants.length, 0);
         const visible = product.visible && photoFiles.length > 0;
         const payload = {
           name: product.name,
@@ -120,19 +131,22 @@ function AddProducts({ categoryNames }: { categoryNames: string[] }) {
           description: product.description || undefined,
           material: product.fabric || undefined,
           primaryColour: product.colour,
-          variants: product.variants.map((variant, i) => ({
-            name: `${product.colour}${variant.size ? ` / ${variant.size}` : ""}`,
-            color: product.colour,
-            sku: variant.sku,
-            size: variant.size || undefined,
-            price: variant.price,
-            compareAtPrice: variant.oldPrice ?? undefined,
-            stockQuantity: variant.stock,
-            isDefault: i === 0,
-            images: i === 0 ? photoFiles.map((file, order) => ({ file, isPrimary: order === 0, order, alt: `${product.name}${order ? ` — photo ${order + 1}` : ""}` })) : undefined,
-          })),
+          variants: colours.flatMap((colour, colourIndex) => {
+            const files = photoFilesOf(colour);
+            return colour.variants.map((variant, i) => ({
+              name: `${colour.colour}${variant.size ? ` / ${variant.size}` : ""}`,
+              color: colour.colour,
+              sku: variant.sku,
+              size: variant.size || undefined,
+              price: variant.price,
+              compareAtPrice: variant.oldPrice ?? undefined,
+              stockQuantity: variant.stock,
+              isDefault: colourIndex === 0 && i === 0,
+              images: i === 0 ? files.map((file, order) => ({ file, isPrimary: colourIndex === 0 && order === 0, order, alt: `${product.name}${colours.length > 1 ? ` — ${colour.colour}` : ""}${order ? ` — photo ${order + 1}` : ""}` })) : undefined,
+            }));
+          }),
         };
-        const response = await callApi<{ results: Array<{ success: boolean; productId?: string; error?: string; variantErrors?: string[]; images?: Array<{ file: string; isPrimary: boolean; order: number; alt: string }> }> }>("/api/admin/products/import?reindex=0", "POST", payload);
+        const response = await callApi<{ results: Array<{ success: boolean; productId?: string; error?: string; variantErrors?: string[]; images?: Array<{ file: string; isPrimary: boolean; order: number; alt: string; variantId?: string }> }> }>("/api/admin/products/import?reindex=0", "POST", payload);
         if (!response.ok) {
           results.push({ name: product.name, ok: false, message: response.error });
           continue;
@@ -149,12 +163,12 @@ function AddProducts({ categoryNames }: { categoryNames: string[] }) {
           const file = pictureFor(job.file);
           if (!file) continue;
           setProgress({ done: index, total, label: `${product.name} — photo ${uploaded + 1}` });
-          const outcome = await uploadProductPicture({ productId: result.productId, file, altText: job.alt, isPrimary: job.isPrimary, sortOrder: job.order });
+          const outcome = await uploadProductPicture({ productId: result.productId, file, altText: job.alt, isPrimary: job.isPrimary, sortOrder: job.order, variantId: job.variantId });
           if (outcome.ok) uploaded += 1;
           else notes.push(`Photo ${job.file}: ${outcome.error}`);
         }
         const hidden = product.visible && !visible ? "Saved as hidden because it has no photo yet." : "";
-        results.push({ name: product.name, ok: true, message: [`${product.variants.length} size${product.variants.length === 1 ? "" : "s"} added`, uploaded ? `${uploaded} photo${uploaded === 1 ? "" : "s"}` : "", hidden, ...notes].filter(Boolean).join(" · ") });
+        results.push({ name: product.name, ok: true, message: [`${colours.length > 1 ? `${colours.length} colours, ` : ""}${sizeCount} size${sizeCount === 1 ? "" : "s"} added`, uploaded ? `${uploaded} photo${uploaded === 1 ? "" : "s"}` : "", hidden, ...notes].filter(Boolean).join(" · ") });
       }
 
       setProgress({ done: total, total, label: "Updating website search…" });

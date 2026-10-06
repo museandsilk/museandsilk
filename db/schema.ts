@@ -1,4 +1,4 @@
-import { boolean, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -394,6 +394,23 @@ export const subscribers = pgTable("subscribers", {
   consentAt: timestamp("consent_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Physical shops. The owner can add as many as needed; they show in the website footer and on the Contact page. */
+export const storeLocations = pgTable("store_locations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  address: text("address").notNull(),
+  city: text("city").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  hours: text("hours").notNull().default(""),
+  // Found by the address search (Geoapify); optional – a shop without a pin still shows its written address.
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  isMain: boolean("is_main").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  ...timestamps,
 });
 
 export const siteSettings = pgTable("site_settings", {

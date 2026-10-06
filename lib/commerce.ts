@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { BRAND } from "@/lib/brand";
 import { mediaUrl } from "@/lib/media-url";
@@ -121,22 +121,25 @@ async function getListingExtras(productIds: string[]): Promise<Map<string, Listi
         key: productImages.r2Key,
         widths: productImages.variantWidths,
         isPrimary: productImages.isPrimary,
+        variantId: productImages.variantId,
       })
       .from(productImages)
-      .where(and(inArray(productImages.productId, productIds), eq(productImages.status, "active"), isNull(productImages.variantId)))
+      .where(and(inArray(productImages.productId, productIds), eq(productImages.status, "active")))
       .orderBy(desc(productImages.isPrimary), asc(productImages.sortOrder), asc(productImages.createdAt)),
   ]);
 
   for (const row of stockRows) extras.set(row.productId, { available: row.available });
-  const seen = new Map<string, number>();
-  for (const row of imageRows) {
-    const position = (seen.get(row.productId) ?? 0) + 1;
-    seen.set(row.productId, position);
-    if (position === 2) {
-      const entry = extras.get(row.productId) ?? { available: 0 };
-      entry.altImageUrl = imageUrlFor(row.key, row.widths);
-      extras.set(row.productId, entry);
-    }
+  // Rows arrive main-photo first. The hover photo is the next one of the same colour as the main photo, so hovering
+  // never flashes a different colour; a product whose main colour has only one photo falls back to its next photo.
+  const rowsByProduct = new Map<string, typeof imageRows>();
+  for (const row of imageRows) rowsByProduct.set(row.productId, [...(rowsByProduct.get(row.productId) ?? []), row]);
+  for (const [productId, list] of rowsByProduct) {
+    const [first, ...rest] = list;
+    const alt = rest.find((row) => row.variantId === first.variantId) ?? rest[0];
+    if (!alt) continue;
+    const entry = extras.get(productId) ?? { available: 0 };
+    entry.altImageUrl = imageUrlFor(alt.key, alt.widths);
+    extras.set(productId, entry);
   }
   return extras;
 }
@@ -144,8 +147,49 @@ async function getListingExtras(productIds: string[]): Promise<Map<string, Listi
 /** Published products for storefront listing (shop grid, homepage "New arrivals", etc). Each product
  * carries its default variant's price/stock/primary image — enough for a product card without a
  * second query per product. */
-export async function getCatalogProducts(): Promise<CatalogProduct[]> {
-  const rows = await db
+/** Products per page / per "Show more" – small enough to load fast on a phone, big enough that few requests are needed. */
+export const CATALOG_PAGE_SIZE = 24;
+
+export type CatalogQuery = {
+  /** Only this category (its slug). */
+  categorySlug?: string;
+  /** Only these products (wishlist). */
+  ids?: string[];
+  /** Only products the owner ticked "Show on the home page". */
+  featuredOnly?: boolean;
+  sort?: "newest" | "low" | "high";
+  /** Pagination: without a limit the whole live catalogue is returned (sitemap, search fallback). */
+  limit?: number;
+  offset?: number;
+};
+
+function catalogWhere(query: CatalogQuery) {
+  return and(
+    eq(products.status, "published"),
+    query.categorySlug ? eq(categories.slug, query.categorySlug) : undefined,
+    query.ids ? (query.ids.length ? inArray(products.id, query.ids) : sql`false`) : undefined,
+    query.featuredOnly ? eq(products.featured, true) : undefined,
+  );
+}
+
+/** How many live products match – for the Show more button. */
+export async function countCatalogProducts(query: CatalogQuery = {}): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(products)
+    .innerJoin(categories, eq(categories.id, products.categoryId))
+    .where(catalogWhere(query));
+  return row?.n ?? 0;
+}
+
+export async function getCatalogProducts(query: CatalogQuery = {}): Promise<CatalogProduct[]> {
+  const order =
+    query.sort === "low"
+      ? [asc(productVariants.price), desc(products.publishedAt), desc(products.id)]
+      : query.sort === "high"
+        ? [desc(productVariants.price), desc(products.publishedAt), desc(products.id)]
+        : [desc(products.publishedAt), desc(products.createdAt), desc(products.id)];
+  let builder = db
     .select({
       id: products.id,
       slug: products.slug,
@@ -176,8 +220,11 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
     .innerJoin(categories, eq(categories.id, products.categoryId))
     .innerJoin(productVariants, and(eq(productVariants.productId, products.id), eq(productVariants.isDefault, true)))
     .leftJoin(productImages, and(eq(productImages.productId, products.id), eq(productImages.isPrimary, true), eq(productImages.status, "active")))
-    .where(eq(products.status, "published"))
-    .orderBy(desc(products.publishedAt), desc(products.createdAt));
+    .where(catalogWhere(query))
+    .orderBy(...order)
+    .$dynamic();
+  if (query.limit) builder = builder.limit(query.limit).offset(query.offset ?? 0);
+  const rows = await builder;
 
   const [extras, sales] = await Promise.all([getListingExtras(rows.map((row) => row.id)), getActiveSales()]);
 

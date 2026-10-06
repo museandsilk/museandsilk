@@ -152,7 +152,7 @@
 .footer-social { display: flex; gap: 10px; }
 .footer-social a { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid #3a3a3a; border-radius: 50%; color: #fff; transition: background-color .2s, color .2s; }
 .footer-social a:hover { background: #fff; color: #000; }
-.footer-links { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+.footer-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 32px; }
 .footer-links h3 { margin: 0 0 18px; color: #fff; font-size: 11px; font-weight: 500; letter-spacing: .24em; text-transform: uppercase; }
 .footer-links a { display: block; width: fit-content; margin: 0 0 11px; color: #a8a8a8; font-size: 13px; transition: color .2s; }
 .footer-links a:hover { color: #fff; }

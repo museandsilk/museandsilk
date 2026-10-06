@@ -10,6 +10,7 @@ import { useLockedAction } from "@/lib/use-locked-action";
 import { callApi, Dialog, Hint, useToast } from "../../_ui/client";
 import { Icon } from "../../_ui/icons";
 import { pkr } from "../../_ui/ui";
+import { ProductPreview, type PreviewData } from "./product-preview";
 
 export type EditorCategory = { id: string; name: string };
 export type EditorProduct = {
@@ -26,11 +27,14 @@ export type EditorProduct = {
   featured: boolean;
   badge: string;
 };
-export type EditorVariantRow = { id: string; size: string; sku: string; price: number; compareAtPrice: number | null; stockQuantity: number; reservedQuantity: number; lowStockThreshold: number };
-export type EditorImageRow = { id: string; r2Key: string; variantWidths: number[] | null; isPrimary: boolean; sortOrder: number; altText: string };
+export type EditorVariantRow = { id: string; color: string; size: string; sku: string; price: number; compareAtPrice: number | null; stockQuantity: number; reservedQuantity: number; lowStockThreshold: number };
+export type EditorImageRow = { id: string; variantId: string | null; r2Key: string; variantWidths: number[] | null; isPrimary: boolean; sortOrder: number; altText: string };
 
 type VariantDraft = { key: string; id?: string; size: string; sku: string; skuTouched: boolean; price: string; compareAt: string; stock: string; low: string; reserved: number };
-type PhotoDraft = { key: string; id?: string; url: string; file?: File; isPrimary: boolean };
+/** The first photo of a colour is its main photo, so a photo only needs to remember its place in the list. */
+type PhotoDraft = { key: string; id?: string; url: string; file?: File; variantId?: string | null };
+/** One colour of the product: its own name, sizes (with prices and stock) and photos. */
+type ColorDraft = { key: string; name: string; variants: VariantDraft[]; photos: PhotoDraft[] };
 
 const TYPES = ["Shalwar Kameez", "Kurta", "Shirt", "T-Shirt", "Polo Shirt", "Pants", "Cargo Pants", "Jeans", "Waistcoat", "Sweater", "Hoodie", "Wallet", "Belt", "Card Holder", "Cap", "Socks"];
 const TEXT_SIZES = ["S", "M", "L", "XL", "XXL"];
@@ -39,6 +43,31 @@ const BADGES = ["", "New", "Sale", "Bestseller", "Limited"];
 
 let counter = 0;
 const uid = () => `k${Date.now().toString(36)}${(counter++).toString(36)}`;
+
+/** Turns the saved variants and photos into one editable block per colour (sizes + photos together). */
+function buildColors(primaryColour: string, variants: EditorVariantRow[] | undefined, images: EditorImageRow[] | undefined): ColorDraft[] {
+  const draftOf = (v: EditorVariantRow): VariantDraft => ({ key: v.id, id: v.id, size: v.size, sku: v.sku, skuTouched: true, price: String(v.price), compareAt: v.compareAtPrice ? String(v.compareAtPrice) : "", stock: String(v.stockQuantity), low: String(v.lowStockThreshold), reserved: v.reservedQuantity });
+  const colors: ColorDraft[] = [];
+  for (const v of variants ?? []) {
+    const name = v.color.trim() || primaryColour.trim();
+    let color = colors.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (!color) {
+      color = { key: uid(), name, variants: [], photos: [] };
+      colors.push(color);
+    }
+    color.variants.push(draftOf(v));
+  }
+  if (!colors.length) {
+    colors.push({ key: uid(), name: primaryColour, photos: [], variants: [{ key: uid(), size: "", sku: "", skuTouched: false, price: "", compareAt: "", stock: "0", low: "3", reserved: 0 }] });
+  }
+  const sorted = [...(images ?? [])].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder);
+  for (const image of sorted) {
+    // A photo shared by the whole product (no colour) is shown under the first colour so nothing is lost.
+    const owner = colors.find((c) => c.variants.some((v) => v.id === image.variantId)) ?? colors[0];
+    owner.photos.push({ key: image.id, id: image.id, url: mediaUrl(image.r2Key, image.variantWidths), variantId: image.variantId });
+  }
+  return colors;
+}
 
 export function ProductEditor({ categories, product, variants: initialVariants, images: initialImages }: { categories: EditorCategory[]; product?: EditorProduct; variants?: EditorVariantRow[]; images?: EditorImageRow[] }) {
   const router = useRouter();
@@ -51,7 +80,6 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
     name: product?.name ?? "",
     categoryId: product?.categoryId ?? categories[0]?.id ?? "",
     typeLabel: product?.typeLabel ?? "",
-    primaryColour: product?.primaryColour ?? "",
     material: product?.material ?? "",
     shortDescription: product?.shortDescription ?? "",
     description: product?.description ?? "",
@@ -60,16 +88,13 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
     featured: product?.featured ?? false,
     badge: product?.badge ?? "",
   });
-  const [variants, setVariants] = useState<VariantDraft[]>(() =>
-    initialVariants?.length
-      ? initialVariants.map((v) => ({ key: v.id, id: v.id, size: v.size, sku: v.sku, skuTouched: true, price: String(v.price), compareAt: v.compareAtPrice ? String(v.compareAtPrice) : "", stock: String(v.stockQuantity), low: String(v.lowStockThreshold), reserved: v.reservedQuantity }))
-      : [{ key: uid(), size: "", sku: "", skuTouched: false, price: "", compareAt: "", stock: "0", low: "3", reserved: 0 }],
-  );
+  const [colors, setColors] = useState<ColorDraft[]>(() => buildColors(product?.primaryColour ?? "", initialVariants, initialImages));
+  const [active, setActive] = useState(0);
   const [removedVariants, setRemovedVariants] = useState<string[]>([]);
-  const [photos, setPhotos] = useState<PhotoDraft[]>(() =>
-    [...(initialImages ?? [])].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder).map((img) => ({ key: img.id, id: img.id, url: mediaUrl(img.r2Key, img.variantWidths), isPrimary: img.isPrimary })),
-  );
   const [removedPhotos, setRemovedPhotos] = useState<string[]>([]);
+  const [adding, setAdding] = useState<{ name: string; from: string } | null>(null);
+  const [removingColor, setRemovingColor] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [progress, setProgress] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -96,6 +121,12 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
     touch();
   };
 
+  const multi = colors.length > 1;
+  const current = colors[Math.min(active, colors.length - 1)];
+  const variants = current.variants;
+  const photos = current.photos;
+  const mapCurrent = (change: (color: ColorDraft) => ColorDraft) => setColors((all) => all.map((c) => (c.key === current.key ? change(c) : c)));
+
   /* ---------------------------------- photos ---------------------------------- */
   function addFiles(list: FileList | File[]) {
     const problems: string[] = [];
@@ -108,15 +139,11 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
       }
       const url = URL.createObjectURL(file);
       blobUrls.current.push(url);
-      next.push({ key: uid(), url, file, isPrimary: false });
+      next.push({ key: uid(), url, file });
     }
     if (problems.length) toast(problems[0] + (problems.length > 1 ? ` (and ${problems.length - 1} more)` : ""), "bad");
     if (!next.length) return;
-    setPhotos((current) => {
-      const all = [...current, ...next].slice(0, 12);
-      if (!all.some((p) => p.isPrimary) && all[0]) all[0] = { ...all[0], isPrimary: true };
-      return all;
-    });
+    mapCurrent((c) => ({ ...c, photos: [...c.photos, ...next].slice(0, 12) }));
     touch();
   }
   const onDrop = (event: DragEvent) => {
@@ -125,56 +152,90 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
     addFiles(event.dataTransfer.files);
   };
   const makeMain = (key: string) => {
-    setPhotos((current) => {
-      const picked = current.find((p) => p.key === key);
-      if (!picked) return current;
-      return [{ ...picked, isPrimary: true }, ...current.filter((p) => p.key !== key).map((p) => ({ ...p, isPrimary: false }))];
+    mapCurrent((c) => {
+      const picked = c.photos.find((p) => p.key === key);
+      return picked ? { ...c, photos: [picked, ...c.photos.filter((p) => p.key !== key)] } : c;
     });
     touch();
   };
   const movePhoto = (key: string, delta: -1 | 1) => {
-    setPhotos((current) => {
-      const index = current.findIndex((p) => p.key === key);
+    mapCurrent((c) => {
+      const index = c.photos.findIndex((p) => p.key === key);
       const target = index + delta;
-      if (index < 0 || target < 0 || target >= current.length) return current;
-      const copy = [...current];
+      if (index < 0 || target < 0 || target >= c.photos.length) return c;
+      const copy = [...c.photos];
       [copy[index], copy[target]] = [copy[target], copy[index]];
-      return copy;
+      return { ...c, photos: copy };
     });
     touch();
   };
   const removePhoto = (photo: PhotoDraft) => {
-    if (photo.id) setRemovedPhotos((current) => [...current, photo.id as string]);
-    setPhotos((current) => {
-      const rest = current.filter((p) => p.key !== photo.key);
-      if (photo.isPrimary && rest[0]) rest[0] = { ...rest[0], isPrimary: true };
-      return rest;
-    });
+    if (photo.id) setRemovedPhotos((all) => [...all, photo.id as string]);
+    mapCurrent((c) => ({ ...c, photos: c.photos.filter((p) => p.key !== photo.key) }));
     touch();
   };
 
   /* --------------------------------- variants --------------------------------- */
+  const blankVariant = (): VariantDraft => ({ key: uid(), size: "", sku: "", skuTouched: false, price: "", compareAt: "", stock: "0", low: "3", reserved: 0 });
   const updateVariant = (key: string, patch: Partial<VariantDraft>) => {
-    setVariants((current) => current.map((v) => (v.key === key ? { ...v, ...patch } : v)));
+    mapCurrent((c) => ({ ...c, variants: c.variants.map((v) => (v.key === key ? { ...v, ...patch } : v)) }));
     touch();
   };
   const addSizes = (sizes: string[]) => {
-    setVariants((current) => {
-      const have = new Set(current.map((v) => v.size.toLowerCase()));
-      const base = current.find((v) => v.price) ?? current[0];
+    mapCurrent((c) => {
+      const have = new Set(c.variants.map((v) => v.size.toLowerCase()));
+      const base = c.variants.find((v) => v.price) ?? c.variants[0];
       // Replace the single empty starter row instead of leaving a blank row above the new sizes.
-      const start = current.length === 1 && !current[0].size && !current[0].sku ? [] : current;
-      const fresh = sizes.filter((s) => !have.has(s.toLowerCase())).map((size) => ({ key: uid(), size, sku: "", skuTouched: false, price: base?.price ?? "", compareAt: base?.compareAt ?? "", stock: "0", low: "3", reserved: 0 }));
-      return [...start, ...fresh];
+      const start = c.variants.length === 1 && !c.variants[0].size && !c.variants[0].sku ? [] : c.variants;
+      const fresh = sizes.filter((size) => !have.has(size.toLowerCase())).map((size) => ({ ...blankVariant(), size, price: base?.price ?? "", compareAt: base?.compareAt ?? "" }));
+      return { ...c, variants: [...start, ...fresh] };
     });
     touch();
   };
   const removeVariant = (v: VariantDraft) => {
-    if (v.id) setRemovedVariants((current) => [...current, v.id as string]);
-    setVariants((current) => (current.length === 1 ? [{ ...current[0], id: undefined, key: uid(), size: "", sku: "", skuTouched: false, price: "", compareAt: "", stock: "0" }] : current.filter((x) => x.key !== v.key)));
+    if (v.id) setRemovedVariants((all) => [...all, v.id as string]);
+    mapCurrent((c) => ({ ...c, variants: c.variants.length === 1 ? [blankVariant()] : c.variants.filter((x) => x.key !== v.key) }));
     touch();
   };
-  const withSkus = useMemo(() => variants.map((v) => ({ ...v, sku: v.skuTouched || v.id ? v.sku : suggestSku(form.name, form.typeLabel, v.size) })), [variants, form.name, form.typeLabel]);
+  const resolved = useMemo(
+    () => colors.map((c) => ({ ...c, variants: c.variants.map((v) => ({ ...v, sku: v.skuTouched || v.id ? v.sku : suggestSku(form.name, form.typeLabel, v.size, colors.length > 1 ? c.name : "") })) })),
+    [colors, form.name, form.typeLabel],
+  );
+  const withSkus = resolved[Math.min(active, resolved.length - 1)].variants;
+
+  /* ---------------------------------- colours ---------------------------------- */
+  const renameColor = (name: string) => {
+    mapCurrent((c) => ({ ...c, name }));
+    touch();
+  };
+  function addColor() {
+    if (!adding) return;
+    const name = adding.name.trim();
+    if (!name) {
+      toast("Please type the new colour, for example Navy.", "bad");
+      return;
+    }
+    if (colors.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) {
+      toast(`You already have ${name}.`, "bad");
+      return;
+    }
+    // The old colour's sizes, prices and low-stock alerts come along so nothing is typed twice – stock starts at 0 for the new colour.
+    const source = colors.find((c) => c.key === adding.from) ?? current;
+    const copied = source.variants.map<VariantDraft>((v) => ({ ...blankVariant(), size: v.size, price: v.price, compareAt: v.compareAt, low: v.low }));
+    setColors((all) => [...all, { key: uid(), name, variants: copied.length ? copied : [blankVariant()], photos: [] }]);
+    setActive(colors.length);
+    setAdding(null);
+    touch();
+  }
+  function removeColor() {
+    if (colors.length < 2) return;
+    setRemovedVariants((all) => [...all, ...current.variants.flatMap((v) => (v.id ? [v.id] : []))]);
+    setRemovedPhotos((all) => [...all, ...current.photos.flatMap((p) => (p.id ? [p.id] : []))]);
+    setColors((all) => all.filter((c) => c.key !== current.key));
+    setActive((index) => Math.max(0, index - 1));
+    setRemovingColor(false);
+    touch();
+  }
 
   /* ----------------------------------- AI text ---------------------------------- */
   async function writeText(mode: "write" | "rewrite") {
@@ -184,7 +245,7 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
     }
     await writer.run(async () => {
       const categoryName = categories.find((c) => c.id === form.categoryId)?.name;
-      const result = await callApi<{ description: string }>("/api/admin/ai-description", "POST", { name: form.name, type: form.typeLabel, category: categoryName, color: form.primaryColour, material: form.material, existing: form.description, mode });
+      const result = await callApi<{ description: string }>("/api/admin/ai-description", "POST", { name: form.name, type: form.typeLabel, category: categoryName, color: colors.map((c) => c.name.trim()).filter(Boolean).join(", "), material: form.material, existing: form.description, mode });
       if (result.ok) {
         setForm((current) => ({ ...current, description: result.data.description }));
         touch();
@@ -199,20 +260,26 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
     if (!form.name.trim()) problems.push("Please type the product name.");
     if (!form.categoryId) problems.push("Please choose a category (create one first under Categories).");
     if (!form.typeLabel.trim()) problems.push("Please say what kind of product it is, for example Shirt or Pants.");
-    if (!form.primaryColour.trim()) problems.push("Please type the colour.");
-    const sizes = new Set<string>();
-    withSkus.forEach((v, index) => {
-      const label = v.size ? `Size ${v.size}` : `Row ${index + 1}`;
-      if (!v.price || Number(v.price) < 1) problems.push(`${label}: please enter a price.`);
-      if (v.compareAt && Number(v.compareAt) <= Number(v.price)) problems.push(`${label}: the old price must be higher than the selling price (or leave it empty).`);
-      if (!v.sku.trim()) problems.push(`${label}: the product code is missing.`);
-      const key = v.size.trim().toLowerCase();
-      if (sizes.has(key)) problems.push(`${label} is listed twice.`);
-      sizes.add(key);
+    const names = new Set<string>();
+    resolved.forEach((c, colorIndex) => {
+      const where = multi ? `${c.name.trim() || `Colour ${colorIndex + 1}`}: ` : "";
+      if (!c.name.trim()) problems.push(`${where}please type the colour.`);
+      else if (names.has(c.name.trim().toLowerCase())) problems.push(`The colour ${c.name.trim()} is listed twice.`);
+      names.add(c.name.trim().toLowerCase());
+      const sizes = new Set<string>();
+      c.variants.forEach((v, index) => {
+        const label = `${where}${v.size ? `Size ${v.size}` : `Row ${index + 1}`}`;
+        if (!v.price || Number(v.price) < 1) problems.push(`${label}: please enter a price.`);
+        if (v.compareAt && Number(v.compareAt) <= Number(v.price)) problems.push(`${label}: the old price must be higher than the selling price (or leave it empty).`);
+        if (!v.sku.trim()) problems.push(`${label}: the product code is missing.`);
+        const key = v.size.trim().toLowerCase();
+        if (sizes.has(key)) problems.push(`${label} is listed twice.`);
+        sizes.add(key);
+      });
     });
-    const codes = withSkus.map((v) => v.sku.trim().toLowerCase());
+    const codes = resolved.flatMap((c) => c.variants.map((v) => v.sku.trim().toLowerCase()));
     if (new Set(codes).size !== codes.length) problems.push("Two sizes have the same product code. Every size needs its own code.");
-    if (form.status === "published" && photos.length === 0) problems.push("Add at least one photo before showing this product on the website (or choose “Hidden”).");
+    if (form.status === "published" && !colors.some((c) => c.photos.length)) problems.push("Add at least one photo before showing this product on the website (or choose “Hidden”).");
     return problems;
   }
 
@@ -236,7 +303,7 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
         name: form.name.trim(),
         categoryId: form.categoryId,
         typeLabel: form.typeLabel.trim(),
-        primaryColour: form.primaryColour.trim(),
+        primaryColour: colors[0].name.trim(),
         material: form.material.trim() || null,
         shortDescription: form.shortDescription.trim() || null,
         description: form.description.trim() || null,
@@ -249,40 +316,57 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
       if (!saved.ok) return fail(saved.error);
       const productId = saved.data.product.id;
 
-      // 2. sizes, prices and stock
+      // 2. every colour's sizes, prices and stock. The first saved size of a colour is what its photos are linked to.
+      const anchors = new Map<string, string>();
       let first = true;
-      for (const v of withSkus) {
-        setProgress(`Saving ${v.size ? `size ${v.size}` : "price and stock"}…`);
-        const body = {
-          name: `${form.primaryColour.trim()}${v.size ? ` / ${v.size}` : ""}`,
-          sku: v.sku.trim(),
-          color: form.primaryColour.trim(),
-          size: v.size.trim(),
-          price: Number(v.price),
-          stockQuantity: Number(v.stock || 0),
-          lowStockThreshold: Number(v.low || 3),
-        };
-        const result = v.id
-          ? await callApi(`/api/admin/variants/${v.id}`, "PATCH", { ...body, compareAtPrice: v.compareAt ? Number(v.compareAt) : null })
-          : await callApi("/api/admin/variants", "POST", { ...body, productId, compareAtPrice: v.compareAt ? Number(v.compareAt) : undefined, isDefault: first });
-        if (!result.ok) return fail(`${v.size ? `Size ${v.size}` : "Price and stock"}: ${result.error}`);
-        first = false;
+      for (const c of resolved) {
+        const colorName = c.name.trim();
+        for (const v of c.variants) {
+          setProgress(`Saving ${[colorName, v.size ? `size ${v.size}` : "price and stock"].filter(Boolean).join(" · ")}…`);
+          const body = {
+            name: `${colorName}${v.size ? ` / ${v.size}` : ""}`,
+            sku: v.sku.trim(),
+            color: colorName,
+            size: v.size.trim(),
+            price: Number(v.price),
+            stockQuantity: Number(v.stock || 0),
+            lowStockThreshold: Number(v.low || 3),
+          };
+          const label = `${multi ? `${colorName} ` : ""}${v.size ? `size ${v.size}` : "price and stock"}`;
+          if (v.id) {
+            const result = await callApi(`/api/admin/variants/${v.id}`, "PATCH", { ...body, compareAtPrice: v.compareAt ? Number(v.compareAt) : null });
+            if (!result.ok) return fail(`${label}: ${result.error}`);
+            if (!anchors.has(c.key)) anchors.set(c.key, v.id);
+          } else {
+            const result = await callApi<{ variant: { id: string } }>("/api/admin/variants", "POST", { ...body, productId, compareAtPrice: v.compareAt ? Number(v.compareAt) : undefined, isDefault: first });
+            if (!result.ok) return fail(`${label}: ${result.error}`);
+            if (!anchors.has(c.key)) anchors.set(c.key, result.data.variant.id);
+          }
+          first = false;
+        }
       }
       for (const id of removedVariants) await callApi(`/api/admin/variants/${id}`, "DELETE");
 
-      // 3. photos
+      // 3. photos, colour by colour. Only one photo is the product's main one (the first of the first colour that has photos).
       for (const id of removedPhotos) await callApi(`/api/admin/images/${id}`, "DELETE");
+      const mainColor = resolved.find((c) => c.photos.length)?.key;
+      const newCount = resolved.reduce((sum, c) => sum + c.photos.filter((p) => p.file).length, 0);
       let uploaded = 0;
-      const newCount = photos.filter((p) => p.file).length;
-      for (let index = 0; index < photos.length; index++) {
-        const photo = photos[index];
-        if (photo.file) {
-          uploaded += 1;
-          setProgress(`Uploading photo ${uploaded} of ${newCount}…`);
-          const outcome = await uploadProductPicture({ productId, file: photo.file, altText: `${form.name.trim()}${index ? ` — photo ${index + 1}` : ""}`, isPrimary: photo.isPrimary, sortOrder: index });
-          if (!outcome.ok) return fail(`The product was saved, but a photo failed: ${outcome.error}`);
-        } else if (photo.id) {
-          await callApi(`/api/admin/images/${photo.id}`, "PATCH", { sortOrder: index, ...(photo.isPrimary ? { isPrimary: true } : {}) });
+      for (const c of resolved) {
+        const anchor = multi ? anchors.get(c.key) : undefined;
+        const ownVariants = new Set(c.variants.flatMap((v) => (v.id ? [v.id] : [])));
+        for (let index = 0; index < c.photos.length; index++) {
+          const photo = c.photos[index];
+          const isMain = c.key === mainColor && index === 0;
+          if (photo.file) {
+            uploaded += 1;
+            setProgress(`Uploading photo ${uploaded} of ${newCount}…`);
+            const outcome = await uploadProductPicture({ productId, file: photo.file, altText: `${form.name.trim()}${multi ? ` — ${c.name.trim()}` : ""}${index ? ` — photo ${index + 1}` : ""}`, isPrimary: isMain, sortOrder: index, variantId: anchor });
+            if (!outcome.ok) return fail(`The product was saved, but a photo failed: ${outcome.error}`);
+          } else if (photo.id) {
+            const linked = photo.variantId ? ownVariants.has(photo.variantId) : false;
+            await callApi(`/api/admin/images/${photo.id}`, "PATCH", { sortOrder: index, ...(isMain ? { isPrimary: true } : {}), ...(anchor && !linked ? { variantId: anchor } : {}) });
+          }
         }
       }
 
@@ -305,8 +389,22 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
     } else toast(result.error, "bad");
   }
 
+  const previewData: PreviewData = {
+    name: form.name.trim(),
+    type: form.typeLabel.trim(),
+    shortDescription: form.shortDescription.trim(),
+    description: form.description.trim(),
+    care: form.careInstructions.trim(),
+    material: form.material.trim(),
+    badge: form.badge,
+    colors: resolved.map((c) => ({
+      name: c.name.trim(),
+      photos: c.photos.map((p) => p.url),
+      sizes: c.variants.map((v) => ({ size: v.size.trim(), price: Number(v.price) || 0, compareAt: v.compareAt ? Number(v.compareAt) : null, stock: Math.max(0, Number(v.stock || 0) - v.reserved) })),
+    })),
+  };
   const busy = saver.pending;
-  const saleLooksWrong = withSkus.some((v) => v.compareAt && Number(v.compareAt) <= Number(v.price));
+  const saleLooksWrong = resolved.some((c) => c.variants.some((v) => v.compareAt && Number(v.compareAt) <= Number(v.price)));
 
   return (
     <form onSubmit={save} className="a-stack">
@@ -357,11 +455,6 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
             </datalist>
           </div>
           <div className="a-field">
-            <label htmlFor="pe-colour">Colour</label>
-            <input id="pe-colour" value={form.primaryColour} onChange={setField("primaryColour")} placeholder="e.g. Olive" />
-            <span className="a-help">Selling the same item in another colour? Add it as a separate product.</span>
-          </div>
-          <div className="a-field">
             <label htmlFor="pe-fabric">Fabric (optional)</label>
             <input id="pe-fabric" value={form.material} onChange={setField("material")} placeholder="e.g. Cotton twill" />
           </div>
@@ -392,9 +485,75 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
         </div>
       </section>
 
+      <section className="a-card" aria-label="Colours">
+        <header className="a-card-head">
+          <h2>2. Colour{multi ? "s" : ""}</h2>
+          <Hint text="Selling the same item in more than one colour? Add each colour here. Customers see colour buttons on one product page, and you keep one list in Stock." below />
+        </header>
+        <div className="a-card-pad a-stack" style={{ gap: 14 }}>
+          <div className="a-colortabs" role="group" aria-label="Colours of this product">
+            {colors.map((c, index) => (
+              <button key={c.key} type="button" aria-pressed={c === current} onClick={() => setActive(index)}>
+                {c.name.trim() || "New colour"}
+                <small>{c.photos.length} photo{c.photos.length === 1 ? "" : "s"}</small>
+              </button>
+            ))}
+            <button type="button" className="add" onClick={() => setAdding({ name: "", from: current.key })} title="Same product in another colour. Sizes and prices are copied so you only change what is different.">
+              <Icon name="plus" size={15} /> Add another colour
+            </button>
+          </div>
+          {adding && (
+            <div className="a-note" role="group" aria-label="Add another colour">
+              <div className="a-stack" style={{ gap: 10, width: "100%" }}>
+                <strong>Add this product in another colour</strong>
+                <div className="a-form-grid">
+                  <div className="a-field">
+                    <label htmlFor="pe-newcolor">New colour</label>
+                    <input id="pe-newcolor" value={adding.name} onChange={(event) => setAdding({ ...adding, name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addColor(); } }} placeholder="e.g. Navy" maxLength={40} autoFocus />
+                  </div>
+                  {colors.length > 1 && (
+                    <div className="a-field">
+                      <label htmlFor="pe-copyfrom">Copy sizes and prices from</label>
+                      <select id="pe-copyfrom" value={adding.from} onChange={(event) => setAdding({ ...adding, from: event.target.value })}>
+                        {colors.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.name.trim() || "New colour"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <span className="a-help">We copy the sizes, prices and low-stock alerts so you do not type them again. You can change anything afterwards. Stock starts at 0 for the new colour.</span>
+                <div className="a-row">
+                  <button type="button" className="a-btn a-btn-primary a-btn-sm" onClick={addColor}>
+                    Add colour
+                  </button>
+                  <button type="button" className="a-btn a-btn-sm" onClick={() => setAdding(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="a-row" style={{ alignItems: "flex-end" }}>
+            <div className="a-field" style={{ minWidth: 260 }}>
+              <label htmlFor="pe-colour">Colour</label>
+              <input id="pe-colour" value={current.name} onChange={(event) => renameColor(event.target.value)} placeholder="e.g. Olive" maxLength={40} />
+            </div>
+            {multi && (
+              <button type="button" className="a-btn a-btn-quiet" onClick={() => setRemovingColor(true)}>
+                <Icon name="trash" size={16} /> Remove this colour
+              </button>
+            )}
+          </div>
+          {multi && <p className="a-help">The photos and sizes below belong to <strong>{current.name.trim() || "this colour"}</strong>. Pick another colour above to change its photos, sizes and stock.</p>}
+        </div>
+      </section>
+
       <section className="a-card">
         <header className="a-card-head">
-          <h2>2. Photos</h2>
+          <h2>3. Photos{multi ? ` · ${current.name.trim() || "this colour"}` : ""}</h2>
           <small>{photos.length} of 12 · the first photo is the main one</small>
         </header>
         <div className="a-card-pad a-stack" style={{ gap: 14 }}>
@@ -428,12 +587,12 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
                     ) : (
                       <Image src={photo.url} alt={`Photo ${index + 1}`} fill sizes="160px" />
                     )}
-                    {photo.isPrimary && <span className="main-tag">Main photo</span>}
+                    {index === 0 && <span className="main-tag">Main photo</span>}
                   </div>
                   <div className="tools">
                     <button type="button" onClick={() => movePhoto(photo.key, -1)} disabled={index === 0} aria-label="Move earlier" title="Move earlier">←</button>
                     <button type="button" onClick={() => movePhoto(photo.key, 1)} disabled={index === photos.length - 1} aria-label="Move later" title="Move later">→</button>
-                    {!photo.isPrimary && <button type="button" onClick={() => makeMain(photo.key)}>Make main</button>}
+                    {index !== 0 && <button type="button" onClick={() => makeMain(photo.key)}>Make main</button>}
                     <button type="button" className="del" onClick={() => removePhoto(photo)} aria-label="Remove photo" title="Remove this photo">
                       <Icon name="trash" size={15} />
                     </button>
@@ -447,7 +606,7 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
 
       <section className="a-card">
         <header className="a-card-head">
-          <h2>3. Sizes, prices and stock</h2>
+          <h2>4. Sizes, prices and stock{multi ? ` · ${current.name.trim() || "this colour"}` : ""}</h2>
           <Hint text="One row for each size. Stock is how many you have on the shelf right now. When stock reaches 0 the size shows “Sold out”." below />
         </header>
         <div className="a-card-pad a-stack" style={{ gap: 14 }}>
@@ -521,7 +680,7 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
           </div>
           {withSkus.length > 1 && (
             <div className="a-row">
-              <button type="button" className="a-btn a-btn-sm" onClick={() => { const first = variants.find((v) => v.price); if (first) { setVariants((c) => c.map((v) => ({ ...v, price: first.price, compareAt: first.compareAt }))); touch(); } }} disabled={!variants.some((v) => v.price)}>
+              <button type="button" className="a-btn a-btn-sm" onClick={() => { const first = variants.find((v) => v.price); if (first) { mapCurrent((c) => ({ ...c, variants: c.variants.map((v) => ({ ...v, price: first.price, compareAt: first.compareAt })) })); touch(); } }} disabled={!variants.some((v) => v.price)}>
                 Use the first price for every size
               </button>
             </div>
@@ -533,7 +692,7 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
 
       <section className="a-card">
         <header className="a-card-head">
-          <h2>4. Show it on your website?</h2>
+          <h2>5. Show it on your website?</h2>
         </header>
         <div className="a-card-pad a-form-grid">
           <fieldset style={{ border: 0, margin: 0, padding: 0, gridColumn: "1 / -1", display: "grid", gap: 10 }}>
@@ -589,6 +748,9 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
           )}
         </div>
         <div className="a-row">
+          <button type="button" className="a-btn" onClick={() => setPreviewing(true)} title="See how this looks to customers on a phone and on a laptop – nothing is saved">
+            <Icon name="eye" size={16} /> Preview
+          </button>
           {!isNew && (
             <button type="button" className="a-btn a-btn-quiet" onClick={() => setConfirmDelete(true)} disabled={busy}>
               <Icon name="trash" size={16} /> Delete…
@@ -610,6 +772,22 @@ export function ProductEditor({ categories, product, variants: initialVariants, 
           </button>
         </div>
       </div>
+
+      {previewing && <ProductPreview data={previewData} initialColor={Math.min(active, colors.length - 1)} onClose={() => setPreviewing(false)} />}
+
+      {removingColor && (
+        <Dialog title={`Remove the colour “${current.name.trim() || "this colour"}”?` } onClose={() => setRemovingColor(false)}>
+          <p>Its sizes, stock and photos are removed when you press <strong>Save</strong>. The other colours are not touched. Old orders keep their record.</p>
+          <div className="a-dialog-actions">
+            <button type="button" className="a-btn" onClick={() => setRemovingColor(false)}>
+              Go back
+            </button>
+            <button type="button" className="a-btn a-btn-danger" onClick={removeColor}>
+              Remove colour
+            </button>
+          </div>
+        </Dialog>
+      )}
 
       {confirmDelete && product && (
         <Dialog title={`Remove “${product.name}”?`} onClose={() => setConfirmDelete(false)}>

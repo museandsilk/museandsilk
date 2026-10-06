@@ -20,7 +20,7 @@ const FILTERS = [
   { key: "archived", label: "Removed" },
 ] as const;
 
-type Row = { id: string; name: string; type: string; status: string; category: string; created: Date; minPrice: number | null; maxPrice: number | null; sizes: number; available: number | null; lowCount: number; imageKey: string | null; widths: number[] | null; featured: boolean };
+type Row = { id: string; name: string; type: string; status: string; category: string; created: Date; minPrice: number | null; maxPrice: number | null; sizes: number; colors: number; available: number | null; lowCount: number; imageKey: string | null; widths: number[] | null; featured: boolean };
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ filter?: string; q?: string; page?: string; cat?: string }> }) {
   const params = await searchParams;
@@ -37,13 +37,13 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   const base = sql`
     select p.id, p.name, p.type_label as type, p.status, p.featured, p.created_at as created, c.name as category,
-           s.min_price::int as "minPrice", s.max_price::int as "maxPrice", s.sizes, s.available, s.low_count as "lowCount",
+           s.min_price::int as "minPrice", s.max_price::int as "maxPrice", s.sizes, s.colors, s.available, s.low_count as "lowCount",
            (select i.r2_key from product_images i where i.product_id = p.id and i.status = 'active' order by i.is_primary desc, i.sort_order, i.created_at limit 1) as "imageKey",
            (select i.variant_widths from product_images i where i.product_id = p.id and i.status = 'active' order by i.is_primary desc, i.sort_order, i.created_at limit 1) as widths
     from products p
     join categories c on c.id = p.category_id
     left join lateral (
-      select min(v.price) as min_price, max(v.price) as max_price, count(*)::int as sizes,
+      select min(v.price) as min_price, max(v.price) as max_price, count(*)::int as sizes, count(distinct lower(v.color))::int as colors,
              sum(greatest(0, v.stock_quantity - v.reserved_quantity))::int as available,
              count(*) filter (where v.stock_quantity - v.reserved_quantity <= v.low_stock_threshold)::int as low_count
       from product_variants v where v.product_id = p.id and v.status = 'active'
@@ -144,7 +144,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                         <span>
                           <strong>{row.name}</strong>
                           <small>
-                            {row.type} · {row.sizes} size{row.sizes === 1 ? "" : "s"}
+                            {row.type} · {row.colors > 1 ? `${row.colors} colours · ` : ""}{row.sizes} size{row.sizes === 1 ? "" : "s"}{row.colors > 1 ? " in all" : ""}
                             {row.featured ? " · on home page" : ""}
                           </small>
                         </span>

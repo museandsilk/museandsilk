@@ -10,7 +10,6 @@ export async function GET(request: Request) {
     .slice(0, 50);
   if (!ids.length) return Response.json({ products: [] });
 
-  const wanted = new Set(ids);
-  const products = (await getCatalogProducts()).filter((product) => wanted.has(product.id)).map(toCard);
+  const products = (await getCatalogProducts({ ids })).map(toCard);
   return Response.json({ products }, { headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } });
 }
