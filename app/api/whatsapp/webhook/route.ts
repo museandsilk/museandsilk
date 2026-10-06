@@ -1,3 +1,4 @@
+import { siteOrigin } from "@/lib/brand";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { announceOrderEvent } from "@/lib/order-events";
 import { and, eq } from "drizzle-orm";
@@ -90,7 +91,7 @@ function statusForButtonPayload(buttonPayload: string): "confirmed" | "cancelled
 async function handleButtonReply(repliedToMessageId: string, buttonPayload: string): Promise<void> {
   const toStatus = statusForButtonPayload(buttonPayload);
   if (!toStatus) return;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://nureasmir.com";
+  const siteUrl = siteOrigin();
 
   if (toStatus === "cancelled") {
     // Same single cancel path as the website and the admin (lib/order-actions.ts): only an order still

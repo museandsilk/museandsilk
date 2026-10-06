@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Jost } from "next/font/google";
 import "./globals.css";
 import "./storefront.css";
-import { BRAND, siteOrigin } from "@/lib/brand";
+import { BRAND, normalizeOrigin, siteOrigin } from "@/lib/brand";
 import { getPublicSettings } from "@/lib/commerce";
 import { getNonce } from "@/lib/nonce";
 import { getSiteImages } from "@/lib/site-images";
@@ -31,7 +31,7 @@ export const viewport: Viewport = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const origin = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000");
   const share = (await getSiteImages()).share_image;
   const shareUrl = share ? (/^https?:\/\//.test(share.url) ? share.url.split("?")[0] : `${origin}${share.url.split("?")[0]}`) : `${origin}/og.jpg`;
   const title = `${BRAND.name} — ${BRAND.descriptor}`;

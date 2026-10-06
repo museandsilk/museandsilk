@@ -19,6 +19,13 @@ export const BRAND = {
   },
 } as const;
 
+/** Turns whatever was typed into the site-address setting ("nureasmir.com", "https://nureasmir.com/") into a valid origin. */
+export function normalizeOrigin(raw: string | undefined, fallback: string = BRAND.fallbackOrigin): string {
+  const value = (raw ?? "").trim().replace(/\/+$/, "");
+  if (!value) return fallback;
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
 export function siteOrigin(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL || BRAND.fallbackOrigin).replace(/\/$/, "");
+  return normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL);
 }
