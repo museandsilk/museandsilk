@@ -18,4 +18,6 @@ jobs:
         env:
           SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: curl -sf -X GET "$SITE_URL/api/cron/search-reindex" -H "Authorization: Bearer $CRON_SECRET"
+        # A block (|), because the header text contains "Authorization: " – on one line that colon-space made the whole file invalid YAML.
+        run: |
+          curl -sf -X GET "$SITE_URL/api/cron/search-reindex" -H "Authorization: Bearer $CRON_SECRET"
