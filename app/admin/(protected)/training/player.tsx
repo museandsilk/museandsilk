@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../_ui/icons";
-import { foldActions, lastTarget, type Lesson, type TourState } from "./engine";
+import { foldActions, lastTarget, type Lesson, type TourState } from "@/lib/training-engine";
 
 const SPEEDS = [1, 1.5, 2] as const;
 const DONE_KEY = "adm-training-done";

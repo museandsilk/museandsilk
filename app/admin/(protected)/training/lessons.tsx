@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { estimateSeconds, type Lesson, type Step, type TourState } from "./engine";
+import { estimateSeconds, type Lesson, type Step, type TourState } from "@/lib/training-engine";
 import { Badge, Btn, Card, Chip, Field, Grid, Shell, T, Table, Tip } from "./mock";
 
 /**
