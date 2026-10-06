@@ -21,9 +21,16 @@ export const BRAND = {
 
 /** Turns whatever was typed into the site-address setting ("nureasmir.com", "https://nureasmir.com/") into a valid origin. */
 export function normalizeOrigin(raw: string | undefined, fallback: string = BRAND.fallbackOrigin): string {
-  const value = (raw ?? "").trim().replace(/\/+$/, "");
-  if (!value) return fallback;
-  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  // Tolerates quotes, spaces, a trailing slash or path, and a missing https:// (all seen in pasted settings).
+  const cleaned = (raw ?? "").trim().replace(/^["'\s]+|["'\s]+$/g, "");
+  const match = cleaned.match(/^(?:https?:\/\/)?([a-z0-9.-]+\.[a-z]{2,}|localhost)(:\d+)?/i);
+  if (!match) return fallback;
+  const scheme = /^http:\/\//i.test(cleaned) ? "http" : /^https:\/\//i.test(cleaned) ? "https" : match[1] === "localhost" ? "http" : "https";
+  try {
+    return new URL(`${scheme}://${match[1]}${match[2] ?? ""}`).origin;
+  } catch {
+    return fallback;
+  }
 }
 
 export function siteOrigin(): string {
