@@ -48,7 +48,7 @@
     "react-hook-form": "^7.83.0",
     "resend": "^6.18.1",
     "tailwind-merge": "^3.6.0",
-    "wrangler": "^4.115.0",
+    "wrangler": "^4.147.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
