@@ -49,7 +49,7 @@ export default async function Home() {
                 <div className="cat-tile-media">
                   <Image
                     src={category.imageUrl ?? "/placeholder.webp"}
-                    alt={category.name}
+                    alt="" /* the name is written right under the picture, so screen readers do not need it twice */
                     fill
                     sizes="(max-width: 700px) 46vw, 25vw"
                     priority={index < 4}
