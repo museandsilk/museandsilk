@@ -6,6 +6,7 @@ import { useLockedAction } from "@/lib/use-locked-action";
 import { callApi, Hint, useToast } from "../../_ui/client";
 import { Icon } from "../../_ui/icons";
 import { Badge } from "../../_ui/ui";
+import { buildAnnouncements, isAnnouncementMode, isDeliveryMode } from "@/lib/shop-rules";
 import { PhotoShrinker } from "./photo-shrinker";
 
 export type SettingsValues = {
@@ -31,6 +32,11 @@ export type SettingsValues = {
   bankReservationHours: number;
   refundWindowDays: number;
   soldoutHideDays: number;
+  announcementMode: string;
+  announcementLines: string;
+  bankDepositEnabled: boolean;
+  deliveryMode: string;
+  flatDeliveryCharge: number;
   googleSiteVerification: string;
   bingSiteVerification: string;
   metaPixelId: string;
@@ -67,6 +73,25 @@ export function SettingsForm({ initial, status }: { initial: SettingsValues; sta
     setForm((current) => ({ ...current, [key]: typeof initial[key] === "number" ? Number(event.target.value.replace(/\D/g, "")) : event.target.value }));
     setDirty(true);
   };
+  const setValue = <K extends keyof SettingsValues>(key: K, value: SettingsValues[K]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setDirty(true);
+  };
+  const choice = (key: "announcementMode" | "deliveryMode", value: string, title: string, detail: string) => (
+    <label className="a-check" key={value}>
+      <input type="radio" name={`s-${key}`} checked={form[key] === value} onChange={() => setValue(key, value)} />
+      <span>
+        <strong>{title}</strong>
+        <small className="a-help" style={{ display: "block" }}>{detail}</small>
+      </span>
+    </label>
+  );
+  const topBarPreview = buildAnnouncements({
+    mode: isAnnouncementMode(form.announcementMode) ? form.announcementMode : "auto",
+    lines: form.announcementLines,
+    freeDeliveryAbove: form.freeDeliveryThreshold,
+    bankDepositEnabled: form.bankDepositEnabled,
+  });
   const text = (key: keyof SettingsValues, label: string, options: { hint?: string; placeholder?: string; wide?: boolean; type?: string; help?: string; prefix?: string } = {}) => (
     <div className={`a-field${options.wide ? " wide" : ""}`}>
       <label htmlFor={`s-${key}`}>
@@ -79,6 +104,10 @@ export function SettingsForm({ initial, status }: { initial: SettingsValues; sta
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (!isDeliveryMode(form.deliveryMode) || !isAnnouncementMode(form.announcementMode)) {
+      toast("Please choose one of the options.", "bad");
+      return;
+    }
     await saving.run(async () => {
       const result = await callApi<{ settings: Partial<Record<keyof SettingsValues, string | number>> }>("/api/admin/settings", "PATCH", form);
       if (result.ok) {
@@ -183,8 +212,51 @@ export function SettingsForm({ initial, status }: { initial: SettingsValues; sta
         </div>
       </Section>
 
+      <Section id="topbar" title="Top bar of your website" intro="The thin strip at the very top of every page. It slides through these lines one after another.">
+        <fieldset className="wide" style={{ border: 0, margin: 0, padding: 0, display: "grid", gap: 10 }}>
+          <legend className="sr-only">What the top bar shows</legend>
+          {choice("announcementMode", "auto", "Automatic (recommended)", "Built from your real rules, so it can never be wrong: cash on delivery, and “Free delivery on orders above Rs. …” using the free-delivery amount below. Your own lines are added after them.")}
+          {choice("announcementMode", "custom", "Only my own lines", "Shows just what you type below.")}
+          {choice("announcementMode", "off", "Hide the top bar", "No strip at the top.")}
+        </fieldset>
+        {form.announcementMode !== "off" && (
+          <div className="a-field wide">
+            <label htmlFor="s-announcementLines">
+              {form.announcementMode === "custom" ? "Your lines" : "Extra lines (optional)"} <Hint text="One message per line, up to 6 lines. Example: New arrivals every week" />
+            </label>
+            <textarea id="s-announcementLines" rows={4} value={form.announcementLines} onChange={(event) => setValue("announcementLines", event.target.value)} placeholder={"New arrivals every week\nEid collection is live"} maxLength={1200} />
+          </div>
+        )}
+        <div className="wide">
+          <p className="a-help" style={{ marginBottom: 6 }}>How it will look (your website updates when you press Save):</p>
+          {topBarPreview.length ? (
+            <ul style={{ margin: 0, padding: "10px 16px", listStyle: "none", background: "#111", color: "#fff", borderRadius: 8, display: "grid", gap: 4, fontSize: 13, letterSpacing: ".04em" }}>
+              {topBarPreview.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="a-muted">The top bar is hidden.</p>
+          )}
+        </div>
+      </Section>
+
       <Section id="delivery" title="Delivery, payment and refunds">
         {text("freeDeliveryThreshold", "Free delivery above (PKR)", { hint: "Orders worth more than this get free delivery. Put 0 to switch free delivery off." })}
+        <fieldset className="wide" style={{ border: 0, margin: 0, padding: 0, display: "grid", gap: 10 }}>
+          <legend style={{ fontWeight: 600, marginBottom: 6 }}>What customers pay for delivery <Hint text="This is what the CUSTOMER is charged. TCS bills you separately for carrying the parcel – the two do not have to be equal. Free delivery above the amount is always applied, whichever way you choose." /></legend>
+          {choice("deliveryMode", "zones", "A price for each area (recommended)", "You set the price per area on the “Delivery charges” page, for example Karachi Rs 250, rest of Pakistan Rs 400.")}
+          {choice("deliveryMode", "flat", "One price everywhere", "The same delivery charge for all of Pakistan.")}
+          {choice("deliveryMode", "tcs", "Follow TCS prices (when available)", "Uses TCS's own tariff by city once TCS is connected. Until then, or for any city TCS cannot price, your area prices are used – so an order is never blocked.")}
+        </fieldset>
+        {form.deliveryMode === "flat" && text("flatDeliveryCharge", "Delivery charge everywhere (PKR)", { hint: "Charged on every order below the free-delivery amount." })}
+        <label className="a-check wide">
+          <input type="checkbox" checked={form.bankDepositEnabled} onChange={(event) => setValue("bankDepositEnabled", event.target.checked)} />
+          <span>
+            <strong>Also accept bank transfer</strong>
+            <small className="a-help" style={{ display: "block" }}>{form.bankDepositEnabled ? "Customers can choose bank transfer and upload a receipt. Fill in your bank details below." : "Off: customers can only choose cash on delivery. Turn this on when you are ready to check bank receipts."}</small>
+          </span>
+        </label>
         {text("refundWindowDays", "Refund time (days)", { hint: "How many days after delivery a customer may ask for a refund. 0 = no refunds." })}
         {text("codReservationHours", "Hold stock for cash-on-delivery orders (hours)", { hint: "If the customer does not confirm in this time, the order is cancelled and the stock goes back on sale." })}
         {text("bankReservationHours", "Hold stock for bank-transfer orders (hours)", { hint: "How long a customer has to send the receipt." })}

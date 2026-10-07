@@ -18,4 +18,4 @@ export function refreshStorefront(force = false): void {
 }
 
 /** Admin actions that change what shoppers see. */
-export const STOREFRONT_ACTIONS = /^(campaign|category|collection|delivery-zone|flash-sale|image|product|settings|stock|variant|siteimage)\./;
+export const STOREFRONT_ACTIONS = /^(campaign|category|collection|delivery-zone|faq|flash-sale|image|location|product|settings|stock|variant|siteimage)\./;

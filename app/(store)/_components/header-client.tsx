@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { searchProducts } from "@/lib/search/client";
 import type { SearchHit } from "@/lib/search/types";
 import { cartCount, readCart } from "@/lib/cart";
@@ -24,11 +24,12 @@ const Icon = {
 
 export function HeaderClient({
   categories,
-  freeDeliveryThreshold,
+  messages,
   whatsappNumber,
 }: {
   categories: NavCategory[];
-  freeDeliveryThreshold: number | null;
+  /** The lines of the strip at the top of the page (built from the shop's rules in the admin); empty hides the strip. */
+  messages: string[];
   whatsappNumber: string;
 }) {
   const router = useRouter();
@@ -64,17 +65,8 @@ export function HeaderClient({
     };
   }, [menuOpen, searchOpen]);
 
-  const messages = useMemo(
-    () => [
-      freeDeliveryThreshold
-        ? `Free shipping across Pakistan on orders above Rs. ${freeDeliveryThreshold.toLocaleString("en-PK")}`
-        : "Free shipping across Pakistan on qualifying orders",
-      "Cash on delivery available",
-      "New arrivals every week",
-    ],
-    [freeDeliveryThreshold],
-  );
   useEffect(() => {
+    if (messages.length < 2) return;
     const timer = window.setInterval(() => setMessageIndex((index) => (index + 1) % messages.length), 4500);
     return () => window.clearInterval(timer);
   }, [messages.length]);
@@ -92,6 +84,7 @@ export function HeaderClient({
 
   return (
     <>
+      {messages.length > 0 && (
       <div className="announcement" role="status">
         <div className="announcement-ticker">
           {messages.map((message, index) => {
@@ -105,6 +98,7 @@ export function HeaderClient({
           })}
         </div>
       </div>
+      )}
 
       <header className="site-header">
         <div className="hdr-side">

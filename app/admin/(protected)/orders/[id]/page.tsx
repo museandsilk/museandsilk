@@ -272,6 +272,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   <br />
                   {order.city}, {order.province}
                 </p>
+                {order.deliveryLatitude != null && order.deliveryLongitude != null && (
+                  <p>
+                    <a href={`https://www.google.com/maps?q=${order.deliveryLatitude},${order.deliveryLongitude}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline" }}>
+                      Open the customer’s pin in Google Maps ↗
+                    </a>
+                  </p>
+                )}
                 <CopyButton text={`${order.customerName}\n${order.customerPhone}\n${order.address}, ${order.city}`} label="Copy name, phone & address" />
                 {order.deliveryNotes && <p className="a-note" style={{ marginTop: 8 }}><Icon name="info" /><span>Customer note: {order.deliveryNotes}</span></p>}
               </div>

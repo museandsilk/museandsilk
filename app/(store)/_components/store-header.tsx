@@ -1,4 +1,5 @@
 import { getActiveCategories, getPublicSettings } from "@/lib/commerce";
+import { buildAnnouncements, isAnnouncementMode } from "@/lib/shop-rules";
 import { HeaderClient } from "./header-client";
 
 /** Server wrapper: feeds the (client) header the live category list and shipping threshold, so the
@@ -9,7 +10,12 @@ export async function StoreHeader() {
   return (
     <HeaderClient
       categories={categories.map((category) => ({ name: category.name, slug: category.slug }))}
-      freeDeliveryThreshold={settings.freeDeliveryThreshold || null}
+      messages={buildAnnouncements({
+        mode: isAnnouncementMode(settings.announcementMode) ? settings.announcementMode : "auto",
+        lines: settings.announcementLines,
+        freeDeliveryAbove: settings.freeDeliveryThreshold,
+        bankDepositEnabled: settings.bankDepositEnabled,
+      })}
       whatsappNumber={settings.whatsappNumber}
     />
   );

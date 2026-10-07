@@ -1,3 +1,4 @@
+import { parseLines } from "@/lib/shop-rules";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -38,6 +39,11 @@ const updateSchema = z.object({
   refundWindowDays: z.coerce.number().int().min(0).max(60).optional(),
   soldoutHideDays: z.coerce.number().int().min(0).max(3650).optional(),
   googleSiteVerification: z.string().trim().max(120).optional(),
+  announcementMode: z.enum(["auto", "custom", "off"]).optional(),
+  announcementLines: z.string().max(1200).optional(),
+  bankDepositEnabled: z.boolean().optional(),
+  deliveryMode: z.enum(["zones", "flat", "tcs"]).optional(),
+  flatDeliveryCharge: z.coerce.number().int().min(0).max(100000).optional(),
   bingSiteVerification: z.string().trim().max(120).optional(),
   bankName: z.string().optional(),
   bankAccountTitle: z.string().optional(),
@@ -89,6 +95,11 @@ export async function PATCH(request: Request) {
     ...(data.tcsShipperPhone !== undefined ? { tcsShipperPhone: cleanPhone(data.tcsShipperPhone) } : {}),
     ...(data.refundWindowDays !== undefined ? { refundWindowDays: data.refundWindowDays } : {}),
     ...(data.soldoutHideDays !== undefined ? { soldoutHideDays: data.soldoutHideDays } : {}),
+    ...(data.announcementMode !== undefined ? { announcementMode: data.announcementMode } : {}),
+    ...(data.announcementLines !== undefined ? { announcementLines: parseLines(data.announcementLines).join("\n") } : {}),
+    ...(data.bankDepositEnabled !== undefined ? { bankDepositEnabled: data.bankDepositEnabled } : {}),
+    ...(data.deliveryMode !== undefined ? { deliveryMode: data.deliveryMode } : {}),
+    ...(data.flatDeliveryCharge !== undefined ? { flatDeliveryCharge: data.flatDeliveryCharge } : {}),
     ...(data.googleSiteVerification !== undefined ? { googleSiteVerification: cleanVerification(data.googleSiteVerification) } : {}),
     ...(data.bingSiteVerification !== undefined ? { bingSiteVerification: cleanVerification(data.bingSiteVerification) } : {}),
     ...(data.bankName !== undefined ? { bankName: data.bankName } : {}),

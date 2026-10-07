@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { cleanOrders, clearPushDevices, placeOrder, setStock, sql, variantBySku, warmUp } from "../support/helpers";
+import { cleanOrders, clearPushDevices, placeOrder, setStock, sql, variantBySku, warmUp, setBankDeposit } from "../support/helpers";
 import { noHorizontalOverflow, seedCart, watchErrors } from "../support/ui";
 
 const SKU = "NA-TE-SAS-M";
@@ -9,7 +9,8 @@ async function fillCheckout(page: Page, name = "E2E Buyer") {
   await page.locator('input[name="customerPhone"]').fill("+923001234567");
   await page.locator('textarea[name="address"]').fill("House 1, Street 2, DHA");
   await page.locator('input[name="city"]').fill("Karachi");
-  await page.locator('select[name="province"]').selectOption({ label: "Sindh" });
+  await page.getByRole("combobox", { name: "Province" }).click();
+  await page.getByRole("option", { name: "Sindh" }).click();
 }
 
 async function ordersInDb(prefix = "E2E") {
@@ -17,6 +18,7 @@ async function ordersInDb(prefix = "E2E") {
 }
 
 test.beforeAll(async ({ request }) => {
+  await setBankDeposit(true);
   await warmUp(request);
 });
 test.beforeEach(async ({ page }) => {
@@ -31,6 +33,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 test.afterAll(async () => {
+  await setBankDeposit(false);
   await cleanOrders();
 });
 

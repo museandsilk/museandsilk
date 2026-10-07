@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../_ui/icons";
+import { FRAME_HEIGHT, FRAME_WIDTH } from "./mock";
+import { fill, UI, UR, type Lang } from "@/lib/training-ur";
 import { foldActions, lastTarget, type Lesson, type TourState } from "@/lib/training-engine";
 
 const SPEEDS = [1, 1.5, 2] as const;
@@ -21,7 +23,9 @@ function readDone(): string[] {
  * It is not a recording – it is drawn live with the same colours and shapes as the real admin, so it always matches, loads
  * instantly and needs no video bandwidth. Everything can be paused, stepped and replayed; with "reduce motion" it never autoplays.
  */
-export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; initialLesson?: string }) {
+export function TrainingPlayer({ lessons, initialLesson, lang }: { lessons: Lesson[]; initialLesson?: string; lang: Lang }) {
+  const L = UI[lang];
+  const words = (item: Lesson) => (lang === "ur" && UR[item.id] ? { title: UR[item.id].title, blurb: UR[item.id].blurb } : { title: item.title, blurb: item.blurb });
   const startIndex = Math.max(0, lessons.findIndex((lesson) => lesson.id === initialLesson));
   const [lessonIndex, setLessonIndex] = useState(startIndex);
   const [stepIndex, setStepIndex] = useState(0);
@@ -34,9 +38,15 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
   const [replay, setReplay] = useState(0);
   const [missing, setMissing] = useState("");
   const stage = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.7);
+  const [wide, setWide] = useState(false);
 
   const lesson = lessons[lessonIndex];
   const step = lesson.steps[stepIndex];
+  const say = lang === "ur" && UR[lesson.id]?.steps[stepIndex] ? UR[lesson.id].steps[stepIndex] : step.say;
   const base = useMemo(() => foldActions(lesson.steps.slice(0, stepIndex)), [lesson, stepIndex]);
 
   useEffect(() => {
@@ -149,6 +159,54 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
     return () => window.removeEventListener("resize", onResize);
   }, [step, place]);
 
+  useEffect(() => {
+    const onChange = () => setFull(document.fullscreenElement === root.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  // The pretend screen is re-measured after the layout changes size, so the cursor stays on its target.
+  useEffect(() => {
+    const id = window.setTimeout(() => place(lastTarget(step)), 250);
+    return () => window.clearTimeout(id);
+  }, [full, wide, step, place]);
+
+  useEffect(() => {
+    const fit = () => {
+      const width = wrap.current?.clientWidth ?? FRAME_WIDTH;
+      const room = full ? window.innerHeight - 250 : wide ? Math.max(480, window.innerHeight - 120) : Infinity;
+      setScale(Math.max(0.3, Math.min(width / FRAME_WIDTH, room / FRAME_HEIGHT, 1.6)));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    if (wrap.current) observer.observe(wrap.current);
+    window.addEventListener("resize", fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, [full, wide]);
+
+  // Wide view also folds the left menu away (and puts it back afterwards) so the lesson gets the whole width of the page.
+  useEffect(() => {
+    if (!wide) return;
+    const shell = document.querySelector<HTMLElement>(".adm-shell");
+    const before = shell?.dataset.side;
+    if (shell) shell.dataset.side = "collapsed";
+    return () => {
+      if (shell) shell.dataset.side = before ?? "open";
+    };
+  }, [wide]);
+
+  async function toggleFull() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await root.current?.requestFullscreen();
+    } catch {
+      setWide((value) => !value); // this browser refuses full screen: the wide view is the next best thing
+    }
+  }
+
   function choose(index: number) {
     setLessonIndex(index);
     setStepIndex(0);
@@ -165,22 +223,38 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
     setPlaying((value) => !value);
   }
 
+  useEffect(() => {
+    if (!full && !wide) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
+      if (event.key === " " && target?.tagName !== "BUTTON") {
+        event.preventDefault();
+        setPlaying((value) => !value);
+      } else if (event.key === "ArrowRight") goNext();
+      else if (event.key === "ArrowLeft") setStepIndex((index) => Math.max(0, index - 1));
+      else if (event.key.toLowerCase() === "f") void toggleFull();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const state: TourState = { ...base, ...live };
   const progress = ((stepIndex + (finished ? 1 : 0)) / lesson.steps.length) * 100;
   const nextLesson = lessons[lessonIndex + 1];
 
   return (
-    <div className="tour">
+    <div className={`tour${full ? " is-full" : ""}${wide ? " is-wide" : ""}`} ref={root}>
       <nav className="tour-list" aria-label="Lessons">
         <p className="a-muted" style={{ margin: "0 0 8px", fontSize: 13 }}>
-          {done.filter((id) => lessons.some((l) => l.id === id)).length} of {lessons.length} watched
+          {fill(L.watched, { a: done.filter((id) => lessons.some((l) => l.id === id)).length, b: lessons.length })}
         </p>
         {lessons.map((item, index) => (
           <button key={item.id} type="button" className="tour-item" aria-current={index === lessonIndex ? "true" : undefined} onClick={() => choose(index)}>
             <span className="tour-num" aria-hidden="true">{done.includes(item.id) ? "✓" : index + 1}</span>
             <span>
-              <strong>{item.title}</strong>
-              <small>{item.minutes} min · {item.steps.length} steps</small>
+              <strong>{words(item).title}</strong>
+              <small>{fill(L.minSteps, { m: item.minutes, n: item.steps.length })}</small>
             </span>
           </button>
         ))}
@@ -189,13 +263,22 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
       <section className="tour-main" aria-label={`Lesson: ${lesson.title}`}>
         <header className="tour-head">
           <div>
-            <h2>{lesson.title}</h2>
-            <p className="a-muted">{lesson.blurb}</p>
+            <h2>{words(lesson).title}</h2>
+            <p className="a-muted">{words(lesson).blurb}</p>
+          </div>
+          <div className="a-row" style={{ flex: "none" }}>
+            <button type="button" className="a-btn a-btn-sm" onClick={() => setWide((value) => !value)} aria-pressed={wide} title="Hide the lesson list and make the screen bigger">
+              {wide ? L.unwide : L.wide}
+            </button>
+            <button type="button" className="a-btn a-btn-sm" onClick={toggleFull} aria-pressed={full} title="Use the whole screen (press Esc to leave)">
+              <Icon name="expand" size={15} /> {full ? L.leaveFull : L.full}
+            </button>
           </div>
         </header>
 
-        <div className="tour-stage" ref={stage} aria-live="off" data-missing={missing || undefined} data-playing={playing ? "1" : "0"}>
-          <div className="tour-screen">{step.screen(state)}</div>
+        <div className="tour-wrap" ref={wrap}>
+        <div className="tour-stage" ref={stage} aria-live="off" data-missing={missing || undefined} data-playing={playing ? "1" : "0"} style={{ width: FRAME_WIDTH * scale, height: FRAME_HEIGHT * scale }}>
+          <div className="tour-frame" style={{ transform: `scale(${scale})` }}>{step.screen(state)}</div>
           <svg className="tour-cursor" style={{ left: cursor.x, top: cursor.y, opacity: cursor.visible ? 1 : 0 }} width="22" height="26" viewBox="0 0 22 26" aria-hidden="true">
             <path d="M2 1v20l5.2-4.8 3.4 7.6 3.6-1.6-3.4-7.4H18z" fill="#fff" stroke="#111" strokeWidth="1.6" strokeLinejoin="round" />
           </svg>
@@ -203,14 +286,14 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
           {finished && (
             <div className="tour-done" role="status">
               <Icon name="checkCircle" size={40} />
-              <h3>You finished “{lesson.title}”</h3>
+              <h3>{fill(L.finished, { t: words(lesson).title })}</h3>
               <div className="a-row" style={{ justifyContent: "center" }}>
                 <button type="button" className="a-btn" onClick={() => { setStepIndex(0); setFinished(false); setPlaying(true); setReplay((n) => n + 1); }}>
-                  Watch again
+                  {L.again}
                 </button>
                 {nextLesson && (
                   <button type="button" className="a-btn a-btn-primary" onClick={() => { choose(lessonIndex + 1); setPlaying(true); }}>
-                    Next: {nextLesson.title}
+                    {L.nextLesson} {words(nextLesson).title}
                   </button>
                 )}
               </div>
@@ -218,9 +301,11 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
           )}
         </div>
 
+        </div>
+
         <div className="tour-caption" role="status" aria-live="polite">
-          <span className="tour-step">Step {stepIndex + 1} of {lesson.steps.length}</span>
-          <p>{step.say}</p>
+          <span className="tour-step">{fill(L.stepOf, { a: stepIndex + 1, b: lesson.steps.length })}</span>
+          <p>{say}</p>
         </div>
 
         <div className="tour-bar">
@@ -233,17 +318,17 @@ export function TrainingPlayer({ lessons, initialLesson }: { lessons: Lesson[]; 
           <div className="a-row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
             <div className="a-row">
               <button type="button" className="a-btn" onClick={() => { setStepIndex(Math.max(0, stepIndex - 1)); setFinished(false); }} disabled={stepIndex === 0}>
-                ← Back
+                {L.back}
               </button>
               <button type="button" className="a-btn a-btn-primary" onClick={play} aria-pressed={playing}>
-                {playing ? "❚❚ Pause" : finished ? "▶ Play again" : "▶ Play"}
+                {playing ? L.pause : finished ? L.playAgain : L.play}
               </button>
               <button type="button" className="a-btn" onClick={() => (stepIndex < lesson.steps.length - 1 ? (setStepIndex(stepIndex + 1), setFinished(false)) : goNext())}>
-                Next →
+                {L.next}
               </button>
             </div>
             <div className="a-row">
-              <span className="a-muted">Speed</span>
+              <span className="a-muted">{L.speed}</span>
               <div className="a-range" role="group" aria-label="Speed">
                 {SPEEDS.map((value) => (
                   <button key={value} type="button" aria-pressed={speed === value} aria-current={speed === value ? "page" : undefined} onClick={() => setSpeed(value)}>

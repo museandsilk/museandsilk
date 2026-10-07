@@ -583,8 +583,7 @@
 .tour-num { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--sunk); font-weight: 700; font-size: 13px; }
 .tour-main { display: grid; gap: 14px; min-width: 0; }
 .tour-head h2 { font-size: 22px; }
-.tour-stage { position: relative; border: 1px solid var(--line-strong, var(--line)); border-radius: 16px; background: var(--bg); overflow: hidden; height: clamp(440px, 64vh, 600px); box-shadow: 0 10px 30px rgba(0, 0, 0, .08); }
-.tour-screen { position: absolute; inset: 0; overflow: hidden; }
+.tour-stage { position: relative; margin: 0 auto; border: 1px solid var(--line-strong, var(--line)); border-radius: 14px; background: var(--bg); overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, .08); }
 .tour-cursor { position: absolute; z-index: 5; pointer-events: none; transition: left .7s cubic-bezier(.4, 0, .2, 1), top .7s cubic-bezier(.4, 0, .2, 1), opacity .2s; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); margin: -2px 0 0 -2px; }
 .tour-ripple { position: absolute; z-index: 4; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: rgba(60, 130, 255, .45); pointer-events: none; animation: tour-ripple .55s ease-out forwards; }
 @keyframes tour-ripple { from { transform: scale(.4); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
@@ -600,37 +599,34 @@
 .tour-seek button[aria-current="step"] { background: rgba(127, 127, 127, .25); }
 @media (prefers-reduced-motion: reduce) { .tour-cursor { transition: none; } .tour-ripple { animation: none; opacity: 0; } }
 
-.m-shell { display: grid; grid-template-columns: 150px 1fr; height: 100%; font-size: 12.5px; color: var(--text); }
-.m-side { padding: 10px 8px; background: var(--surface); border-right: 1px solid var(--line); display: grid; align-content: start; gap: 2px; overflow: hidden; }
-.m-brand { font-weight: 800; padding: 4px 8px 10px; font-size: 13px; }
-.m-nav { padding: 5px 8px; border-radius: 7px; color: var(--muted); white-space: nowrap; }
-.m-nav.on { background: var(--text); color: var(--bg); font-weight: 700; }
-.m-page { padding: 14px 18px; overflow: hidden; display: grid; align-content: start; gap: 10px; }
-.m-title { font-size: 19px; font-weight: 800; }
-.m-intro { color: var(--muted); margin-top: -6px; }
-.m-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.m-card-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-.m-card-body { padding: 10px 12px; display: grid; gap: 8px; }
-.m-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line-strong, var(--line)); border-radius: 8px; background: var(--surface); font-weight: 700; white-space: nowrap; }
-.m-btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-.m-btn.quiet { border-color: transparent; background: transparent; color: var(--muted); }
-.m-field { display: grid; gap: 3px; }
-.m-label { font-weight: 700; font-size: 12px; }
-.m-input { min-height: 28px; padding: 5px 9px; border: 1px solid var(--line-strong, var(--line)); border-radius: 7px; background: var(--bg); display: flex; align-items: center; }
-.m-input .ph { color: var(--faint, var(--muted)); opacity: .75; }
-.m-input.focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .2); }
-.m-input .caret { display: inline-block; width: 1px; height: 14px; margin-left: 1px; background: var(--text); animation: m-blink 1s steps(1) infinite; }
-@keyframes m-blink { 50% { opacity: 0; } }
-.m-grid { display: grid; gap: 8px; }
-.m-chip { display: inline-flex; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-weight: 600; }
-.m-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
-.m-badge { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 11.5px; background: var(--sunk); }
-.m-badge.new { background: #fff1c2; color: #7a5a00; } .m-badge.work { background: #dbeafe; color: #1e4fa3; } .m-badge.ship { background: #e9defc; color: #5b34a8; } .m-badge.done { background: #d6f5df; color: #1c6b3a; } .m-badge.bad { background: #fde0e0; color: #a12626; }
-.m-table { width: 100%; border-collapse: collapse; }
-.m-table th { text-align: left; color: var(--muted); font-weight: 700; padding: 5px 8px; border-bottom: 1px solid var(--line); }
-.m-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
-.m-tip { padding: 8px 12px; border-radius: 9px; background: color-mix(in srgb, #3b82f6 12%, var(--surface)); border: 1px solid color-mix(in srgb, #3b82f6 35%, var(--line)); }
 .m-hl { outline: 2px solid #3b82f6; outline-offset: 2px; border-radius: 8px; }
 .m-photo { width: 52px; height: 66px; border-radius: 7px; background: linear-gradient(160deg, #cdbfa8, #6b5b4a); border: 1px solid var(--line); }
 .m-photo.navy { background: linear-gradient(160deg, #6b86b8, #1d2c52); }
 @media (max-width: 1280px) { .tour { grid-template-columns: 1fr; } .tour-list { position: static; max-height: none; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); } }
+
+/* Folded menu + the bigger lesson views */
+.adm-shell[data-side="collapsed"] { grid-template-columns: minmax(0, 1fr); }
+.adm-shell[data-side="collapsed"] > .adm-side { display: none; }
+.adm-shell[data-side="collapsed"] > .adm-main > .adm-page { max-width: none; }
+.tour-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.tour.is-wide { grid-template-columns: minmax(0, 1fr); }
+.tour.is-wide .tour-list { display: none; }
+.tour.is-wide .tour-caption p { font-size: 19px; }
+.tour.is-full { grid-template-columns: minmax(0, 1fr); background: var(--bg); padding: 22px clamp(20px, 4vw, 60px); overflow: auto; align-content: start; }
+.tour.is-full .tour-list { display: none; }
+.tour.is-full .tour-caption p { font-size: 22px; }
+.tour.is-full .tour-caption { min-height: 84px; }
+.tour:fullscreen { color: var(--text); }
+
+/* The lesson screens are the real admin at real size (1280 x 760), shrunk to fit the window */
+.tour-wrap { width: 100%; min-width: 0; }
+.tour-frame { position: absolute; left: 0; top: 0; width: 1280px; height: 760px; transform-origin: 0 0; overflow: hidden; }
+.tf-shell { display: grid; grid-template-columns: 252px minmax(0, 1fr); width: 1280px; height: 760px; background: var(--bg); color: var(--text); overflow: hidden; }
+.tf-side { position: static; height: 760px; }
+.tf-main { min-width: 0; height: 760px; overflow: hidden; }
+.tf-page { padding-top: 22px; }
+.tf-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-weight: 600; font-size: 14px; }
+.tf-chip.on { border-color: var(--text); color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.tf-input { display: inline-flex; align-items: center; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 15px; }
+.tf-focus input { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent); }
+.tour.is-wide { grid-template-columns: minmax(0, 1fr); }

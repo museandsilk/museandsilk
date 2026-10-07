@@ -170,3 +170,8 @@ export async function orderIdOf(orderNumber: string): Promise<string> {
   const [row] = (await sql`select id from orders where order_number = ${orderNumber}`) as Array<{ id: string }>;
   return row.id;
 }
+
+/** Bank transfer is OFF by default (cash on delivery only). The few tests about bank transfer switch it on for their own run. */
+export async function setBankDeposit(on: boolean): Promise<void> {
+  await sql`update site_settings set bank_deposit_enabled = ${on} where id = 'store'`;
+}

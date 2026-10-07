@@ -1,9 +1,16 @@
 import type { ReactNode } from "react";
+import { Icon } from "../../_ui/icons";
+import { NAV } from "../../_ui/nav";
+import { Badge as RealBadge, PageHeader } from "../../_ui/ui";
 import type { TourState } from "@/lib/training-engine";
 
-/** Small building blocks that look like the real admin (same colours, same shapes), used to draw the pretend screens in each lesson. */
+/**
+ * The pretend screens are drawn with the REAL admin styles and components (same sidebar, header, cards, buttons, inputs, tables)
+ * at the real laptop size, then shrunk to fit the lesson window. So what the owner learns on is exactly what they will see.
+ */
 
-const NAV = ["Home", "Orders", "Refunds", "Products", "Stock", "Categories", "Flash sales", "Discount codes", "Website pictures", "Shop locations", "Delivery charges", "Settings", "Training"];
+export const FRAME_WIDTH = 1280;
+export const FRAME_HEIGHT = 760;
 
 type S = { s: TourState };
 
@@ -16,21 +23,48 @@ export function T({ id, s, children, className = "", as: Tag = "span", style }: 
   );
 }
 
-export function Shell({ nav, title, intro, children }: { nav: string; title: string; intro?: string; children: ReactNode }) {
+/** The real admin frame: sidebar with the real menu, the top bar with the search box, then the page. */
+export function Shell({ nav, title, intro, actions, children }: { nav: string; title: string; intro?: string; actions?: ReactNode; children: ReactNode }) {
   return (
-    <div className="m-shell">
-      <div className="m-side" aria-hidden="true">
-        <div className="m-brand">Nure Asmir</div>
-        {NAV.map((item) => (
-          <div key={item} className={`m-nav${item === nav ? " on" : ""}`}>
-            {item}
+    <div className="tf-shell">
+      <aside className="adm-side tf-side" aria-hidden="true">
+        <div className="adm-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" width={38} height={38} />
+          <div>
+            <strong>Nure Asmir</strong>
+            <span>Shop manager</span>
           </div>
-        ))}
-      </div>
-      <div className="m-page">
-        <div className="m-title">{title}</div>
-        {intro && <div className="m-intro">{intro}</div>}
-        {children}
+        </div>
+        <nav className="adm-nav">
+          {NAV.map((group, index) => (
+            <div key={group.label ?? index} style={{ display: "grid", gap: 2 }}>
+              {group.label && <p className="adm-nav-label">{group.label}</p>}
+              {group.items.map((item) => (
+                <a key={item.href} aria-current={item.label === nav ? "page" : undefined}>
+                  <Icon name={item.icon} />
+                  {item.label}
+                </a>
+              ))}
+            </div>
+          ))}
+        </nav>
+      </aside>
+      <div className="adm-main tf-main">
+        <div className="adm-top" style={{ position: "static" }} aria-hidden="true">
+          <span className="adm-search-btn">
+            <Icon name="search" size={18} />
+            Search orders, customers, products…
+            <kbd>Ctrl K</kbd>
+          </span>
+          <div className="adm-top-right">
+            <span className="a-btn a-btn-sm">View shop</span>
+          </div>
+        </div>
+        <main className="adm-page tf-page">
+          <PageHeader title={title} intro={intro} actions={actions} />
+          <div className="a-stack">{children}</div>
+        </main>
       </div>
     </div>
   );
@@ -38,21 +72,19 @@ export function Shell({ nav, title, intro, children }: { nav: string; title: str
 
 export function Btn({ id, s, children, primary, quiet }: S & { id: string; children: ReactNode; primary?: boolean; quiet?: boolean }) {
   return (
-    <T id={id} s={s} className={`m-btn${primary ? " primary" : ""}${quiet ? " quiet" : ""}`}>
+    <T id={id} s={s} className={`a-btn${primary ? " a-btn-primary" : ""}${quiet ? " a-btn-quiet" : ""}`}>
       {children}
     </T>
   );
 }
 
-/** A text box that shows what has been typed so far (state key `k`) or its placeholder. */
+/** A real text box that shows what has been typed so far (state key `k`) or its placeholder. */
 export function Field({ id, s, k, label, placeholder, wide, w }: S & { id: string; k: string; label?: string; placeholder?: string; wide?: boolean; w?: number }) {
-  const value = s[k];
   return (
-    <div className="m-field" style={{ gridColumn: wide ? "1 / -1" : undefined, width: w }}>
-      {label && <div className="m-label">{label}</div>}
-      <T id={id} s={s} as="div" className={`m-input${value ? " filled" : ""}${s.hl === id && !value ? " focus" : ""}`}>
-        {value || <span className="ph">{placeholder}</span>}
-        {s.hl === id && value !== undefined && <i className="caret" />}
+    <div className="a-field" style={{ gridColumn: wide ? "1 / -1" : undefined, width: w }}>
+      {label && <label>{label}</label>}
+      <T id={id} s={s} as="div" className={s.hl === id ? "tf-focus" : ""}>
+        <input readOnly tabIndex={-1} value={s[k] ?? ""} placeholder={placeholder} style={{ width: "100%" }} />
       </T>
     </div>
   );
@@ -60,59 +92,68 @@ export function Field({ id, s, k, label, placeholder, wide, w }: S & { id: strin
 
 export function Card({ title, children, right }: { title?: string; children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="m-card">
+    <section className="a-card">
       {title && (
-        <div className="m-card-head">
-          <strong>{title}</strong>
+        <header className="a-card-head">
+          <h2>{title}</h2>
           {right}
-        </div>
+        </header>
       )}
-      <div className="m-card-body">{children}</div>
-    </div>
+      <div className="a-card-pad a-stack" style={{ gap: 12 }}>
+        {children}
+      </div>
+    </section>
   );
 }
 
 export function Chip({ children, on, id, s }: { children: ReactNode; on?: boolean; id?: string; s?: TourState }) {
   return id && s ? (
-    <T id={id} s={s} className={`m-chip${on ? " on" : ""}`}>
+    <T id={id} s={s} className={`tf-chip${on ? " on" : ""}`}>
       {children}
     </T>
   ) : (
-    <span className={`m-chip${on ? " on" : ""}`}>{children}</span>
+    <span className={`tf-chip${on ? " on" : ""}`}>{children}</span>
   );
 }
 
 export function Badge({ tone, children }: { tone: "new" | "work" | "ship" | "done" | "bad" | "muted"; children: ReactNode }) {
-  return <span className={`m-badge ${tone}`}>{children}</span>;
+  return <RealBadge tone={tone}>{children}</RealBadge>;
 }
 
 export function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   return (
-    <table className="m-table">
-      <thead>
-        <tr>
-          {head.map((h) => (
-            <th key={h}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, i) => (
-          <tr key={i}>
-            {row.map((cell, j) => (
-              <td key={j}>{cell}</td>
+    <div className="a-table-wrap">
+      <table className="a-table">
+        <thead>
+          <tr>
+            {head.map((h) => (
+              <th key={h}>{h}</th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => (
+                <td key={j}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 export function Tip({ children }: { children: ReactNode }) {
-  return <div className="m-tip">{children}</div>;
+  return (
+    <div className="a-note">
+      <Icon name="info" />
+      <div>{children}</div>
+    </div>
+  );
 }
 
 export function Grid({ cols = 2, children }: { cols?: number; children: ReactNode }) {
-  return <div className="m-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>{children}</div>;
+  return <div className="a-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>{children}</div>;
 }

@@ -1,3 +1,4 @@
+import { computeDeliveryCharge, isDeliveryMode, type DeliveryMode } from "@/lib/shop-rules";
 // Admin-side order placement ("place an order on behalf of a customer"), single or bulk.
 //
 // Mirrors the rules of public checkout (app/api/orders/route.ts) — published product, active
@@ -99,6 +100,8 @@ type ZoneRow = { id: string; name: string; deliveryCharge: number; estimatedDays
 export type Catalog = {
   zones: ZoneRow[];
   freeDeliveryThreshold: number;
+  deliveryMode: DeliveryMode;
+  flatDeliveryCharge: number;
   variantsBySku: Map<string, VariantRow>; // keyed by lower-cased sku
   variantsById: Map<string, VariantRow>;
 };
@@ -177,7 +180,7 @@ export async function loadCatalog(inputs: unknown[]): Promise<Catalog> {
       .select({ id: deliveryZones.id, name: deliveryZones.name, deliveryCharge: deliveryZones.deliveryCharge, estimatedDaysMax: deliveryZones.estimatedDaysMax })
       .from(deliveryZones)
       .where(eq(deliveryZones.active, true)),
-    db.select({ freeDeliveryThreshold: siteSettings.freeDeliveryThreshold }).from(siteSettings).where(eq(siteSettings.id, "store")).limit(1),
+    db.select({ freeDeliveryThreshold: siteSettings.freeDeliveryThreshold, deliveryMode: siteSettings.deliveryMode, flatDeliveryCharge: siteSettings.flatDeliveryCharge }).from(siteSettings).where(eq(siteSettings.id, "store")).limit(1),
     conditions.length
       ? db
           .select(select)
@@ -189,7 +192,9 @@ export async function loadCatalog(inputs: unknown[]): Promise<Catalog> {
 
   return {
     zones,
-    freeDeliveryThreshold: settingsRows[0]?.freeDeliveryThreshold ?? 4000,
+    freeDeliveryThreshold: settingsRows[0]?.freeDeliveryThreshold ?? 10000,
+    deliveryMode: isDeliveryMode(settingsRows[0]?.deliveryMode) ? settingsRows[0].deliveryMode : "zones",
+    flatDeliveryCharge: settingsRows[0]?.flatDeliveryCharge ?? 250,
     variantsBySku: new Map(variantRows.map((row) => [lower(row.sku), row])),
     variantsById: new Map(variantRows.map((row) => [row.variantId, row])),
   };
@@ -264,7 +269,7 @@ export function resolveOrder(raw: unknown, catalog: Catalog, consumed?: Map<stri
   if (errors.length || !zone) return { ok: false, errors };
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
-  const deliveryCharge = input.deliveryCharge ?? (subtotal >= catalog.freeDeliveryThreshold ? 0 : zone.deliveryCharge);
+  const deliveryCharge = input.deliveryCharge ?? computeDeliveryCharge({ mode: catalog.deliveryMode, subtotal, freeAbove: catalog.freeDeliveryThreshold, zoneCharge: zone.deliveryCharge, flatCharge: catalog.flatDeliveryCharge });
   const discount = input.discount ?? 0;
   if (discount > subtotal + deliveryCharge) return { ok: false, errors: [`discount: PKR ${discount} is more than the order's value (PKR ${subtotal + deliveryCharge})`] };
 

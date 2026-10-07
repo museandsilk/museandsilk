@@ -30,7 +30,14 @@ function Bar({ used, limit, warn = 0.8 }: { used: number; limit: number | null; 
   );
 }
 
-const present = (name: string) => Boolean(process.env[name]);
+// Public values (NEXT_PUBLIC_…) are put into the build at build time, and only where the code names them literally – looking one up by a
+// variable name finds nothing at run time. So these are written out one by one; everything else is a private setting read when the page opens.
+const PUBLIC_VALUES: Record<string, string | undefined> = {
+  NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+  NEXT_PUBLIC_ALGOLIA_SEARCH_KEY: process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY,
+};
+const present = (name: string) => Boolean(name in PUBLIC_VALUES ? PUBLIC_VALUES[name] : process.env[name]);
 
 export default async function DeveloperPage() {
   const user = await requireAdminUser("/admin/developer");

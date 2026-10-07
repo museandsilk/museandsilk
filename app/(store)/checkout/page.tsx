@@ -1,5 +1,5 @@
 "use client";
-import { AddressSearch } from "@/components/address-search";
+import { LocationPicker, type PickedPlace } from "@/components/location-picker";
 
 import Link from "next/link";
 import Script from "next/script";
@@ -7,14 +7,20 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { clearCart, readCart, type CartItem } from "@/lib/cart";
 import { checkoutAttemptKey, clearCheckoutAttempt, syncCartWithServer } from "@/lib/cart-sync";
 import { hasCustomerPushToken, pushSupport, registerCustomerPush } from "@/lib/customer-push";
+import { matchZone } from "@/lib/geo";
+import { computeDeliveryCharge, freeDeliveryHint, isDeliveryMode } from "@/lib/shop-rules";
 import { useLockedAction } from "@/lib/use-locked-action";
+import { ThemedSelect } from "../_components/themed-select";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 const GOOGLE_MERCHANT_ID = process.env.NEXT_PUBLIC_GOOGLE_MERCHANT_ID;
 
-type Zone = { id: string; name: string; deliveryCharge: number; estimatedDaysMin: number; estimatedDaysMax: number };
+type Zone = { id: string; name: string; deliveryCharge: number; estimatedDaysMin: number; estimatedDaysMax: number; cities?: string[]; provinces?: string[] };
 type Settings = {
   freeDeliveryThreshold: number;
+  bankDepositEnabled?: boolean;
+  deliveryMode?: string;
+  flatDeliveryCharge?: number;
   whatsappNumber: string;
   bankName: string;
   bankAccountTitle: string;
@@ -55,7 +61,12 @@ export default function CheckoutPage() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [zoneId, setZoneId] = useState("");
+  // The delivery area is DERIVED, not stored in several places: a place the shopper picked (GPS, search, map) chooses its area, an area they
+  // choose by hand always wins, and otherwise the first area is used. Whatever order things load in, the answer is the same.
+  const [manualZone, setManualZone] = useState("");
+  const [picked, setPicked] = useState<PickedPlace | null>(null);
+  const [province, setProvince] = useState("");
+  const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null);
   const [payment, setPayment] = useState<"cod" | "bank_deposit">("cod");
   const [busy, setBusy] = useState(false);
   const submitLock = useRef(false);
@@ -221,7 +232,6 @@ export default function CheckoutPage() {
       .then((data: { zones?: Zone[]; settings?: Settings | null }) => {
         setZones(data.zones ?? []);
         setSettings(data.settings ?? null);
-        if (data.zones?.[0]) setZoneId(data.zones[0].id);
       })
       .catch(() => {
         setError("Delivery options could not be loaded. Please refresh and try again.");
@@ -230,17 +240,39 @@ export default function CheckoutPage() {
   }, []);
 
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
+  const placeZone = useMemo(() => (picked ? matchZone(zones, picked.city, picked.province) : null), [zones, picked]);
+  const zoneId = manualZone || placeZone?.id || zones[0]?.id || "";
+  const locationNote = !manualZone && placeZone ? `Delivery area set to ${placeZone.name}.` : "";
   const zone = zones.find((item) => item.id === zoneId);
-  const delivery = subtotal >= Number(settings?.freeDeliveryThreshold ?? 4000) ? 0 : Number(zone?.deliveryCharge ?? 0);
-  const total = Math.max(0, subtotal + delivery - (coupon?.discount ?? 0));
+  const chargeFor = (candidate: Zone | undefined) =>
+    computeDeliveryCharge({
+      mode: isDeliveryMode(settings?.deliveryMode) ? settings.deliveryMode : "zones",
+      subtotal,
+      freeAbove: Number(settings?.freeDeliveryThreshold ?? 10000),
+      zoneCharge: Number(candidate?.deliveryCharge ?? 0),
+      flatCharge: Number(settings?.flatDeliveryCharge ?? 250),
+    });
+  const delivery = chargeFor(zone);
+  const bankOn = Boolean(settings?.bankDepositEnabled);
+  const hint = freeDeliveryHint(subtotal, Number(settings?.freeDeliveryThreshold ?? 0));
 
-  // Re-check the applied coupon whenever the cart total changes (e.g. a min-order-amount coupon
-  // that was valid before a quantity change might no longer qualify).
-  useEffect(() => {
-    if (!coupon) return;
-    void applyCoupon(coupon.code, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subtotal, delivery]);
+  // Picking a place (GPS, search or the map) fills in the address, city and province and chooses the matching delivery area.
+  function placePicked(place: PickedPlace) {
+    const fill = (selector: string, text: string) => {
+      const field = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector);
+      if (field && text) {
+        field.value = text;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    };
+    fill('textarea[name="address"]', place.address);
+    fill('input[name="city"]', place.city);
+    if (place.province) setProvince(place.province);
+    setPin({ lat: place.lat, lon: place.lon });
+    setPicked(place);
+    setManualZone(""); // a new place chooses its own area again
+  }
+  const total = Math.max(0, subtotal + delivery - (coupon?.discount ?? 0));
 
   async function applyCoupon(code: string, silent = false) {
     if (!code.trim() || (couponLock.current && !silent)) return;
@@ -268,6 +300,16 @@ export default function CheckoutPage() {
       setCouponBusy(false);
     }
   }
+
+  // Re-check the applied coupon whenever the cart total changes (e.g. a min-order-amount coupon
+  // that was valid before a quantity change might no longer qualify).
+  useEffect(() => {
+    if (!coupon) return;
+    // The cart total changed, so the coupon is checked again with the server (this is the point of the effect).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void applyCoupon(coupon.code, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal, delivery]);
 
   function removeCoupon() {
     setCoupon(null);
@@ -303,7 +345,9 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           ...values,
           zoneId,
-          paymentMethod: payment,
+          paymentMethod: bankOn ? payment : "cod",
+          latitude: pin?.lat,
+          longitude: pin?.lon,
           couponCode: coupon?.code,
           otpToken,
           items: items.map(({ variantId, quantity }) => ({ variantId, quantity })),
@@ -574,21 +618,7 @@ export default function CheckoutPage() {
               <fieldset>
                 <legend>02 · Delivery address</legend>
                 <div className="checkout-grid">
-                  <AddressSearch
-                    className="field-wide"
-                    label="Find your address (optional – or type it below)"
-                    onPick={(found) => {
-                      const fill = (selector: string, text: string) => {
-                        const field = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector);
-                        if (field && text) {
-                          field.value = text;
-                          field.dispatchEvent(new Event("input", { bubbles: true }));
-                        }
-                      };
-                      fill('textarea[name="address"]', found.address);
-                      fill('input[name="city"]', found.city);
-                    }}
-                  />
+                  <LocationPicker onPick={placePicked} />
                   <label className="field-wide">
                     <span>Complete address *</span>
                     <textarea required name="address" rows={3} autoComplete="street-address" />
@@ -599,25 +629,22 @@ export default function CheckoutPage() {
                   </label>
                   <label>
                     <span>Province *</span>
-                    <select required name="province" defaultValue="">
-                      <option value="" disabled>
-                        Choose province
-                      </option>
-                      {PROVINCES.map((item) => (
-                        <option key={item}>{item}</option>
-                      ))}
-                    </select>
+                    <ThemedSelect name="province" required label="Province" value={province} onChange={setProvince} placeholder="Choose province" options={PROVINCES.map((item) => ({ value: item, label: item }))} />
                   </label>
                   <label className="field-wide">
                     <span>Delivery zone *</span>
-                    <select required value={zoneId} onChange={(event) => setZoneId(event.target.value)}>
-                      {zones.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} · {money.format(item.deliveryCharge)} · {item.estimatedDaysMin}–
-                          {item.estimatedDaysMax} days
-                        </option>
-                      ))}
-                    </select>
+                    <ThemedSelect
+                      name="zone"
+                      required
+                      label="Delivery zone"
+                      value={zoneId}
+                      onChange={setManualZone}
+                      options={zones.map((item) => {
+                        const charge = chargeFor(item);
+                        return { value: item.id, label: item.name, hint: `${charge ? money.format(charge) : "Free delivery"} · ${item.estimatedDaysMin}–${item.estimatedDaysMax} days` };
+                      })}
+                    />
+                    {locationNote && <small className="lp-note">{locationNote}</small>}
                   </label>
                 </div>
               </fieldset>
@@ -631,20 +658,17 @@ export default function CheckoutPage() {
                       <small>Reserved for {settings?.codReservationHours ?? 6} hours while we confirm your order.</small>
                     </span>
                   </label>
-                  <label className={payment === "bank_deposit" ? "active" : ""}>
-                    <input
-                      type="radio"
-                      name="payment"
-                      checked={payment === "bank_deposit"}
-                      onChange={() => setPayment("bank_deposit")}
-                    />
-                    <span>
-                      <strong>Bank deposit</strong>
-                      <small>Reserved for {settings?.bankReservationHours ?? 6} hours while payment is verified.</small>
-                    </span>
-                  </label>
+                  {bankOn && (
+                    <label className={payment === "bank_deposit" ? "active" : ""}>
+                      <input type="radio" name="payment" checked={payment === "bank_deposit"} onChange={() => setPayment("bank_deposit")} />
+                      <span>
+                        <strong>Bank deposit</strong>
+                        <small>Reserved for {settings?.bankReservationHours ?? 6} hours while payment is verified.</small>
+                      </span>
+                    </label>
+                  )}
                 </div>
-                {payment === "bank_deposit" && settings?.bankAccountNumber && (
+                {bankOn && payment === "bank_deposit" && settings?.bankAccountNumber && (
                   <aside className="bank-deposit-preview">
                     <p>Send payment to:</p>
                     <p>{settings.bankName}</p>
@@ -725,6 +749,7 @@ export default function CheckoutPage() {
                   <span>Delivery</span>
                   <strong>{delivery ? money.format(delivery) : "Complimentary"}</strong>
                 </p>
+                {hint && <p className="free-hint"><span>{hint}</span></p>}
                 {coupon && coupon.discount > 0 && (
                   <p>
                     <span>Coupon ({coupon.code})</span>

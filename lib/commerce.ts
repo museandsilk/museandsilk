@@ -1,3 +1,4 @@
+import { hasFilters, type CatalogFilters } from "@/lib/catalog-filters";
 import { cache } from "react";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -157,14 +158,30 @@ export type CatalogQuery = {
   ids?: string[];
   /** Only products the owner ticked "Show on the home page". */
   featuredOnly?: boolean;
+  /** Price range / sizes / colours / in-stock-only: a product matches when ONE of its sizes-and-colours satisfies all of them together. */
+  filters?: CatalogFilters;
   sort?: "newest" | "low" | "high";
   /** Pagination: without a limit the whole live catalogue is returned (sitemap, search fallback). */
   limit?: number;
   offset?: number;
 };
 
+/** A product passes the shop filters when one of its (active) variants fits every chosen price, size, colour and stock condition. */
+function variantFilter(filters: CatalogFilters | undefined) {
+  if (!filters || !hasFilters(filters)) return undefined;
+  const list = (values: string[]) => sql.join(values.map((value) => sql`${value.toLowerCase()}`), sql`, `);
+  const parts = [sql`v.product_id = ${products.id}`, sql`v.status = 'active'`];
+  if (filters.min != null) parts.push(sql`v.price >= ${filters.min}`);
+  if (filters.max != null) parts.push(sql`v.price <= ${filters.max}`);
+  if (filters.sizes.length) parts.push(sql`lower(v.size) in (${list(filters.sizes)})`);
+  if (filters.colors.length) parts.push(sql`lower(v.color) in (${list(filters.colors)})`);
+  if (filters.inStock) parts.push(sql`v.stock_quantity - v.reserved_quantity > 0`);
+  return sql`exists (select 1 from product_variants v where ${sql.join(parts, sql` and `)})`;
+}
+
 function catalogWhere(query: CatalogQuery) {
   return and(
+    variantFilter(query.filters),
     eq(products.status, "published"),
     query.categorySlug ? eq(categories.slug, query.categorySlug) : undefined,
     query.ids ? (query.ids.length ? inArray(products.id, query.ids) : sql`false`) : undefined,
@@ -635,6 +652,11 @@ export async function getFeedProducts(): Promise<FeedProduct[]> {
 export type PublicSettings = {
   googleSiteVerification: string;
   bingSiteVerification: string;
+  announcementMode: string;
+  announcementLines: string;
+  bankDepositEnabled: boolean;
+  deliveryMode: string;
+  flatDeliveryCharge: number;
   whatsappNumber: string;
   supportPhone: string;
   supportEmail: string;
@@ -669,5 +691,10 @@ export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
     bankReservationHours: row?.bankReservationHours ?? 6,
     googleSiteVerification: row?.googleSiteVerification ?? "",
     bingSiteVerification: row?.bingSiteVerification ?? "",
+    announcementMode: row?.announcementMode ?? "auto",
+    announcementLines: row?.announcementLines ?? "",
+    bankDepositEnabled: row?.bankDepositEnabled ?? false,
+    deliveryMode: row?.deliveryMode ?? "zones",
+    flatDeliveryCharge: row?.flatDeliveryCharge ?? 250,
   };
 });

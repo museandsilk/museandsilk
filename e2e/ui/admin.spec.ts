@@ -529,6 +529,7 @@ test.describe("admin (desktop Chromium)", () => {
     test("training: every lesson steps through with the cursor always finding its target, and Play really types and clicks", async ({ page }) => {
       test.setTimeout(300_000); // two lessons are played in real time
       await login(page);
+      await page.context().addCookies([{ name: "adm-lang", value: "en", url: BASE }]);
       await page.goto("/admin/training");
       await page.waitForLoadState("networkidle");
       const lessons = page.locator("nav[aria-label='Lessons'] button");
@@ -561,6 +562,92 @@ test.describe("admin (desktop Chromium)", () => {
       await page.getByRole("button", { name: "▶ Play" }).click();
       await expect(page.getByText(/You finished/)).toBeVisible({ timeout: 120_000 });
       await expect(lessons.nth(0)).toContainText("✓");
+    });
+
+    test("the menu can be folded away to use the whole width, it is remembered, and the lessons have a wide and a full-screen view", async ({ page }) => {
+      await login(page);
+      await page.context().addCookies([{ name: "adm-lang", value: "en", url: BASE }]);
+      await page.goto("/admin/training");
+      await page.waitForLoadState("networkidle");
+      const side = page.locator(".adm-shell > .adm-side");
+      await expect(side).toBeVisible();
+      await page.getByRole("button", { name: "Hide the menu" }).click();
+      await expect(side).toBeHidden();
+      await page.reload();
+      await expect(page.locator(".adm-shell")).toHaveAttribute("data-side", "collapsed");
+      await expect(side).toBeHidden();
+
+      // wide view: the lesson list steps aside and the pretend screen gets bigger
+      const stage = page.locator(".tour-stage");
+      const small = (await stage.boundingBox())!.height; // (only used to prove the window never grows past its real size of 760 px)
+      expect(small).toBeGreaterThan(300);
+      await page.getByRole("button", { name: "Wide view" }).click();
+      await expect(page.locator("nav[aria-label='Lessons']")).toBeHidden();
+      await expect(page.locator(".adm-shell")).toHaveAttribute("data-side", "collapsed");
+      await expect.poll(async () => (await stage.boundingBox())!.height, "wide view stays large and fits the screen").toBeGreaterThan(480);
+      expect((await stage.boundingBox())!.height).toBeLessThanOrEqual(small + 1 > 0 ? 760 : 760);
+      await page.getByRole("button", { name: "▶ Play" }).click();
+      await expect(page.locator(".tour-step")).toHaveText(/Step [2-9] of/, { timeout: 40_000 });
+      await page.getByRole("button", { name: "❚❚ Pause" }).click();
+
+      // full screen (falls back to the wide view where a browser refuses)
+      await page.getByRole("button", { name: "Full screen" }).click();
+      await expect.poll(async () => page.evaluate(() => Boolean(document.fullscreenElement) || document.querySelector(".tour")?.classList.contains("is-wide") === true)).toBe(true);
+      await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
+
+      await page.getByRole("button", { name: "Show the menu" }).click();
+      await expect(side).toBeVisible();
+      await page.evaluate(() => (document.cookie = "adm-side=open; Path=/"));
+    });
+
+    test("training: Roman Urdu by default with English one click away, a written guide, and the screens are the real admin", async ({ page }) => {
+      await login(page);
+      await page.goto("/admin/training");
+      await page.waitForLoadState("networkidle");
+
+      // Roman Urdu is what the owner sees first
+      await expect(page.getByRole("button", { name: "Roman Urdu" })).toHaveAttribute("aria-pressed", "true");
+      await expect(page.locator(".tour-step")).toHaveText(/Qadam 1 \/ 6/);
+      await expect(page.locator(".tour-caption p")).toContainText("Ye Home hai");
+      await expect(page.getByRole("button", { name: "▶ Chalayein" })).toBeVisible();
+
+      // the pretend screen is built from the real admin: the real menu, the real search box, real cards and buttons
+      const frame = page.locator(".tour-frame");
+      await expect(frame.locator("aside.adm-side")).toContainText("Website pictures");
+      await expect(frame.locator(".adm-search-btn")).toBeVisible();
+      await expect(frame.locator(".a-card").first()).toBeVisible();
+      const box = (await frame.boundingBox())!;
+      const real = await page.locator(".adm-side").first().boundingBox(); // the page's own menu
+      expect(box.width, "shrunk to fit, never stretched").toBeLessThanOrEqual(1280);
+      expect(real?.width).toBeGreaterThan(200);
+
+      // the written guide, same lessons, same number of steps
+      await page.getByRole("button", { name: "Parhein (text guide)" }).click();
+      const guides = page.locator("section[id^='guide-']");
+      expect(await guides.count()).toBeGreaterThanOrEqual(10);
+      await expect(guides.first()).toContainText("Apna raasta jaanein");
+      const urSteps = await guides.first().locator("ol li").count();
+
+      // English is one click away, remembered, and has the same steps
+      await page.getByRole("button", { name: "English", exact: true }).click();
+      await expect(guides.first()).toContainText("Find your way around");
+      expect(await guides.first().locator("ol li").count()).toBe(urSteps);
+      const cookies = await page.context().cookies();
+      expect(cookies.find((c) => c.name === "adm-lang")?.value).toBe("en");
+      await page.reload();
+      await expect(page.getByRole("button", { name: "English", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+      // every lesson has exactly as many Roman Urdu lines as it has steps
+      await page.getByRole("button", { name: "Roman Urdu" }).click();
+      await page.getByRole("button", { name: "Parhein (text guide)" }).click();
+      const lessons = (await guides.count());
+      for (let i = 0; i < lessons; i++) {
+        const lines = await guides.nth(i).locator("ol li").count();
+        await page.getByRole("button", { name: "Dekhein (video jaisa)" }).click();
+        await page.locator("nav[aria-label='Lessons'] button").nth(i).click();
+        await expect(page.locator(".tour-step")).toHaveText(new RegExp(`Qadam 1 / ${lines}$`));
+        await page.getByRole("button", { name: "Parhein (text guide)" }).click();
+      }
     });
 
     test("advanced settings: tucked away, and the sold-out time can be changed and set to 'forever'", async ({ page }) => {
