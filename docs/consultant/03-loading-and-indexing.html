@@ -7,11 +7,12 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="top"><div class="in"><h1>Loading issues, likely fixes and Google readiness</h1><p>What customers can run into, what we measured, what we think causes it, and what to decide. Prepared 7 October 2026.</p></div></header>
-<nav class="docs"><div class="in"><a href="01-architecture.html">1. Architecture, APIs, limits</a><a href="02-seo-geo.html">2. SEO and GEO</a><a href="03-loading-and-indexing.html" aria-current="page">3. Loading issues and Google readiness</a></div></nav>
+<header class="top"><div class="in"><p class="eyebrow">Nure Asmir · Documentation</p><h1>Loading issues, likely fixes and Google readiness</h1><p>What customers can run into, what we measured, what we think causes it, and what to decide. Prepared 7 October 2026.</p></div></header>
+<nav class="docs" aria-label="Documentation"><div class="in"><a href="index.html">Overview and diagram</a><a href="01-architecture.html">Architecture, APIs, limits</a><a href="02-seo-geo.html">SEO and GEO</a><a href="03-loading-and-indexing.html" aria-current="page">Issues, speed and readiness</a></div></nav>
 <main>
+<ul class="toc" aria-label="On this page"><li><a href="#dns">DNS problem</a></li><li><a href="#speed">Speed</a></li><li><a href="#ready">Google readiness</a></li><li><a href="#sandbox">Sandbox</a></li><li><a href="#decisions">Decisions</a></li></ul>
 
-<h2>A. Problem 1: &ldquo;This site can&rsquo;t be reached&rdquo; for some customers</h2>
+<h2 id="dns">A. Problem 1: &ldquo;This site can&rsquo;t be reached&rdquo; for some customers</h2>
 <div class="card">
 <p><strong>What was reported:</strong> a customer saw <code>ERR_NAME_NOT_RESOLVED</code> on <code>www.nureasmir.com</code>. They were using Google DNS (8.8.8.8 / 8.8.4.4). When they switched to Cloudflare DNS (1.1.1.1) it opened at once.</p>
 <p><strong>What we checked:</strong> all three names resolve correctly (IPv4 and IPv6) on Google, Cloudflare, Quad9, AdGuard, NextDNS and AliDNS. From 20 countries, 19 loaded the site (one Tehran node timed out, which looks local to that network). DNSSEC is off, so a validation failure is not the cause. The mail and Worker records in Cloudflare are all present. The &ldquo;CNAME failed&rdquo; result on dnschecker.org is normal because Cloudflare hides CNAMEs.</p>
@@ -33,7 +34,7 @@
 <li>Would a second, independent DNS provider (Cloudflare Secondary DNS or similar) be worth it for a shop whose customers are in Pakistan?</li>
 </ul>
 
-<h2>B. Problem 2: slow pages (sometimes)</h2>
+<h2 id="speed">B. Problem 2: slow pages (sometimes)</h2>
 <h3>What we measured</h3>
 <table>
 <tr><th>Measurement (live site, from Pakistan)</th><th>Result</th></tr>
@@ -59,7 +60,7 @@
 <tr><td>7</td><td>Small accessibility items (colour contrast, redundant alt text, button names, tap-target size).</td><td>Fix each; they also help rankings slightly.</td><td>Small</td><td><span class="tag warn">To do</span></td></tr>
 </table>
 
-<h2>C. Are we ready for Google to index us?</h2>
+<h2 id="ready">C. Are we ready for Google to index us?</h2>
 <div class="note bad"><strong>Not yet. We are technically ready, but two things must happen first.</strong></div>
 <table>
 <tr><th>Check</th><th>Result</th><th>Note</th></tr>
@@ -75,7 +76,7 @@
 </table>
 <p><strong>Go signal:</strong> after (1) the pull request is merged and live, (2) real products are added, (3) Search Console is verified. Then request indexing of the home page and a few products, and wait. Google can take days to weeks and up to a month; searching Chrome right after is not a valid test.</p>
 
-<h2>D. Admin training sandbox: do we have one?</h2>
+<h2 id="sandbox">D. Admin training sandbox: do we have one?</h2>
 <div class="card">
 <p><strong>Today: no real sandbox.</strong> The training area (Admin &rarr; Training) plays <em>simulated</em> lessons on a pretend screen that looks like the real admin, in Roman Urdu or English, with a written guide. Nothing the learner clicks touches real data, but they also cannot practise freely.</p>
 <p><strong>Proposal (not built yet):</strong></p>
@@ -86,7 +87,7 @@
 <p><strong>How:</strong> a third Worker (<code>APP_TARGET=sandbox</code>) connected to a separate Neon database branch filled with sample data; emails, TCS bookings, WhatsApp and push alerts switched off in that mode; a visible &ldquo;Practice mode&rdquo; strip; a nightly reset job. We already use a database branch for testing, so the pieces exist. Rough size: a few days; needs a decision on whether practice accounts are shared or per person.</p>
 </div>
 
-<h2>E. Decisions we need from the consultant or owner</h2>
+<h2 id="decisions">E. Decisions we need from the consultant or owner</h2>
 <ol>
 <li>Edge-cache the public pages (fix B3), and if yes, with what time.</li>
 <li>Smart Placement or a database region closer to Pakistan.</li>

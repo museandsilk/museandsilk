@@ -7,13 +7,14 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="top"><div class="in"><h1>SEO and GEO: what is done and what is left</h1><p>SEO = being found on Google. GEO = being found and recommended by AI assistants (ChatGPT, Gemini, Claude, Perplexity). Prepared 7 October 2026.</p></div></header>
-<nav class="docs"><div class="in"><a href="01-architecture.html">1. Architecture, APIs, limits</a><a href="02-seo-geo.html" aria-current="page">2. SEO and GEO</a><a href="03-loading-and-indexing.html">3. Loading issues and Google readiness</a></div></nav>
+<header class="top"><div class="in"><p class="eyebrow">Nure Asmir · Documentation</p><h1>SEO and GEO: what is done and what is left</h1><p>SEO = being found on Google. GEO = being found and recommended by AI assistants (ChatGPT, Gemini, Claude, Perplexity). Prepared 7 October 2026.</p></div></header>
+<nav class="docs" aria-label="Documentation"><div class="in"><a href="index.html">Overview and diagram</a><a href="01-architecture.html">Architecture, APIs, limits</a><a href="02-seo-geo.html" aria-current="page">SEO and GEO</a><a href="03-loading-and-indexing.html">Issues, speed and readiness</a></div></nav>
 <main>
+<ul class="toc" aria-label="On this page"><li><a href="#technical">Technical SEO</a></li><li><a href="#geo">GEO</a></li><li><a href="#tools">Admin tools</a></li><li><a href="#gaps">Gaps</a></li><li><a href="#plan">Plan</a></li><li><a href="#questions">Questions</a></li></ul>
 
 <div class="note bad"><strong>An honest word first.</strong> The website&rsquo;s technical side is strong, but nobody can promise to &ldquo;beat&rdquo; an established brand such as Ismail Farid. Google ranks mostly on <em>trust built over time</em>: how many respected sites link to you, how long the brand has existed, how many people search for it by name, and reviews. A new site cannot buy that in a month. What we <em>can</em> do is remove every technical obstacle, give Google and AI assistants clean facts, and choose battles we can win first (section 5).</div>
 
-<h2>1. Technical SEO that is in place</h2>
+<h2 id="technical">1. Technical SEO that is in place</h2>
 <table>
 <tr><th>Item</th><th>Status</th><th>Detail</th></tr>
 <tr><td>Page titles and descriptions</td><td><span class="tag good">Done</span></td><td>Every page has its own. Products get a title (under 60 characters) and description (under 155) written automatically when saved, or by the owner.</td></tr>
@@ -29,7 +30,7 @@
 <tr><td>Secure and private</td><td><span class="tag good">Done</span></td><td>HTTPS everywhere with HSTS; the admin site is marked &ldquo;do not index&rdquo;.</td></tr>
 </table>
 
-<h2>2. GEO: helping AI assistants</h2>
+<h2 id="geo">2. GEO: helping AI assistants</h2>
 <table>
 <tr><th>Item</th><th>Status</th><th>Detail</th></tr>
 <tr><td><code>llms.txt</code></td><td><span class="tag good">Done</span></td><td>A plain summary of the brand, shop, policies and delivery for AI assistants. Corrected today (it still mentioned bank deposit).</td></tr>
@@ -39,7 +40,7 @@
 <tr><td>Local presence</td><td><span class="tag good">Done</span></td><td>Each physical shop is published with its address and map pin.</td></tr>
 </table>
 
-<h2>3. Tools the owner has inside the admin</h2>
+<h2 id="tools">3. Tools the owner has inside the admin</h2>
 <ul>
 <li><strong>On every product:</strong> phrases people really type (with a &ldquo;Try on Google&rdquo; button), a Google preview, and a checklist.</li>
 <li><strong>New today:</strong> a clear note that Google decides when to show a page and that it <em>can take up to a month</em> (so staff do not search on Chrome and blame the website); the preview is labelled &ldquo;not live yet&rdquo;.</li>
@@ -47,7 +48,7 @@
 <li><strong>Settings:</strong> Google and Bing site-verification boxes, and analytics IDs.</li>
 </ul>
 
-<h2>4. What is NOT done yet (the real gaps)</h2>
+<h2 id="gaps">4. What is NOT done yet (the real gaps)</h2>
 <table>
 <tr><th>Gap</th><th>Why it matters</th><th>Who</th></tr>
 <tr><td>Google Search Console not verified</td><td>We cannot ask Google to index, see errors or search terms until the owner verifies the site (the verification box in Settings is empty today).</td><td>Owner (10 minutes)</td></tr>
@@ -60,7 +61,7 @@
 <tr><td>Urdu pages</td><td>Many customers search in Urdu or Roman Urdu; there are no Urdu pages.</td><td>Decision for owner</td></tr>
 </table>
 
-<h2>5. A realistic plan against big brands</h2>
+<h2 id="plan">5. A realistic plan against big brands</h2>
 <ol>
 <li><strong>Win your own name first.</strong> Searching &ldquo;Nure Asmir&rdquo; should show the shop first (usually within weeks of indexing). Verify Search Console, submit the sitemap, add Google Business Profile.</li>
 <li><strong>Free Google Shopping listings.</strong> Connect the product feed to Merchant Center; products can show in the Shopping tab without ads once real products are live.</li>
@@ -72,7 +73,7 @@
 
 <div class="note"><strong>Timing the owner should expect:</strong> Google needs days to weeks to first list a new page and can take up to a month; moving up the rankings takes months. AI assistants update even more slowly and unpredictably.</div>
 
-<h2>6. Questions for the consultant</h2>
+<h2 id="questions">6. Questions for the consultant</h2>
 <ol>
 <li>Which 10 phrases should we aim at first, given competitors&rsquo; strength?</li>
 <li>Do we add Urdu or Roman-Urdu pages, and how?</li>

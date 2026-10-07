@@ -7,11 +7,12 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="top"><div class="in"><h1>Architecture, APIs and limits</h1><p>Nure Asmir online shop · prepared 7 October 2026 for the consultant discussion</p></div></header>
-<nav class="docs"><div class="in"><a href="01-architecture.html" aria-current="page">1. Architecture, APIs, limits</a><a href="02-seo-geo.html">2. SEO and GEO</a><a href="03-loading-and-indexing.html">3. Loading issues and Google readiness</a></div></nav>
+<header class="top"><div class="in"><p class="eyebrow">Nure Asmir · Documentation</p><h1>Architecture, APIs and limits</h1><p>Nure Asmir online shop · prepared 7 October 2026 for the consultant discussion</p></div></header>
+<nav class="docs" aria-label="Documentation"><div class="in"><a href="index.html">Overview and diagram</a><a href="01-architecture.html" aria-current="page">Architecture, APIs, limits</a><a href="02-seo-geo.html">SEO and GEO</a><a href="03-loading-and-indexing.html">Issues, speed and readiness</a></div></nav>
 <main>
+<ul class="toc" aria-label="On this page"><li><a href="#overview">Big picture</a></li><li><a href="#stack">Technology</a></li><li><a href="#flow">What happens on a visit</a></li><li><a href="#api">API routes</a></li><li><a href="#limits">Limits</a></li><li><a href="#security">Security</a></li><li><a href="#questions">Questions</a></li></ul>
 
-<h2>1. The big picture (in simple words)</h2>
+<h2 id="overview">1. The big picture (in simple words)</h2>
 <p>Two websites run from one code base. The <strong>shop</strong> (what customers see) and the <strong>admin</strong> (what the owner and staff use). Both run on Cloudflare&rsquo;s network, close to the customer, and both talk to one database and two picture stores.</p>
 <div class="grid">
   <div class="card"><h3>Shop</h3><p><span class="mono">nureasmir.com</span> (and <span class="mono">www</span>, which redirects to it). Cloudflare Worker named <code>nure-asmir</code>.</p></div>
@@ -19,7 +20,7 @@
   <div class="card"><h3>Why two?</h3><p>The free Cloudflare plan allows a program of at most 3&nbsp;MB (compressed). The shop and admin together were too big, so each is built separately (<code>scripts/build-target.mjs</code>).</p></div>
 </div>
 
-<h2>2. Technology</h2>
+<h2 id="stack">2. Technology</h2>
 <table>
 <tr><th>Part</th><th>What we use</th><th>Why</th></tr>
 <tr><td>Website framework</td><td>Next.js 16.3.8 (App Router), React 19, TypeScript</td><td>Server-rendered pages that Google can read; fast navigation.</td></tr>
@@ -38,7 +39,7 @@
 <tr><td>Deploy</td><td>GitHub Actions: tests, then migrations, then both Workers, then domain check</td><td>The owner merges to <code>main</code>; nothing deploys without that.</td></tr>
 </table>
 
-<h2>3. What happens when someone opens a page</h2>
+<h2 id="flow">3. What happens when someone opens a page</h2>
 <ol>
 <li>The browser asks DNS for <code>nureasmir.com</code>. Cloudflare answers.</li>
 <li>The request reaches Cloudflare in Lahore. A small program (<code>middleware.ts</code>) adds security headers and redirects <code>www</code> and <code>http</code> to the one real address.</li>
@@ -47,7 +48,7 @@
 <li>Pictures come from <code>/cdn/…</code> with a one-year cache, so a returning visitor downloads them once.</li>
 </ol>
 
-<h2>4. The API routes (what each group does)</h2>
+<h2 id="api">4. The API routes (what each group does)</h2>
 <p>93 routes under <code>app/api</code>. Customer-facing ones are public with limits; <code>/api/admin/*</code> needs a signed-in admin; <code>/api/cron/*</code> needs a secret.</p>
 <table>
 <tr><th>Group</th><th>Routes</th><th>Who can call it</th></tr>
@@ -64,7 +65,7 @@
 <tr><td>Other</td><td><code>/api/health</code>, <code>/api/revalidate</code>, <code>/api/whatsapp/webhook</code>, <code>/api/push/customer</code>, <code>/api/newsletter</code>, <code>/api/usage/ping</code>, <code>/api/developer/storage</code></td><td>Mixed (webhook is signature-checked)</td></tr>
 </table>
 
-<h2>5. Limits we live inside</h2>
+<h2 id="limits">5. Limits we live inside</h2>
 <div class="note">The numbers below are the free allowances as published when this was written; vendors change them, so the vendor&rsquo;s own page is the final word. The app&rsquo;s own <em>Developer</em> page counts usage against these and predicts what runs out first.</div>
 <table>
 <tr><th>Service</th><th>Free allowance</th><th>What happens at the limit</th><th>Upgrade</th></tr>
@@ -90,10 +91,10 @@
 </table>
 <div class="note">We stopped at 2,500 requests on purpose so we do not use up the free daily allowance. The breaking point is <strong>not yet known</strong>. Checkout and orders were not load-tested on the live site, only on the test copy.</div>
 
-<h2>6. Security in one paragraph</h2>
+<h2 id="security">6. Security in one paragraph</h2>
 <p>Admin sign-in is separate from the shop and rate-limited. Every price is recalculated on the server (the browser&rsquo;s numbers are never trusted). Secrets live only in GitHub and Cloudflare, never in the code. Security headers (CSP, HSTS, no framing) are set on every page. Dependencies were patched this week; one low-risk advisory remains in developer-only tooling (<code>braces</code>, no fixed version exists yet). The Firebase browser key is now limited to our own websites.</p>
 
-<h2>7. Questions for the consultant</h2>
+<h2 id="questions">7. Questions for the consultant</h2>
 <ol>
 <li>At what traffic should we move to Workers Paid and a paid Neon plan, and what should we watch to know?</li>
 <li>Is it worth putting the Worker close to the database (Smart Placement) or the database close to Pakistan?</li>
