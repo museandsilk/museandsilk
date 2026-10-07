@@ -27,6 +27,27 @@
 <tr><td>Shorten the &ldquo;remember a missing answer&rdquo; time (SOA minimum 1800 seconds)</td><td><span class="tag bad">Not possible on Free; unknown which plan allows it</span></td></tr>
 <tr><td>Fast fix for one customer: flush the name in Google&rsquo;s public DNS cache tool, or ask them to use 1.1.1.1 or mobile data</td><td><span class="tag good">Available</span></td></tr>
 </table>
+<h3>Measured on a real affected router (7 October 2026)</h3>
+<div class="card">
+<p>The site was tested from a computer on the home router where the site sometimes would not open on the first try and opened after pressing reload several times. That computer asks the <strong>router itself</strong> (192.168.100.1) for DNS, and the router asks the internet provider.</p>
+<table>
+<tr><th>Test</th><th>Result</th><th>What it tells us</th></tr>
+<tr><td>First lookup after a quiet time, through the router</td><td><strong>8.6 seconds</strong> once; later 1.06 s and 0.9 s on some lookups; usually 20&ndash;50 ms</td><td>The router&rsquo;s DNS sometimes stalls for seconds. Chrome gives up or shows &ldquo;can&rsquo;t be reached&rdquo; during a stall; the next reload finds the answer saved and works. This matches the complaint exactly.</td></tr>
+<tr><td>30 fresh lookups: router / Cloudflare 1.1.1.1 / Google 8.8.8.8</td><td>median 25 ms, worst 906 ms / median 18 ms, worst 290 ms / median 249 ms, worst 323 ms</td><td>1.1.1.1 was both faster and steadier than the router. Google is slower but steady.</td></tr>
+<tr><td>Quad9 (9.9.9.9)</td><td>about 11 seconds for every lookup</td><td>That DNS service is effectively unusable from this connection. Anyone set to it will see the site fail.</td></tr>
+<tr><td>Packets to the router itself (50 pings)</td><td>2% lost, slowest 5% over 37 ms</td><td>The Wi-Fi link has some loss, which also causes a stray one-second pause when a connection is set up (seen twice).</td></tr>
+<tr><td>Our server from this router</td><td>connect about 30 ms, page start 0.12&ndash;0.5 s, all 12 loads succeeded</td><td>Cloudflare and the shop are reachable and fast. The delay is before our server is reached.</td></tr>
+<tr><td>Outside websites the home page needs</td><td>only <code>flagcdn.com</code> (currency flags) and Cloudflare&rsquo;s analytics script besides our own</td><td>Few extra lookups. The flags are now our own files, so that outside lookup is gone too.</td></tr>
+</table>
+<p><strong>Plain conclusion:</strong> the website is not at fault; this connection&rsquo;s DNS and Wi-Fi are occasionally slow. Because our records are kept for 5 minutes (Cloudflare fixes this for proxied names), the lookup repeats every few minutes, and each repeat has a small chance of hitting a stall.</p>
+<p><strong>What fixes it for a customer (no change to the website needed):</strong></p>
+<ol>
+<li>In Chrome: Settings &rarr; Privacy and security &rarr; Security &rarr; <em>Use secure DNS</em> &rarr; choose Cloudflare (1.1.1.1) or Google. This skips the router&rsquo;s DNS.</li>
+<li>On Android: Settings &rarr; Network &rarr; <em>Private DNS</em> &rarr; <code>one.one.one.one</code>.</li>
+<li>On the router: set the DNS servers to <code>1.1.1.1</code> and <code>1.0.0.1</code> (backup <code>8.8.8.8</code>). Do not use 9.9.9.9 here.</li>
+<li>Restart the router; use the 5&nbsp;GHz Wi-Fi band when close to it.</li>
+</ol>
+</div>
 <h3>For the consultant</h3>
 <ul>
 <li>Can Cloudflare logs or the audit trail show whether the Worker custom-domain records were ever missing during a deploy?</li>
