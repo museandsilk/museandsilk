@@ -14,7 +14,7 @@ import { ThemeMenu } from "../_ui/theme-menu";
 import { LogoutButton } from "./logout-button";
 import { PushToggle } from "./push-toggle";
 import { SandboxBar } from "./sandbox-bar";
-import { captureBaseline, hasBaseline, isSandbox, sandboxHits } from "@/lib/sandbox";
+import { isSandbox, practiceAvailable, sandboxHits } from "@/lib/sandbox";
 
 async function sidebarCounts() {
   try {
@@ -42,12 +42,10 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
   const text = jar.get("adm-text")?.value === "large" ? "large" : "normal";
   const side = jar.get("adm-side")?.value === "collapsed" ? "collapsed" : "open";
   const storeUrl = process.env.NEXT_PUBLIC_STORE_URL || "/";
-  // The practice shop: remember the starting data the first time anyone opens it, and show how much practice is left today.
+  // The practice shop: show how much practice is left today. The real admin offers a way in once the practice tables exist.
   const practice = isSandbox();
-  if (practice && !(await hasBaseline())) await captureBaseline().catch((error) => console.error("sandbox baseline failed", error));
   const hits = practice ? await sandboxHits() : null;
-  // The real admin offers a way into the practice shop (set SANDBOX_URL on the admin Worker once the practice shop exists).
-  const practiceUrl = !practice && user.role === "owner" ? process.env.SANDBOX_URL || "" : "";
+  const offerPractice = !practice && practiceAvailable() && user.role === "owner";
 
   return (
     <ToastProvider>
@@ -63,7 +61,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
             <SideToggle initialCollapsed={side === "collapsed"} />
           </div>
           <div className="adm-side-scroll">
-            <NavLinks counts={counts} role={user.role} practiceUrl={practiceUrl} />
+            <NavLinks counts={counts} role={user.role} practice={offerPractice} />
           </div>
           <div className="adm-side-foot">
             <div className="adm-push">

@@ -12,10 +12,17 @@ export function SandboxBar({ left, limit }: { left: number; limit: number }) {
   const action = useLockedAction();
   const [asking, setAsking] = useState(false);
 
+  async function leave() {
+    await action.run(async () => {
+      await callApi("/api/admin/practice/exit", "POST");
+      window.location.assign("/admin"); // a full page load: back to the real shop
+    });
+  }
+
   async function reset() {
     setAsking(false);
     await action.run(async () => {
-      const result = await callApi("/api/admin/sandbox/reset", "POST");
+      const result = await callApi("/api/admin/practice/start", "POST");
       if (result.ok) {
         toast("Everything is back to the starting practice data.", "good");
         router.refresh();
@@ -33,6 +40,9 @@ export function SandboxBar({ left, limit }: { left: number; limit: number }) {
       </span>
       <button type="button" className="a-sandbar-btn" onClick={() => setAsking(true)} disabled={action.pending} aria-busy={action.pending}>
         {action.pending ? <span className="spinner" aria-hidden="true" /> : null} Start again
+      </button>
+      <button type="button" className="a-sandbar-btn" onClick={() => void leave()} disabled={action.pending}>
+        Leave practice
       </button>
       {asking && (
         <Dialog title="Start again?" onClose={() => setAsking(false)}>

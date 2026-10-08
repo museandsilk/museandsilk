@@ -1,3 +1,4 @@
+import { isPracticeRequest } from "@/lib/practice-context";
 import { AwsClient } from "aws4fetch";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { recordApiCall } from "@/lib/usage";
@@ -195,7 +196,7 @@ export async function getObjectBytes(
 
 export async function deleteObject(key: string, visibility: Visibility = "public"): Promise<void> {
   // The practice shop shares the picture store with the real shop: practising must never delete a real picture.
-  if (process.env.SANDBOX === "1") return;
+  if (isPracticeRequest()) return;
   if (backendOf(key) === "r2") {
     await r2Bucket()?.delete(key);
     count("r2-storage", true);

@@ -1,12 +1,12 @@
 // Sets up (or tops up) the PRACTICE shop's database. Safe to run again: it only fills what is missing.
 //
-//   DATABASE_URL=<the practice database> ADMIN_EMAIL=practice@nureasmir.com ADMIN_INITIAL_PASSWORD=<password> npx tsx scripts/sandbox-setup.ts
+//   DATABASE_URL=<the practice connection string> ADMIN_EMAIL=practice@nureasmir.com ADMIN_INITIAL_PASSWORD=<anything> npx tsx scripts/sandbox-setup.ts
 //
 // 1. runs scripts/seed.ts, which creates the practice owner, settings, delivery areas, categories, products with pictures and banners;
 // 2. adds a few pretend orders in different stages, so every lesson has something to work on;
 // 3. remembers how everything looks as "the starting data" (what the Start again button restores).
 //
-// It refuses to run against the real shop's database (it checks that the database has no real-looking customers and that SANDBOX_DATABASE_URL differs).
+// It refuses to run unless the connection looks at the "practice" schema (see scripts/practice-create.ts), so it can never touch the real tables.
 import { spawnSync } from "node:child_process";
 import { sql } from "drizzle-orm";
 import { db } from "../db";
@@ -77,19 +77,21 @@ async function addPretendOrders() {
 
 async function main() {
   const url = process.env.DATABASE_URL ?? "";
-  if (!url) throw new Error("DATABASE_URL is not set.");
-  if (process.env.SANDBOX_DATABASE_URL && process.env.SANDBOX_DATABASE_URL !== url) throw new Error("DATABASE_URL is not the practice database. Refusing to continue.");
-  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_INITIAL_PASSWORD) throw new Error("ADMIN_EMAIL and ADMIN_INITIAL_PASSWORD (the practice sign-in) are required.");
+  if (!url) throw new Error("DATABASE_URL is not set (use the PRACTICE connection string).");
+  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_INITIAL_PASSWORD) throw new Error("ADMIN_EMAIL and ADMIN_INITIAL_PASSWORD (any practice sign-in) are required.");
+  process.env.PRACTICE_DATABASE_URL = url; // the helpers below work on "the practice tables"; here that is simply this connection
+
+  // The one safety check that matters: this must be the practice user, looking at the practice schema – never the real tables.
+  const where = (await db.execute(sql`select current_schema() as schema, current_user as who`)) as unknown as { rows: Array<{ schema: string; who: string }> };
+  if (where.rows[0]?.schema !== "practice") throw new Error(`Refusing to continue: this connection looks at the "${where.rows[0]?.schema}" tables, not the practice ones.`);
 
   if (!(await hasBaseline()) || FORCE) {
-    const foreign = (await db.execute(sql`select 1 from orders where order_number not like 'PR-%' limit 1`)) as unknown as { rows: unknown[] };
-    if (foreign.rows.length && !FORCE) throw new Error("This database already has orders that are not practice orders – it looks like a real shop. Refusing to continue. Use an EMPTY database. (--force is only for a practice database.)");
     const seed = spawnSync(process.execPath, ["./node_modules/tsx/dist/cli.mjs", "scripts/seed.ts"], { stdio: "inherit", env: process.env });
     if (seed.status !== 0) throw new Error("The starting catalogue could not be created.");
     await addPretendOrders();
     console.log(`Saved the starting data (${await captureBaseline()} tables).`);
   } else {
-    console.log("The practice shop is already set up.");
+    console.log("The practice tables are already set up.");
   }
 }
 

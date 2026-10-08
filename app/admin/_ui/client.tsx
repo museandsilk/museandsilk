@@ -36,7 +36,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, window.location.origin);
         const method = init?.method ?? (typeof input === "object" && "method" in input ? input.method : "GET");
         const minutes = response.ok && url.origin === window.location.origin ? storefrontDelayMinutes(url.pathname, method) : null;
-        if (minutes && Date.now() - lastAt > 20_000) {
+        const practising = Boolean(document.querySelector('[data-sandbox="1"]')); // practice changes never reach the website
+        if (minutes && !practising && Date.now() - lastAt > 20_000) {
           lastAt = Date.now();
           // a moment after the form's own "Saved" message, so the two read in order
           const id = ++counter.current;

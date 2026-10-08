@@ -8,6 +8,8 @@
 export const SANDBOX_LIMITS = {
   /** Page views and button presses in the admin per day (Pakistan time). Pictures, scripts and the sign-in page are not counted. */
   hitsPerDay: 1500,
+  /** How much the practice tables may grow beyond their starting size, in bytes (1 MB). */
+  storageBytes: 1024 * 1024,
   /** Most things of each kind that can exist at once. "Start again" puts everything back to the starting data. */
   rows: { products: 25, orders: 60, categories: 8, coupons: 10, flashSales: 5, faqs: 15, collections: 6, locations: 3 },
 } as const;

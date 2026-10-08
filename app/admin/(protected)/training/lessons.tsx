@@ -455,10 +455,10 @@ const LESSON_DEFS: Array<Omit<Lesson, "minutes">> = [
     blurb: "The same admin with pretend data – click anything without any risk. Learn by doing.",
     steps: [
       {
-        say: "At the bottom of the menu, under “Learn”, is “Practice shop”. It opens the SAME admin screens in a new tab, but with its own pretend products and orders.",
+        say: "At the bottom of the menu, under “Learn”, is “Practice shop”. Press “Start practice” and wait about 10 seconds while it gets ready. You do not sign in again: you stay signed in.",
         screen: (s) => (
           <Shell nav="Home" title="Practice shop">
-            <Card><T id="practice-link" s={s} className="a-btn a-btn-primary">✦ Practice shop ↗</T><span className="a-muted">Sign in with the practice password you were given.</span></Card>
+            <Card><T id="practice-link" s={s} className="a-btn a-btn-primary">✦ Start practice</T><span className="a-muted">Getting your practice shop ready… 10 seconds</span></Card>
           </Shell>
         ),
         actions: [{ t: "click", on: "practice-link" }],
@@ -473,12 +473,12 @@ const LESSON_DEFS: Array<Omit<Lesson, "minutes">> = [
         actions: [{ t: "wait", ms: 300 }],
       },
       {
-        say: "You get a fixed number of clicks each day, and the strip counts them down. There are also small limits on how many products or orders you can add, so it stays tidy. It starts fresh the next day.",
+        say: "You get a fixed number of clicks each day, and the strip counts them down. There are also small limits on how many products or orders you can add, and on storage (1 MB), so it stays tidy. It starts fresh the next day.",
         screen: () => <Slide title="What is limited" points={[["Clicks per day", "1,500 page views and button presses. Pictures and signing in are free."], ["Products", "Up to 25 at the same time."], ["Orders", "Up to 60 at the same time."], ["Other things", "A few discount codes, flash sales, questions and shops."]]} foot="If you reach a limit the page tells you in plain words. Nothing breaks." />,
         actions: [{ t: "wait", ms: 300 }],
       },
       {
-        say: "Made a mess? Press “Start again” in the orange strip. Every product, order and setting goes back to how it was at the beginning. Your real shop is never touched.",
+        say: "Made a mess? Press “Start again” in the orange strip. Every product, order and setting goes back to how it was at the beginning. When you are done, press “Leave practice” to go back to your real shop.",
         screen: (s) => (
           <Shell nav="Home" title="Start again">
             <Card><T id="sa-btn" s={s} className="a-btn">Start again</T>{s.sa && <Badge tone="done">Back to the starting practice data ✓</Badge>}</Card>

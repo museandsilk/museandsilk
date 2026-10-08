@@ -1,3 +1,4 @@
+import { isPracticeRequest } from "@/lib/practice-context";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { SERVICES } from "@/lib/dev-limits";
@@ -110,7 +111,7 @@ export async function emailAllowance(): Promise<{ limit: number; used: number; l
 }
 
 export async function sendMail(mail: Mail): Promise<boolean> {
-  if (process.env.SANDBOX === "1") return false; // the practice shop never sends a real email
+  if (isPracticeRequest()) return false; // the practice shop never sends a real email
   const ready = PROVIDERS.filter((provider) => provider.configured());
   if (!ready.length) return false;
   const replyTo = process.env.EMAIL_REPLY_TO || process.env.RESEND_FROM_EMAIL || undefined;

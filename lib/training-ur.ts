@@ -158,10 +158,10 @@ export const UR: Record<string, LessonText> = {
     title: "14. Practice shop",
     blurb: "Wohi admin, nakli data ke saath – bina kisi khatre ke har cheez par click karein. Kar ke seekhein.",
     steps: [
-      "Menu ke bilkul neeche, “Learn” ke tahat, “Practice shop” hai. Ye wohi admin screens nayi tab mein kholta hai, magar apne nakli products aur orders ke saath.",
+      "Menu ke bilkul neeche, “Learn” ke tahat, “Practice shop” hai. “Start practice” dabayein aur taqreeban 10 second intezar karein jab tak tayyar ho. Dobara sign in nahi karna parta: aap sign in hi rehte hain.",
       "Upar narangi patti likhi hoti hai PRACTICE SHOP, taake aap kabhi asli dukaan se na milayein. Wahan se kuch customer tak nahi pahunchta: na email, na WhatsApp, na TCS, na notification.",
-      "Roz ke liye clicks ki ek tay tadad milti hai, aur patti unhein ginti rehti hai. Products ya orders kitne daal sakte hain us ki bhi choti hadd hai taake sab saaf rahe. Agle din nayi shuru hoti hai.",
-      "Gadbad ho gayi? Narangi patti mein “Start again” dabayein. Har product, order aur setting wapas shuru wali halat mein aa jati hai. Asli dukaan ko kuch nahi hota.",
+      "Roz ke liye clicks ki ek tay tadad milti hai, aur patti unhein ginti rehti hai. Products ya orders kitne daal sakte hain aur storage (1 MB) ki bhi choti hadd hai taake sab saaf rahe. Agle din nayi shuru hoti hai.",
+      "Gadbad ho gayi? Narangi patti mein “Start again” dabayein. Har product, order aur setting wapas shuru wali halat mein aa jati hai. Kaam khatam ho to “Leave practice” dabayein aur asli dukaan mein wapas aa jayein.",
       "Ye is tarteeb se kar ke dekhein: sizes ke saath product daalein; order confirm karein aur tracking number daalein; ek order cancel karein; flash sale banayein; notification likhein; Our story page badlein. Jab tak aasaan na lage dohrayein.",
     ],
   },

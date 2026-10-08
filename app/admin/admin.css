@@ -713,3 +713,10 @@
 .adm-nav a svg:last-child:not(:first-child) { margin-left: auto; opacity: .6; }
 .adm-shell[data-sandbox="1"] .adm-side { height: calc(100vh - 48px); top: 48px; }
 .adm-shell[data-sandbox="1"] .adm-top { top: 48px; }
+
+/* starting the practice shop */
+.a-progress { height: 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.a-progress span { display: block; height: 100%; background: var(--primary); transition: width .3s linear; }
+.a-practice-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.a-practice-list li { display: flex; gap: 10px; align-items: flex-start; line-height: 1.5; }
+.a-practice-list svg { flex: none; margin-top: 3px; color: var(--primary); }

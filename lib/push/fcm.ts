@@ -1,3 +1,4 @@
+import { isPracticeRequest } from "@/lib/practice-context";
 import { trackedFetch } from "@/lib/usage";
 /**
  * Firebase Cloud Messaging (HTTP v1) sender for Cloudflare Workers.
@@ -13,7 +14,7 @@ type ServiceAccount = { project_id: string; client_email: string; private_key: s
 let cached: { token: string; expiresAt: number } | null = null;
 
 function loadServiceAccount(): ServiceAccount | null {
-  if (process.env.SANDBOX === "1") return null; // the practice shop never sends a real notification
+  if (isPracticeRequest()) return null; // the practice shop never sends a real notification
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) return null;
   try {
@@ -25,7 +26,7 @@ function loadServiceAccount(): ServiceAccount | null {
 }
 
 export function pushConfigured(): boolean {
-  if (process.env.SANDBOX === "1") return false; // the practice shop never sends a real notification
+  if (isPracticeRequest()) return false; // the practice shop never sends a real notification
   return loadServiceAccount() !== null;
 }
 

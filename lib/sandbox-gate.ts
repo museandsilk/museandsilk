@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { requestIsPractising } from "./practice-cookie";
 import { hitCountsAgainstLimit, hitState, LIMIT_REACHED_MESSAGE } from "./sandbox-rules";
 
 /** Today's date in Pakistan, as text (the practice allowance resets at midnight there). */
@@ -12,9 +13,13 @@ const pakistanDay = () => new Date().toLocaleDateString("en-CA", { timeZone: "As
 export async function sandboxGate(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   if (!hitCountsAgainstLimit(url.pathname, request.method, request.headers)) return null;
+  // only a browser that is practising (or a server set to practise) is counted; the real shop is never slowed down
+  if (process.env.SANDBOX !== "1" && !(await requestIsPractising(request, process.env.CRON_SECRET))) return null;
+  const practiceUrl = process.env.PRACTICE_DATABASE_URL;
+  if (!practiceUrl) return null;
   let used: number;
   try {
-    const sql = neon(process.env.DATABASE_URL as string);
+    const sql = neon(practiceUrl);
     const rows = (await sql`insert into sandbox_usage (day, hits) values (${pakistanDay()}, 1) on conflict (day) do update set hits = sandbox_usage.hits + 1 returning hits`) as Array<{ hits: number }>;
     used = Number(rows[0]?.hits ?? 0);
   } catch {

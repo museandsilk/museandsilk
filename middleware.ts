@@ -44,8 +44,8 @@ function buildCsp(nonce: string): string {
 }
 
 export async function middleware(request: NextRequest) {
-  // The practice shop (SANDBOX=1) counts every admin request against a daily allowance first; the real shop never runs this.
-  if (process.env.SANDBOX === "1") {
+  // A browser that is practising counts every admin request against a daily allowance first; the real shop is not touched by this.
+  if (process.env.PRACTICE_DATABASE_URL) {
     const blocked = await sandboxGate(request);
     if (blocked) return blocked;
   }

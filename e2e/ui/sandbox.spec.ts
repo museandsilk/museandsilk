@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Runs only against a practice-shop server (SANDBOX=1 SANDBOX_HITS_PER_DAY=60), pointed at a throwaway database:
- *   E2E_SANDBOX_URL=http://localhost:3300 E2E_BASE_URL=http://localhost:3300 npx playwright test e2e/ui/sandbox.spec.ts --project=chromium
- * (the normal suite skips it.)
+ * Runs only against a server that practises all the time (SANDBOX=1) with the practice tables ready in the throwaway database:
+ *   SANDBOX=1 SANDBOX_HITS_PER_DAY=60 PRACTICE_DATABASE_URL=<practice connection string> E2E_PRACTICE_EMAIL=… E2E_PRACTICE_PASSWORD=…  *   E2E_SANDBOX_URL=http://localhost:3100 npx playwright test e2e/ui/sandbox.spec.ts --project=chromium
+ * (the normal suite skips it. See scripts/practice-create.ts, practice-migrate.ts and sandbox-setup.ts for making the practice tables.)
  */
 const URL = process.env.E2E_SANDBOX_URL;
 test.skip(!URL, "needs a practice-shop server (E2E_SANDBOX_URL)");
@@ -11,7 +11,7 @@ test.describe.configure({ mode: "serial", timeout: 240_000 });
 
 test("practice shop: banner, the allowance running out, sign-in still possible, and Start again putting everything back", async ({ page }) => {
   const request = page.request; // shares the sign-in with the page
-  const login = await request.post(`${URL}/api/admin/login`, { data: { email: process.env.E2E_ADMIN_EMAIL, password: process.env.E2E_ADMIN_PASSWORD } });
+  const login = await request.post(`${URL}/api/admin/login`, { data: { email: process.env.E2E_PRACTICE_EMAIL, password: process.env.E2E_PRACTICE_PASSWORD } });
   expect(login.status()).toBe(200);
 
   await page.goto(`${URL}/admin`);
