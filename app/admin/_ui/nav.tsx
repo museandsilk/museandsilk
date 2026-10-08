@@ -47,7 +47,7 @@ const DEV_NAV: NavGroup[] = [{ items: [{ href: "/admin/developer", label: "Devel
 
 export const ALL_PAGES = NAV.flatMap((group) => group.items);
 
-export function NavLinks({ counts, role }: { counts: Partial<Record<"orders" | "refunds" | "stock", number>>; role?: string }) {
+export function NavLinks({ counts, role, practiceUrl }: { counts: Partial<Record<"orders" | "refunds" | "stock", number>>; role?: string; practiceUrl?: string }) {
   const pathname = usePathname() || "";
   return (
     <nav className="adm-nav" aria-label="Main">
@@ -67,6 +67,16 @@ export function NavLinks({ counts, role }: { counts: Partial<Record<"orders" | "
           })}
         </div>
       ))}
+      {practiceUrl && role !== "developer" && (
+        <div style={{ display: "grid", gap: 2 }}>
+          <p className="adm-nav-label">Learn</p>
+          <a href={`${practiceUrl}/admin`} target="_blank" rel="noopener noreferrer" title="Practice shop">
+            <Icon name="sparkle" />
+            <span className="adm-nav-text">Practice shop</span>
+            <Icon name="external" size={14} />
+          </a>
+        </div>
+      )}
     </nav>
   );
 }

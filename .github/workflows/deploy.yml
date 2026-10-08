@@ -112,6 +112,38 @@ jobs:
       - name: Deploy admin
         run: npx wrangler deploy -c "$ADMIN_CONFIG"
 
+      # The PRACTICE shop: the very same admin build deployed a second time (wrangler.sandbox.jsonc) on its own small database full of
+      # pretend data. Only runs once the SANDBOX_DATABASE_URL secret exists (an EMPTY Neon database or branch – never the real one).
+      - name: Practice shop (only when SANDBOX_DATABASE_URL is set)
+        env:
+          SANDBOX_DATABASE_URL: ${{ secrets.SANDBOX_DATABASE_URL }}
+          SANDBOX_ADMIN_PASSWORD: ${{ secrets.SANDBOX_ADMIN_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          CSP_NONCE: ${{ secrets.CSP_NONCE }}
+          AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SANDBOX_DATABASE_URL:-}" ] || [ -z "${SANDBOX_ADMIN_PASSWORD:-}" ]; then
+            echo "No SANDBOX_DATABASE_URL / SANDBOX_ADMIN_PASSWORD secret – skipping the practice shop."
+            exit 0
+          fi
+          export DATABASE_URL="$SANDBOX_DATABASE_URL"
+          npx drizzle-kit migrate
+          ADMIN_EMAIL=practice@nureasmir.com ADMIN_INITIAL_PASSWORD="$SANDBOX_ADMIN_PASSWORD" npx tsx scripts/sandbox-setup.ts
+          npx wrangler deploy -c wrangler.sandbox.jsonc
+          for name in DATABASE_URL SESSION_SECRET CSP_NONCE AWS_ENDPOINT_URL_S3 AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx wrangler secret put "$name" -c wrangler.sandbox.jsonc || echo "::warning::could not set $name on the practice shop"
+            fi
+          done
+          # Tell the REAL admin where the practice shop is, so the menu and the Training page can offer it.
+          printf '%s' "https://sandbox.nureasmir.com" | npx wrangler secret put SANDBOX_URL -c "$ADMIN_CONFIG" || echo "::warning::could not set SANDBOX_URL on the admin"
+          printf '%s' "$SANDBOX_ADMIN_PASSWORD" | npx wrangler secret put SANDBOX_ADMIN_PASSWORD -c "$ADMIN_CONFIG" || echo "::warning::could not set SANDBOX_ADMIN_PASSWORD on the admin"
+
       # Runtime secrets the Workers read via process.env. Each value arrives through `env:` and is piped
       # with printf '%s' — never interpolated into the script text — so a secret containing shell syntax
       # cannot alter the command. Pushed on every deploy so a rotated GitHub secret stays in sync.

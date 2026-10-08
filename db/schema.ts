@@ -620,3 +620,16 @@ export const adminMessages = pgTable("admin_messages", {
   createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Practice shop only (see lib/sandbox.ts): how many requests the practice admin has used today. Tiny and empty everywhere else. */
+export const sandboxUsage = pgTable("sandbox_usage", {
+  day: text("day").primaryKey(),
+  hits: integer("hits").notNull().default(0),
+});
+
+/** Practice shop only: a copy of every table as it was when the practice data was set up, so "Start again" can put it all back. */
+export const sandboxBaseline = pgTable("sandbox_baseline", {
+  tableName: text("table_name").primaryKey(),
+  rows: jsonb("rows").$type<unknown[]>().notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -1,4 +1,5 @@
 import { asc, count } from "drizzle-orm";
+import { sandboxRoomMessage } from "@/lib/sandbox";
 import { db } from "@/db";
 import { faqs } from "@/db/schema";
 import { getAdminUser } from "@/lib/auth/admin-auth";
@@ -16,6 +17,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const admin = await getAdminUser();
   if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const full = await sandboxRoomMessage("faqs"); // practice shop only: a small limit on how much can be created
+  if (full) return Response.json({ error: full }, { status: 400 });
   const parsed = faqSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid question." }, { status: 400 });
   const [{ n }] = await db.select({ n: count() }).from(faqs);

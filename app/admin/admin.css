@@ -703,3 +703,13 @@
   .adm-shell, .adm-brand, .adm-fold, .adm-nav-label, .adm-push, .adm-user, .adm-user div, .adm-side-foot .a-btn { transition: none; }
   .adm-shell[data-side="collapsed"] > .adm-side .adm-nav .count { animation: none; }
 }
+
+/* the practice shop */
+.a-sandbar { position: sticky; top: 0; z-index: 90; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 18px; padding: 8px 16px; background: #f59e0b; color: #1c1300; font-size: 14px; }
+.a-sandbar strong { letter-spacing: .14em; }
+.a-sandbar-low { font-weight: 700; text-decoration: underline; }
+.a-sandbar-btn { min-height: 32px; padding: 0 14px; border: 1px solid #1c1300; border-radius: 8px; background: transparent; color: inherit; font-weight: 700; cursor: pointer; }
+.a-sandbar-btn:hover { background: rgba(0,0,0,.08); }
+.adm-nav a svg:last-child:not(:first-child) { margin-left: auto; opacity: .6; }
+.adm-shell[data-sandbox="1"] .adm-side { height: calc(100vh - 48px); top: 48px; }
+.adm-shell[data-sandbox="1"] .adm-top { top: 48px; }

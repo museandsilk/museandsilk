@@ -17,6 +17,7 @@ export function tcsBaseUrl(): string {
 }
 
 export function isTcsConfigured(): boolean {
+  if (process.env.SANDBOX === "1") return false; // the practice shop never talks to TCS
   return Boolean(process.env.TCS_USERNAME && process.env.TCS_PASSWORD && process.env.TCS_ACCOUNT_NO && process.env.TCS_COST_CENTER_CODE);
 }
 
