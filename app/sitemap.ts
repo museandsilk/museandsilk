@@ -1,12 +1,15 @@
 import type { MetadataRoute } from "next";
-import { getActiveCollections, getCatalogProducts } from "@/lib/commerce";
+import { getActiveCategories, getActiveCollections, getCatalogProducts } from "@/lib/commerce";
 import { journalArticles } from "./(store)/journal/journal-data";
 
 const POLICY_SLUGS = ["shipping", "returns", "privacy", "terms"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
-  const [products, collections] = await Promise.all([getCatalogProducts(), getActiveCollections()]);
+  const [products, collections, categories] = await Promise.all([getCatalogProducts(), getActiveCollections(), getActiveCategories()]);
+  // The three original category pages are always listed (as before); any other active category created
+  // in the admin (e.g. long-coats) is added automatically instead of being missing from the sitemap.
+  const categorySlugs = [...new Set(["scarves", "bandanas", "glasses", ...categories.map((category) => category.slug)])];
   const now = new Date();
 
   return [
@@ -17,7 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${origin}/faq`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${origin}/track-order`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
     { url: `${origin}/journal`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
-    ...["scarves", "bandanas", "glasses"].map((slug) => ({
+    ...categorySlugs.map((slug) => ({
       url: `${origin}/collections/${slug}`,
       lastModified: now,
       changeFrequency: "weekly" as const,

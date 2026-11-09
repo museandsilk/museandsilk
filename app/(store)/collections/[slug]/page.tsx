@@ -7,6 +7,9 @@ import { getActiveCategories, getCatalogProducts, getCollectionBySlug } from "@/
 import { buildSrcSet } from "@/lib/images";
 import { getNonce } from "@/lib/nonce";
 
+// The three original categories keep their fixed display names (unchanged behaviour). Any OTHER active
+// category created in the admin (e.g. "Long Coats") is resolved from the database below — before this,
+// only these four slugs were recognised, so every newly added category's page rendered "not found".
 const names: Record<string, string> = { scarves: "Scarves", bandanas: "Bandanas", glasses: "Eyewear", eyewear: "Eyewear" };
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "https://museandsilk.com";
@@ -15,11 +18,12 @@ export const revalidate = 300;
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const custom = names[slug] ? null : await getCollectionBySlug(slug);
-  const title = custom?.name ?? names[slug] ?? "Collection";
+  const dbCategory = names[slug] ? undefined : (await getActiveCategories()).find((entry) => entry.slug === slug);
+  const custom = names[slug] || dbCategory ? null : await getCollectionBySlug(slug);
+  const title = custom?.name ?? names[slug] ?? dbCategory?.name ?? "Collection";
   return {
     title,
-    description: custom?.description || `Shop ${names[slug] ?? "the collection"} from Muse & Silk.`,
+    description: custom?.description || dbCategory?.description || `Shop ${names[slug] ?? dbCategory?.name ?? "the collection"} from Muse & Silk.`,
     alternates: { canonical: `/collections/${slug}` },
   };
 }
@@ -29,13 +33,14 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   const normalized = slug === "eyewear" ? "glasses" : slug;
   const [catalog, allCategories] = await Promise.all([getCatalogProducts(), getActiveCategories()]);
   const nonce = getNonce();
-  const custom = names[slug] ? null : await getCollectionBySlug(slug);
+  const dbCategory = names[slug] ? undefined : allCategories.find((entry) => entry.slug === slug);
+  const custom = names[slug] || dbCategory ? null : await getCollectionBySlug(slug);
 
-  if (!names[slug] && !custom) notFound();
+  if (!names[slug] && !dbCategory && !custom) notFound();
 
   const products = custom?.products ?? catalog.filter((product) => product.category === normalized);
-  const title = custom?.name ?? names[slug] ?? "Collection";
-  const heroCategory = names[slug] ? allCategories.find((entry) => entry.slug === normalized) : undefined;
+  const title = custom?.name ?? names[slug] ?? dbCategory?.name ?? "Collection";
+  const heroCategory = custom ? undefined : allCategories.find((entry) => entry.slug === normalized);
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
