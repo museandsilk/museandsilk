@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AdminToast } from "../admin-toast";
 
 // "Place order for customer" (single) and "Bulk import (JSON)" for the admin order desk. Orders are
 // created already confirmed, by the admin, through /api/admin/orders/place — see
@@ -113,7 +114,7 @@ export function PlaceOrderPanel({
           </small>
         </p>
 
-        {loadError && <div className="admin-message" role="alert">{loadError}</div>}
+        <AdminToast message={loadError} tone="error" onClose={() => setLoadError("")} />
         {!options && !loadError && <p><small>Loading products and delivery zones…</small></p>}
 
         {options && mode === "single" && <SingleOrderForm options={options} onPlaced={onPlaced} onClose={close} setWorking={setWorking} />}
@@ -434,15 +435,15 @@ function SingleOrderForm({
       </div>
 
       {errors.length > 0 && (
-        <div className="admin-message" role="alert">
-          <span>
-            {errors.map((message) => (
-              <span key={message} style={{ display: "block" }}>
-                {message}
-              </span>
-            ))}
-          </span>
-        </div>
+        <AdminToast
+          tone="error"
+          message={errors.map((message) => (
+            <span key={message} style={{ display: "block" }}>
+              {message}
+            </span>
+          ))}
+          onClose={() => setErrors([])}
+        />
       )}
 
       <footer>
@@ -583,7 +584,7 @@ function BulkImport({
             </label>
           </div>
           {checking && <p><small>Checking {fileName}…</small></p>}
-          {parseError && <div className="admin-message" role="alert">{parseError}</div>}
+          <AdminToast message={parseError} tone="error" onClose={() => setParseError("")} />
         </div>
 
         {preview && (

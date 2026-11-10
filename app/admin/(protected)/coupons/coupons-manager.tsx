@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { AdminToast } from "../admin-toast";
 
 type CouponType = "percentage" | "fixed";
 
@@ -190,12 +191,7 @@ export function CouponsManager() {
         </div>
       </header>
 
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
+      <AdminToast message={message} onClose={() => setMessage("")} />
 
       <div className="admin-table-card">
         <div className="admin-table-tools">

@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { slugify } from "@/lib/slug";
 import { processImageClientSide } from "@/lib/client-image-processing";
 import { formatDimensions, joinCareInstructions, joinListField, normalizeGender, productImportSchema } from "@/lib/import/product-import-schema";
+import { AdminToast } from "../admin-toast";
 
 type Category = { id: string; name: string };
 
@@ -800,16 +801,14 @@ export function ProductsManager({ categories }: { categories: Category[] }) {
           >
             Import JSON
           </button>
+          <Link href="/admin/products/bulk" className="bulk-link">
+            Add many with Excel
+          </Link>
           <button onClick={openNew}>Add product</button>
         </div>
       </header>
 
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
+      <AdminToast message={message} onClose={() => setMessage("")} />
 
       <div className="admin-metrics">
         <article>

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { AdminToast } from "../admin-toast";
 
 type Zone = {
   id: string;
@@ -70,12 +71,7 @@ export function DeliveryManager() {
           <h1>Delivery Zones</h1>
         </div>
       </header>
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
+      <AdminToast message={message} onClose={() => setMessage("")} />
       <div className="delivery-manager">
         <section>
           {zones.map((zone) => (

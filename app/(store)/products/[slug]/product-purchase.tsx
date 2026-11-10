@@ -30,6 +30,12 @@ export function ProductPurchase({
   const selected = variants.find((variant) => variant.id === selectedId) ?? variants[0];
 
   useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 6000);
     return () => window.clearTimeout(timer);
@@ -103,9 +109,12 @@ export function ProductPurchase({
         Buy now
       </button>
       {message && (
-        <p className="purchase-message" aria-live="polite">
-          {message}
-        </p>
+        <div className="notice-toast" role="alert">
+          <span>{message}</span>
+          <button type="button" onClick={() => setMessage("")} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
       )}
       <div className="purchase-benefits">
         <span>COD available</span>

@@ -2,6 +2,7 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AdminToast } from "../(protected)/admin-toast";
 
 function LoginForm() {
   const router = useRouter();
@@ -70,7 +71,7 @@ function LoginForm() {
             />
           </label>
         </div>
-        {error && <p className="admin-message">{error}</p>}
+        <AdminToast message={error} tone="error" onClose={() => setError("")} />
         <button className="admin-primary" disabled={busy}>
           {busy ? (
             <span className="busy-label">

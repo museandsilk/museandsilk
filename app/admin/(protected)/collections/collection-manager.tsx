@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { cropImageClientSide, processImageClientSide } from "@/lib/client-image-processing";
 import { ImageCropper } from "../campaign/image-cropper";
+import { AdminToast } from "../admin-toast";
 
 const CARD_ASPECT = 3 / 4;
 const HERO_ASPECT = 21 / 9;
@@ -267,12 +268,7 @@ export function CollectionManager({ products }: { products: Product[] }) {
         </div>
       </header>
 
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
+      <AdminToast message={message} onClose={() => setMessage("")} />
 
       {tab === "categories" ? (
         <div className="collection-manager">

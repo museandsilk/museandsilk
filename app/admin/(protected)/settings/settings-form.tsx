@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { AdminToast } from "../admin-toast";
 
 type Settings = {
   brandName: string;
@@ -79,12 +80,7 @@ export function SettingsForm() {
           <h1>Store settings</h1>
         </div>
       </header>
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
+      <AdminToast message={message} onClose={() => setMessage("")} />
       {settings && (
         <form className="admin-settings-card" onSubmit={save}>
           <div>

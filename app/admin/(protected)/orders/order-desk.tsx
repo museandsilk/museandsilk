@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PlaceOrderPanel, type PanelMode } from "./place-order-panel";
+import { AdminToast } from "../admin-toast";
 
 type OrderRow = {
   id: string;
@@ -323,12 +324,7 @@ export function OrderDesk() {
           <h1>Order desk</h1>
         </div>
       </header>
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
+      <AdminToast message={message} onClose={() => setMessage("")} />
       <div className="admin-top-actions">
         <button className="admin-primary" onClick={() => setPlaceMode("single")}>
           Place order for customer

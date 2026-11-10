@@ -4,6 +4,7 @@ import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
 import { cropImageClientSide, processImageClientSide } from "@/lib/client-image-processing";
 import { ImageCropper } from "./image-cropper";
+import { AdminToast } from "../admin-toast";
 
 const DESKTOP_ASPECT = 16 / 9;
 const MOBILE_ASPECT = 9 / 16;
@@ -253,12 +254,7 @@ export function CampaignManager() {
           <h1>Campaign</h1>
         </div>
       </header>
-      {message && (
-        <div className="admin-message" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>×</button>
-        </div>
-      )}
+      <AdminToast message={message} onClose={() => setMessage("")} />
       <div className="campaign-admin-grid">
         <section className="campaign-list">
           <p className="eyebrow">Current sequence</p>
