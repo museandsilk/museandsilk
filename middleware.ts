@@ -24,13 +24,13 @@ function buildCsp(nonce: string): string {
     // apis.google.com/gstatic.com are Google's Customer Reviews opt-in widget on the order
     // confirmation page (checkout/page.tsx) — it loads platform.js from apis.google.com, which in
     // turn pulls supporting resources from gstatic.com.
-    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com https://www.gstatic.com`,
+    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://analytics.tiktok.com https://static.cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com https://www.gstatic.com`,
     // Inline `style={{...}}` (blur-placeholder backgrounds, etc.) is used extensively throughout
     // the storefront — nonce-ing every one of those individually isn't practical the way it is for
     // the small, fixed set of inline <script> tags, so style-src keeps 'unsafe-inline'.
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com`,
+    `connect-src 'self' ${isDev ? "ws:" : ""} https://www.google-analytics.com https://connect.facebook.net https://analytics.tiktok.com https://analytics-ipv6.tiktokw.us https://business-api.tiktok.com https://cloudflareinsights.com https://challenges.cloudflare.com https://apis.google.com`,
     // Turnstile's checkout widget renders inside an iframe from challenges.cloudflare.com; the
     // Google Customer Reviews opt-in survey itself renders inside an iframe from google.com.
     "frame-src https://challenges.cloudflare.com https://www.google.com",

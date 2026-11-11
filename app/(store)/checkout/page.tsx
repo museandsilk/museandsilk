@@ -291,8 +291,10 @@ export default function CheckoutPage() {
         const trackers = window as Window & {
           fbq?: (...args: unknown[]) => void;
           gtag?: (...args: unknown[]) => void;
+          ttq?: { track: (...args: unknown[]) => void };
         };
         trackers.fbq?.("track", "Purchase", { value: data.total, currency: "PKR" });
+        trackers.ttq?.track("CompletePayment", { value: data.total, currency: "PKR", content_type: "product" });
         trackers.gtag?.("event", "purchase", {
           transaction_id: data.orderNumber,
           value: data.total,

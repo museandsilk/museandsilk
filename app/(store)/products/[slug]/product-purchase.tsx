@@ -65,6 +65,7 @@ export function ProductPurchase({
       return;
     }
     setMessage("");
+    (window as Window & { ttq?: { track: (...args: unknown[]) => void } }).ttq?.track("AddToCart", { content_id: selected.sku, content_name: product.name, content_type: "product", value: selected.price, currency: "PKR", quantity: 1 });
     if (buyNow) {
       router.push("/cart");
       return;

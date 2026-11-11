@@ -90,7 +90,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body>
         {children}
-        <AnalyticsConsent metaPixelId={settings.metaPixelId} gaMeasurementId={settings.gaMeasurementId} nonce={nonce} />
+        <AnalyticsConsent metaPixelId={settings.metaPixelId} gaMeasurementId={settings.gaMeasurementId} tiktokPixelId={process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID ?? ""} nonce={nonce} />
       </body>
     </html>
   );
