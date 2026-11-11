@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { ttqContent, ttqTrack } from "@/lib/tiktok";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CatalogProduct, CatalogVariant } from "@/lib/commerce";
@@ -28,6 +29,11 @@ export function ProductPurchase({
   const [message, setMessage] = useState("");
   const [toast, setToast] = useState<{ variantName: string; price: number } | null>(null);
   const selected = variants.find((variant) => variant.id === selectedId) ?? variants[0];
+
+  useEffect(() => {
+    ttqTrack("ViewContent", { contents: [ttqContent(variants[0].sku, product.name)], value: variants[0].price, currency: "PKR" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.id]);
 
   useEffect(() => {
     if (!message) return;
@@ -65,7 +71,7 @@ export function ProductPurchase({
       return;
     }
     setMessage("");
-    (window as Window & { ttq?: { track: (...args: unknown[]) => void } }).ttq?.track("AddToCart", { content_id: selected.sku, content_name: product.name, content_type: "product", value: selected.price, currency: "PKR", quantity: 1 });
+    ttqTrack("AddToCart", { contents: [ttqContent(selected.sku, product.name)], value: selected.price, currency: "PKR" });
     if (buyNow) {
       router.push("/cart");
       return;

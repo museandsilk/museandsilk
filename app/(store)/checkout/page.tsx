@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Script from "next/script";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ttqContent, ttqTrack } from "@/lib/tiktok";
 import { StoreHeader } from "@/app/(store)/_components/store-components";
 import { clearCart, readCart, type CartItem } from "@/lib/cart";
 
@@ -203,6 +204,13 @@ export default function CheckoutPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  const startedCheckout = useRef(false);
+  useEffect(() => {
+    if (startedCheckout.current || !items.length) return;
+    startedCheckout.current = true;
+    ttqTrack("InitiateCheckout", { contents: items.map((item) => ttqContent(item.sku, item.name)), value: items.reduce((sum, item) => sum + item.price * item.quantity, 0), currency: "PKR" });
+  }, [items]);
+
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
   const zone = zones.find((item) => item.id === zoneId);
   const delivery = subtotal >= Number(settings?.freeDeliveryThreshold ?? 4000) ? 0 : Number(zone?.deliveryCharge ?? 0);
@@ -291,10 +299,9 @@ export default function CheckoutPage() {
         const trackers = window as Window & {
           fbq?: (...args: unknown[]) => void;
           gtag?: (...args: unknown[]) => void;
-          ttq?: { track: (...args: unknown[]) => void };
         };
         trackers.fbq?.("track", "Purchase", { value: data.total, currency: "PKR" });
-        trackers.ttq?.track("CompletePayment", { value: data.total, currency: "PKR", content_type: "product" });
+        ttqTrack("Purchase", { contents: items.map((item) => ttqContent(item.sku, item.name)), value: data.total, currency: "PKR" });
         trackers.gtag?.("event", "purchase", {
           transaction_id: data.orderNumber,
           value: data.total,
